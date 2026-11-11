@@ -86,6 +86,40 @@ class ReportRenderingTest(unittest.TestCase):
         self.assertIn("❌", rendered)
         self.assertIn("1 of 2 expected paths present", rendered)
 
+    def test_text_field_checks_use_aligned_value_table(self) -> None:
+        check = self.report["checks"][0]
+        check = {
+            **check,
+            "stage": "Cluster build",
+            "check": "Fixture variables",
+            "expected": ["cluster_domain_name", "base_domain", "api_ip"],
+            "present": {
+                "fields": ["cluster_domain_name", "base_domain"],
+                "values": {
+                    "cluster_domain_name": "fixture-env",
+                    "base_domain": "example.test",
+                },
+            },
+            "missing": {"fields": ["api_ip"]},
+            "actual": ["cluster_domain_name", "base_domain"],
+            "evidence": {
+                "values": {
+                    "cluster_domain_name": "fixture-env",
+                    "base_domain": "example.test",
+                }
+            },
+        }
+        report = {**self.report, "checks": [check]}
+        rendered = render_text(report)
+        self.assertIn("Expected fields:", rendered)
+        self.assertIn("cluster_domain_name", rendered)
+        self.assertIn("fixture-env", rendered)
+        self.assertIn("base_domain", rendered)
+        self.assertIn("example.test", rendered)
+        self.assertIn("api_ip", rendered)
+        self.assertIn("MISSING", rendered)
+        self.assertIn("2 of 3 expected fields present", rendered)
+
 
 if __name__ == "__main__":
     unittest.main()
