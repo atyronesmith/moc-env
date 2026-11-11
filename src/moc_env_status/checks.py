@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from dataclasses import replace
 from typing import Any
 
@@ -10,6 +10,11 @@ import yaml
 
 from .github import GitHubClient, github_url
 from .model import CheckResult, Environment, StatusReport
+from .observed import (
+    OAC_INFRA_REPOSITORY,
+    inventory_clusters,
+    read_infra_observation,
+)
 
 ORG = "CCI-MOC"
 KNOWN_ISSUES = {"bu-ist-demo": 666}
@@ -32,67 +37,10 @@ LOCAL_CLUSTER_COMPONENTS = [
 ]
 
 
-def _flatten_host(
-    group: dict[str, Any], inherited: dict[str, Any] | None = None
-) -> list[dict[str, Any]]:
-    values = dict(inherited or {})
-    values.update(group.get("vars", {}))
-    hosts: list[dict[str, Any]] = []
-
-    for name, details in group.get("hosts", {}).items():
-        if not isinstance(details, dict):
-            continue
-        hosts.append({"name": name, **values, **details})
-
-    for child in group.get("children", {}).values():
-        if isinstance(child, dict):
-            hosts.extend(_flatten_host(child, values))
-    return hosts
-
-
-def _find_cluster_group(node: Any, cluster: str) -> dict[str, Any] | None:
-    if not isinstance(node, dict):
-        return None
-    variables = node.get("vars")
-    if isinstance(variables, dict) and variables.get("cluster") == cluster:
-        return node
-    for child in node.get("children", {}).values():
-        found = _find_cluster_group(child, cluster)
-        if found is not None:
-            return found
-    return None
-
-
-def _host_summary(hosts: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [
-        {
-            "name": host.get("name"),
-            "node_name": host.get("node_name"),
-            "bmc_addr": host.get("bmc_addr"),
-            "boot_image_url": host.get("boot_image_url"),
-        }
-        for host in hosts
-    ]
-
-
-def _inventory_clusters(node: Any) -> list[str]:
-    """Return all values of vars.cluster in an Ansible inventory."""
-
-    clusters: list[str] = []
-    if not isinstance(node, dict):
-        return clusters
-    variables = node.get("vars")
-    if isinstance(variables, dict) and isinstance(variables.get("cluster"), str):
-        clusters.append(variables["cluster"])
-    for child in node.get("children", {}).values():
-        clusters.extend(_inventory_clusters(child))
-    return sorted(set(clusters))
-
-
 def list_environments(client: GitHubClient) -> list[dict[str, Any]]:
     """List environment base names supported by the status checker."""
 
-    repository = f"{ORG}/oac-infra"
+    repository = OAC_INFRA_REPOSITORY
     tree = client.get_tree(repository)
     hub_inventory_path = "hub-images/inventory.yml"
     inventory_path = "infra/inventory/00hosts.yaml"
@@ -121,7 +69,7 @@ def list_environments(client: GitHubClient) -> list[dict[str, Any]]:
     )
     inventory = yaml.safe_load(inventory_text) if inventory_text else {}
     inventory_root = inventory.get("all", inventory) if isinstance(inventory, dict) else inventory
-    all_clusters = _inventory_clusters(inventory_root)
+    all_clusters = inventory_clusters(inventory_root)
 
     environments: list[dict[str, Any]] = []
     for infra_cluster in infra_clusters:
@@ -237,48 +185,29 @@ class StatusChecker:
         ]
 
     def _infra_checks(self, environment: Environment) -> tuple[list[CheckResult], Environment]:
-        repository = f"{ORG}/oac-infra"
-        inventory_path = "infra/inventory/00hosts.yaml"
-        hub_inventory_path = "hub-images/inventory.yml"
-        vars_path = f"hub-images/group_vars/{environment.infra_cluster}/vars.yml"
+        repository = OAC_INFRA_REPOSITORY
         results: list[CheckResult] = []
-
-        self._emit_progress(
-            "Hardware and inventory",
-            "read the Ansible inventory to find infra and workload host groups",
-            repository,
-            inventory_path,
+        observation = read_infra_observation(
+            self.client,
+            environment,
+            progress=self._emit_progress,
         )
-        tree = self.client.get_tree(repository)
-        inventory_text = (
-            self.client.get_file(repository, inventory_path)
-            if inventory_path in tree
-            else None
-        )
-        inventory = yaml.safe_load(inventory_text) if inventory_text else None
+        inventory_path = observation.inventory_path
+        hub_inventory_path = observation.hub_inventory_path
+        vars_path = observation.variables_path
 
-        for cluster in (environment.infra_cluster, environment.workload_cluster):
-            inventory_root = (
-                inventory.get("all", inventory)
-                if isinstance(inventory, dict)
-                else inventory
-            )
-            group = _find_cluster_group(inventory_root, cluster)
-            hosts = _flatten_host(group) if group else []
-            boot_urls = sorted(
-                {
-                    host.get("boot_image_url")
-                    for host in hosts
-                    if host.get("boot_image_url")
-                }
-            )
+        for cluster_observation in observation.clusters.values():
+            cluster = cluster_observation.cluster
+            group = cluster_observation.group_found
+            hosts = cluster_observation.hosts
+            boot_urls = cluster_observation.boot_image_urls
 
             if group:
                 state = "declared_in_main"
                 reason = f"The inventory contains a {cluster} group with {len(hosts)} hosts."
                 present = {"cluster_group": cluster, "host_count": len(hosts)}
                 missing = None
-            elif inventory:
+            elif observation.inventory_present:
                 state = "partial"
                 reason = (
                     "The inventory file is present in main, but no group has "
@@ -305,7 +234,7 @@ class StatusChecker:
                     reason=reason,
                     present=present,
                     missing=missing,
-                    evidence={"hosts": _host_summary(hosts)},
+                    evidence={"hosts": cluster_observation.host_summaries()},
                     url=github_url(repository, inventory_path),
                 )
             )
@@ -381,24 +310,7 @@ class StatusChecker:
                 )
             )
 
-        self._emit_progress(
-            "Cluster build",
-            "read the hub-image inventory to confirm the infra cluster can generate a hub image",
-            repository,
-            hub_inventory_path,
-        )
-        hub_inventory_text = (
-            self.client.get_file(repository, hub_inventory_path)
-            if hub_inventory_path in tree
-            else None
-        )
-        hub_inventory = yaml.safe_load(hub_inventory_text) if hub_inventory_text else {}
-        hub_children = (
-            hub_inventory.get("all", {}).get("children", {}) or {}
-            if isinstance(hub_inventory, dict)
-            else {}
-        )
-        hub_found = environment.infra_cluster in hub_children
+        hub_found = observation.hub_inventory.cluster_key_present
         if hub_found:
             hub_state = "declared_in_main"
             hub_reason = (
@@ -407,7 +319,7 @@ class StatusChecker:
             )
             hub_present = {"inventory_key": environment.infra_cluster}
             hub_missing = None
-        elif hub_inventory:
+        elif observation.hub_inventory.inventory_present:
             hub_state = "partial"
             hub_reason = (
                 "The hub-image inventory is present, but it does not contain "
@@ -434,21 +346,14 @@ class StatusChecker:
                 reason=hub_reason,
                 present=hub_present,
                 missing=hub_missing,
-                evidence={"path_present": hub_inventory_path in tree},
+                    evidence={
+                        "path_present": observation.hub_inventory.path_present
+                    },
                 url=github_url(repository, hub_inventory_path),
             )
         )
 
-        self._emit_progress(
-            "Cluster build",
-            "read hub-image variables to verify domain, network, API, ingress, and DNS inputs",
-            repository,
-            vars_path,
-        )
-        vars_text = (
-            self.client.get_file(repository, vars_path) if vars_path in tree else None
-        )
-        values = yaml.safe_load(vars_text) if vars_text else {}
+        values = observation.hub_variables.values
         if isinstance(values, dict) and values.get("cluster_domain_name") and values.get("base_domain"):
             environment = replace(
                 environment,
@@ -470,10 +375,10 @@ class StatusChecker:
         missing_fields = [
             field for field in expected_fields if values.get(field) is None
         ]
-        if vars_path in tree and not missing_fields:
+        if observation.hub_variables.path_present and not missing_fields:
             state = "declared_in_main"
             reason = "All required hub-image variables are present in main."
-        elif vars_path in tree:
+        elif observation.hub_variables.path_present:
             state = "partial"
             reason = (
                 "The hub-image variable file is present, but required fields are "
@@ -500,7 +405,7 @@ class StatusChecker:
                 },
                 missing={"fields": missing_fields} if missing_fields else None,
                 evidence={
-                    "path_present": vars_path in tree,
+                    "path_present": observation.hub_variables.path_present,
                     "values": {
                         key: values.get(key)
                         for key in expected_fields
