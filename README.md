@@ -53,6 +53,7 @@ make test
 make run ENV=bu-ist-demo
 make run-json ENV=bu-ist-demo
 make run-no-prs ENV=bu-ist-demo
+make report-markdown ENV=bu-ist-demo
 make check
 ```
 
@@ -67,6 +68,22 @@ make run-no-prs ENV=bu-ist-demo
 `make check` runs the unit tests, byte-compilation, Git whitespace check, and
 package build.
 
+Generate a verbose Markdown report:
+
+```sh
+make report-markdown ENV=bu-ist-demo
+```
+
+The default destination is `reports/bu-ist-demo.md`. Override it with:
+
+```sh
+make report-markdown ENV=bu-ist-demo OUTPUT=/tmp/bu-ist-demo.md
+```
+
+The CLI prints each inspection step to stderr, including the action, repository,
+and source path. Partial results include a reason plus explicit present and
+missing values.
+
 Produce JSON:
 
 ```sh
@@ -77,6 +94,12 @@ Produce Markdown:
 
 ```sh
 uv run moc-env-status bu-ist-demo --format markdown
+```
+
+Write Markdown directly to a file:
+
+```sh
+uv run moc-env-status bu-ist-demo --format markdown --output reports/bu-ist-demo.md
 ```
 
 Override the associated MOC issue:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from typing import Any
 
 import yaml
@@ -12,9 +12,28 @@ from .model import CheckResult, Environment, StatusReport
 
 ORG = "CCI-MOC"
 KNOWN_ISSUES = {"bu-ist-demo": 666}
+ProgressCallback = Callable[[str, str, str, str], None]
+
+LOCAL_CLUSTER_COMPONENTS = [
+    "acm.yaml",
+    "acm-placements.yaml",
+    "cert-manager.yaml",
+    "cluster-certificates.yaml",
+    "cluster-version.yaml",
+    "external-dns-operator.yaml",
+    "external-secrets.yaml",
+    "hcp-config.yaml",
+    "keycloak-oauth.yaml",
+    "metallb.yaml",
+    "openshift-gitops.yaml",
+    "portworx.yaml",
+    "user-workload-monitoring.yaml",
+]
 
 
-def _flatten_host(group: dict[str, Any], inherited: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+def _flatten_host(
+    group: dict[str, Any], inherited: dict[str, Any] | None = None
+) -> list[dict[str, Any]]:
     values = dict(inherited or {})
     values.update(group.get("vars", {}))
     hosts: list[dict[str, Any]] = []
@@ -22,8 +41,7 @@ def _flatten_host(group: dict[str, Any], inherited: dict[str, Any] | None = None
     for name, details in group.get("hosts", {}).items():
         if not isinstance(details, dict):
             continue
-        host = {"name": name, **values, **details}
-        hosts.append(host)
+        hosts.append({"name": name, **values, **details})
 
     for child in group.get("children", {}).values():
         if isinstance(child, dict):
@@ -45,17 +63,15 @@ def _find_cluster_group(node: Any, cluster: str) -> dict[str, Any] | None:
 
 
 def _host_summary(hosts: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
-    summary = []
-    for host in hosts:
-        summary.append(
-            {
-                "name": host.get("name"),
-                "node_name": host.get("node_name"),
-                "bmc_addr": host.get("bmc_addr"),
-                "boot_image_url": host.get("boot_image_url"),
-            }
-        )
-    return summary
+    return [
+        {
+            "name": host.get("name"),
+            "node_name": host.get("node_name"),
+            "bmc_addr": host.get("bmc_addr"),
+            "boot_image_url": host.get("boot_image_url"),
+        }
+        for host in hosts
+    ]
 
 
 def _boot_image_state(url: str | None, cluster: str) -> str:
@@ -68,22 +84,24 @@ def _boot_image_state(url: str | None, cluster: str) -> str:
     return "partial"
 
 
-def _state_from_paths(paths: set[str], exact: str | None = None, prefix: str | None = None) -> tuple[str, list[str]]:
-    if exact is not None:
-        found = sorted(path for path in paths if path == exact)
-    elif prefix is not None:
-        found = sorted(path for path in paths if path.startswith(prefix))
-    else:
-        found = []
-    return ("declared_in_main" if found else "missing"), found
-
-
 class StatusChecker:
     """Build a configuration-state report from public GitHub data."""
 
-    def __init__(self, client: GitHubClient, include_prs: bool = True) -> None:
+    def __init__(
+        self,
+        client: GitHubClient,
+        include_prs: bool = True,
+        progress: ProgressCallback | None = None,
+    ) -> None:
         self.client = client
         self.include_prs = include_prs
+        self.progress = progress
+
+    def _emit_progress(
+        self, stage: str, action: str, repository: str, path: str
+    ) -> None:
+        if self.progress is not None:
+            self.progress(stage, action, repository, path)
 
     def run(self, environment: Environment) -> StatusReport:
         checks: list[CheckResult] = []
@@ -92,26 +110,52 @@ class StatusChecker:
         checks.extend(self._infra_checks(environment))
         checks.extend(self._keycloak_checks(environment))
         checks.extend(self._apps_checks(environment))
-
-        overall = self._overall_state(checks)
-        return StatusReport(environment=environment, checks=checks, overall_state=overall)
+        return StatusReport(
+            environment=environment,
+            checks=checks,
+            overall_state=self._overall_state(checks),
+        )
 
     def _issue_checks(self, environment: Environment) -> list[CheckResult]:
         assert environment.issue_number is not None
-        issue = self.client.get_json(
-            f"/repos/{ORG}/MOC-issues/issues/{environment.issue_number}"
+        repository = f"{ORG}/MOC-issues"
+        path = f"issues/{environment.issue_number}"
+        self._emit_progress(
+            "Request",
+            f"read MOC issue #{environment.issue_number} to establish requested intent",
+            repository,
+            path,
         )
+        issue = self.client.get_json(f"/repos/{repository}/{path}")
         state = "requested" if issue.get("state") == "open" else "missing"
+        if state == "requested":
+            reason = (
+                f"Issue #{environment.issue_number} is open and records the "
+                "environment request."
+            )
+            present = {"issue_state": "open", "title": issue.get("title")}
+            missing = None
+        else:
+            reason = (
+                f"Issue #{environment.issue_number} is {issue.get('state')}; "
+                "it is not an open request."
+            )
+            present = {"issue_state": issue.get("state")}
+            missing = "An open MOC issue"
+
         return [
             CheckResult(
                 stage="Request",
                 check="MOC issue",
-                repository=f"{ORG}/MOC-issues",
-                path=f"issues/{environment.issue_number}",
+                repository=repository,
+                path=path,
                 ref="main",
                 state=state,
                 expected="Open issue recording the environment request",
                 actual=issue.get("state"),
+                reason=reason,
+                present=present,
+                missing=missing,
                 evidence={"title": issue.get("title"), "url": issue.get("html_url")},
                 url=issue.get("html_url"),
             )
@@ -119,12 +163,18 @@ class StatusChecker:
 
     def _infra_checks(self, environment: Environment) -> list[CheckResult]:
         repository = f"{ORG}/oac-infra"
-        tree = self.client.get_tree(repository)
         inventory_path = "infra/inventory/00hosts.yaml"
         hub_inventory_path = "hub-images/inventory.yml"
         vars_path = f"hub-images/group_vars/{environment.infra_cluster}/vars.yml"
         results: list[CheckResult] = []
 
+        self._emit_progress(
+            "Hardware and inventory",
+            "read the Ansible inventory to find infra and workload host groups",
+            repository,
+            inventory_path,
+        )
+        tree = self.client.get_tree(repository)
         inventory_text = (
             self.client.get_file(repository, inventory_path)
             if inventory_path in tree
@@ -133,11 +183,40 @@ class StatusChecker:
         inventory = yaml.safe_load(inventory_text) if inventory_text else None
 
         for cluster in (environment.infra_cluster, environment.workload_cluster):
-            inventory_root = inventory.get("all", inventory) if isinstance(inventory, dict) else inventory
+            inventory_root = (
+                inventory.get("all", inventory)
+                if isinstance(inventory, dict)
+                else inventory
+            )
             group = _find_cluster_group(inventory_root, cluster)
             hosts = _flatten_host(group) if group else []
-            state = "declared_in_main" if group else ("partial" if inventory else "missing")
-            boot_urls = sorted({host.get("boot_image_url") for host in hosts if host.get("boot_image_url")})
+            boot_urls = sorted(
+                {
+                    host.get("boot_image_url")
+                    for host in hosts
+                    if host.get("boot_image_url")
+                }
+            )
+
+            if group:
+                state = "declared_in_main"
+                reason = f"The inventory contains a {cluster} group with {len(hosts)} hosts."
+                present = {"cluster_group": cluster, "host_count": len(hosts)}
+                missing = None
+            elif inventory:
+                state = "partial"
+                reason = (
+                    "The inventory file is present in main, but no group has "
+                    f"vars.cluster == {cluster!r}."
+                )
+                present = {"inventory_file": inventory_path}
+                missing = {"cluster_group": cluster}
+            else:
+                state = "missing"
+                reason = "The Ansible inventory file is absent from main."
+                present = {"inventory_file": None}
+                missing = {"inventory_file": inventory_path, "cluster_group": cluster}
+
             results.append(
                 CheckResult(
                     stage="Hardware and inventory",
@@ -148,34 +227,113 @@ class StatusChecker:
                     state=state,
                     expected=f"Inventory group for {cluster}",
                     actual={"found": group is not None, "host_count": len(hosts)},
+                    reason=reason,
+                    present=present,
+                    missing=missing,
                     evidence={"hosts": _host_summary(hosts)},
                     url=github_url(repository, inventory_path),
                 )
             )
-            if hosts:
-                boot_state = _boot_image_state(boot_urls[0] if len(boot_urls) == 1 else None, cluster)
-                results.append(
-                    CheckResult(
-                        stage="Hardware and inventory",
-                        check=f"{cluster} boot image",
-                        repository=repository,
-                        path=inventory_path,
-                        ref="main",
-                        state=boot_state,
-                        expected=f"Cluster-specific discovery image for {cluster}",
-                        actual=boot_urls,
-                        evidence={"generic_discovery_iso": "discovery.iso" in boot_urls[0]} if boot_urls else {},
-                        url=github_url(repository, inventory_path),
-                    )
-                )
 
+            if not hosts:
+                continue
+
+            selected_url = boot_urls[0] if len(boot_urls) == 1 else None
+            boot_state = _boot_image_state(selected_url, cluster)
+            if boot_state == "declared_in_main":
+                boot_reason = f"The boot image URL is specific to {cluster}."
+                boot_present = {"boot_image_url": selected_url}
+                boot_missing = None
+            elif len(boot_urls) > 1:
+                boot_state = "partial"
+                boot_reason = (
+                    "The host groups declare multiple boot image URLs, so the "
+                    "intended image is ambiguous."
+                )
+                boot_present = {"boot_image_urls": boot_urls}
+                boot_missing = {"single_cluster_specific_url": True}
+            elif selected_url and selected_url.endswith("discovery.iso"):
+                boot_reason = (
+                    "A boot image URL is present, but it points to the generic "
+                    "discovery.iso rather than a cluster-specific image."
+                )
+                boot_present = {"boot_image_url": selected_url}
+                boot_missing = {
+                    "cluster_specific_image": f"{cluster}-agent-discovery.iso"
+                }
+            elif selected_url:
+                boot_reason = (
+                    "A boot image URL is present, but it does not identify the "
+                    "expected cluster."
+                )
+                boot_present = {"boot_image_url": selected_url}
+                boot_missing = {"cluster_name_in_url": cluster}
+            else:
+                boot_reason = "No boot image URL is inherited by the cluster host group."
+                boot_present = {"boot_image_url": None}
+                boot_missing = {
+                    "cluster_specific_image": f"{cluster}-agent-discovery.iso"
+                }
+
+            results.append(
+                CheckResult(
+                    stage="Hardware and inventory",
+                    check=f"{cluster} boot image",
+                    repository=repository,
+                    path=inventory_path,
+                    ref="main",
+                    state=boot_state,
+                    expected=f"Cluster-specific discovery image for {cluster}",
+                    actual=boot_urls,
+                    reason=boot_reason,
+                    present=boot_present,
+                    missing=boot_missing,
+                    evidence={
+                        "generic_discovery_iso": bool(
+                            boot_urls and boot_urls[0].endswith("discovery.iso")
+                        )
+                    },
+                    url=github_url(repository, inventory_path),
+                )
+            )
+
+        self._emit_progress(
+            "Cluster build",
+            "read the hub-image inventory to confirm the infra cluster can generate a hub image",
+            repository,
+            hub_inventory_path,
+        )
         hub_inventory_text = (
             self.client.get_file(repository, hub_inventory_path)
             if hub_inventory_path in tree
             else None
         )
         hub_inventory = yaml.safe_load(hub_inventory_text) if hub_inventory_text else {}
-        hub_found = environment.infra_cluster in (hub_inventory.get("all", {}).get("children", {}) or {})
+        hub_children = (
+            hub_inventory.get("all", {}).get("children", {}) or {}
+            if isinstance(hub_inventory, dict)
+            else {}
+        )
+        hub_found = environment.infra_cluster in hub_children
+        if hub_found:
+            hub_state = "declared_in_main"
+            hub_reason = f"The hub-image inventory contains {environment.infra_cluster}."
+            hub_present = {"cluster_entry": environment.infra_cluster}
+            hub_missing = None
+        elif hub_inventory:
+            hub_state = "partial"
+            hub_reason = (
+                "The hub-image inventory is present, but it does not contain "
+                "the infra cluster entry."
+            )
+            hub_present = {"inventory_file": hub_inventory_path}
+            hub_missing = {"cluster_entry": environment.infra_cluster}
+        else:
+            hub_state = "missing"
+            hub_reason = "The hub-image inventory file is absent from main."
+            hub_present = {"inventory_file": None}
+            hub_missing = {"inventory_file": hub_inventory_path}
+
         results.append(
             CheckResult(
                 stage="Cluster build",
@@ -183,15 +341,26 @@ class StatusChecker:
                 repository=repository,
                 path=hub_inventory_path,
                 ref="main",
-                state="declared_in_main" if hub_found else ("partial" if hub_inventory else "missing"),
+                state=hub_state,
                 expected=f"Hub-image inventory entry for {environment.infra_cluster}",
                 actual={"found": hub_found},
+                reason=hub_reason,
+                present=hub_present,
+                missing=hub_missing,
                 evidence={"path_present": hub_inventory_path in tree},
                 url=github_url(repository, hub_inventory_path),
             )
         )
 
-        vars_text = self.client.get_file(repository, vars_path) if vars_path in tree else None
+        self._emit_progress(
+            "Cluster build",
+            "read hub-image variables to verify domain, network, API, ingress, and DNS inputs",
+            repository,
+            vars_path,
+        )
+        vars_text = (
+            self.client.get_file(repository, vars_path) if vars_path in tree else None
+        )
         values = yaml.safe_load(vars_text) if vars_text else {}
         expected_fields = [
             "cluster_domain_name",
@@ -201,14 +370,25 @@ class StatusChecker:
             "ingress_ip",
             "dns_ip",
         ]
-        present_fields = [field for field in expected_fields if values.get(field) is not None]
-        state = (
-            "declared_in_main"
-            if vars_path in tree and len(present_fields) == len(expected_fields)
-            else "partial"
-            if vars_path in tree
-            else "missing"
-        )
+        present_fields = [
+            field for field in expected_fields if values.get(field) is not None
+        ]
+        missing_fields = [
+            field for field in expected_fields if values.get(field) is None
+        ]
+        if vars_path in tree and not missing_fields:
+            state = "declared_in_main"
+            reason = "All required hub-image variables are present in main."
+        elif vars_path in tree:
+            state = "partial"
+            reason = (
+                "The hub-image variable file is present, but required fields are "
+                "absent: " + ", ".join(missing_fields) + "."
+            )
+        else:
+            state = "missing"
+            reason = "The hub-image variable file is absent from main."
+
         results.append(
             CheckResult(
                 stage="Cluster build",
@@ -219,6 +399,12 @@ class StatusChecker:
                 state=state,
                 expected=expected_fields,
                 actual=present_fields,
+                reason=reason,
+                present={
+                    "fields": present_fields,
+                    "values": {key: values.get(key) for key in present_fields},
+                },
+                missing={"fields": missing_fields} if missing_fields else None,
                 evidence={
                     "path_present": vars_path in tree,
                     "values": {
@@ -235,6 +421,12 @@ class StatusChecker:
     def _keycloak_checks(self, environment: Environment) -> list[CheckResult]:
         repository = f"{ORG}/moc-keycloak"
         path = "main.tf"
+        self._emit_progress(
+            "Identity",
+            "read Terraform configuration to verify the infra cluster's Keycloak OIDC client",
+            repository,
+            path,
+        )
         text = self.client.get_file(repository, path)
         expected = {
             "client": environment.infra_cluster,
@@ -245,13 +437,24 @@ class StatusChecker:
             "secret_name": f'"cluster/{environment.infra_cluster}/keycloak-oidc"',
         }
         present = {name: value in text for name, value in expected.items()}
-        state = (
-            "declared_in_main"
-            if all(present.values())
-            else "partial"
-            if any(present.values())
-            else "missing"
-        )
+        present_keys = [name for name, found in present.items() if found]
+        missing_keys = [name for name, found in present.items() if not found]
+        if not missing_keys:
+            state = "declared_in_main"
+            reason = (
+                "The Keycloak OIDC client, redirect URI, and secret reference "
+                "are present."
+            )
+        elif present_keys:
+            state = "partial"
+            reason = (
+                "Some Keycloak OIDC declarations are present, but these are "
+                "missing: " + ", ".join(missing_keys) + "."
+            )
+        else:
+            state = "missing"
+            reason = "No expected Keycloak OIDC declarations were found."
+
         return [
             CheckResult(
                 stage="Identity",
@@ -261,7 +464,10 @@ class StatusChecker:
                 ref="main",
                 state=state,
                 expected=list(expected),
-                actual=[name for name, found in present.items() if found],
+                actual=present_keys,
+                reason=reason,
+                present={"declarations": present_keys},
+                missing={"declarations": missing_keys} if missing_keys else None,
                 evidence=present,
                 url=github_url(repository, path),
             )
@@ -269,6 +475,12 @@ class StatusChecker:
 
     def _apps_checks(self, environment: Environment) -> list[CheckResult]:
         repository = f"{ORG}/oac-apps"
+        self._emit_progress(
+            "GitOps configuration",
+            "read the repository tree to locate merged infra and workload GitOps paths",
+            repository,
+            "git/trees/main?recursive=1",
+        )
         tree = self.client.get_tree(repository)
         infra_defaults = f"hosted-clusters/{environment.infra_cluster}/values.yaml"
         hub_values_prefix = f"values/{environment.infra_cluster}/"
@@ -283,16 +495,58 @@ class StatusChecker:
         )
 
         path_checks = [
-            ("Infra hosted-cluster defaults", infra_defaults, None),
-            ("Hub-wide component values", None, hub_values_prefix),
-            ("Infra local-cluster values", None, local_prefix),
-            ("Infra ArgoCD applications", None, apps_prefix),
-            ("Workload hosted-cluster values", workload_values, None),
-            ("Workload component values", None, workload_prefix),
+            (
+                "Infra hosted-cluster defaults",
+                infra_defaults,
+                None,
+                [infra_defaults],
+                "the default values for hosted clusters on this infra cluster",
+            ),
+            (
+                "Hub-wide component values",
+                None,
+                hub_values_prefix,
+                [hub_values_prefix + "hcp-config.yaml"],
+                "hub-wide HCP and secret-selector values",
+            ),
+            (
+                "Infra local-cluster values",
+                None,
+                local_prefix,
+                [local_prefix + name for name in LOCAL_CLUSTER_COMPONENTS],
+                "the infra cluster's local operator and shared-service values",
+            ),
+            (
+                "Infra ArgoCD applications",
+                None,
+                apps_prefix,
+                [apps_prefix + "keycloak-oauth.yaml"],
+                "direct ArgoCD applications applied on the infra cluster",
+            ),
+            (
+                "Workload hosted-cluster values",
+                workload_values,
+                None,
+                [workload_values],
+                "the hosted workload cluster definition",
+            ),
+            (
+                "Workload component values",
+                None,
+                workload_prefix,
+                [],
+                "component values scoped to the workload cluster",
+            ),
         ]
+
         results: list[CheckResult] = []
-        for label, exact, prefix in path_checks:
-            state, found = _state_from_paths(set(tree), exact=exact, prefix=prefix)
+        for label, exact, prefix, required_paths, purpose in path_checks:
+            search_path = exact or (prefix or "")
+            found = sorted(
+                path
+                for path in tree
+                if path == search_path or (prefix and path.startswith(prefix))
+            )
             if label == "Hub-wide component values":
                 found = [
                     path
@@ -300,26 +554,75 @@ class StatusChecker:
                     if not path.startswith(local_prefix)
                     and not path.startswith(workload_prefix)
                 ]
+
+            required_found = [path for path in required_paths if path in tree]
+            required_missing = [path for path in required_paths if path not in tree]
+            if required_paths:
+                if not required_missing:
+                    state = "declared_in_main"
+                elif required_found or found:
+                    state = "partial"
+                else:
+                    state = "missing"
+            else:
                 state = "declared_in_main" if found else "missing"
+
+            if state == "declared_in_main":
+                reason = f"All expected files for {purpose} are present in main."
+                missing = None
+            elif state == "partial":
+                reason = (
+                    f"Some files for {purpose} are present, but expected paths "
+                    "are missing: " + ", ".join(required_missing) + "."
+                )
+                missing = {"paths": required_missing}
+            elif found:
+                state = "partial"
+                reason = (
+                    f"Unexpected files exist for {purpose}, but none of the "
+                    "expected paths were found."
+                )
+                missing = {"paths": required_paths}
+            else:
+                reason = f"No merged main paths were found for {purpose}."
+                missing = {"paths": required_paths or [search_path]}
+
             results.append(
                 CheckResult(
                     stage="GitOps configuration",
                     check=label,
                     repository=repository,
-                    path=exact or (prefix.rstrip("/") + "/"),
+                    path=exact or (prefix or "").rstrip("/"),
                     ref="main",
                     state=state,
-                    expected="Present in merged main",
+                    expected=required_paths or "At least one matching path",
                     actual={"matched_paths": found},
-                    evidence={"path_count": len(found)},
-                    url=github_url(repository, exact or prefix.rstrip("/") + "/"),
+                    reason=reason,
+                    present={"paths": found, "expected_paths": required_found},
+                    missing=missing,
+                    evidence={
+                        "path_count": len(found),
+                        "expected_path_count": len(required_paths),
+                    },
+                    url=github_url(repository, exact or (prefix or "").rstrip("/")),
                 )
             )
 
         if not self.include_prs:
             return results
 
+        self._emit_progress(
+            "GitOps configuration",
+            "search pull requests for in-flight changes that reference the environment",
+            repository,
+            "pulls?state=all",
+        )
         pull_requests = []
+        terms = (
+            environment.name,
+            environment.infra_cluster,
+            environment.workload_cluster,
+        )
         for pull in self.client.pulls(repository):
             searchable = " ".join(
                 [
@@ -328,7 +631,7 @@ class StatusChecker:
                     str(pull.get("head", {}).get("ref") or ""),
                 ]
             )
-            if any(term in searchable for term in (environment.name, environment.infra_cluster, environment.workload_cluster)):
+            if any(term in searchable for term in terms):
                 files = list(self.client.pr_files(repository, pull["number"]))
                 pull_requests.append({"pull_request": pull, "files": files})
 
@@ -343,13 +646,22 @@ class StatusChecker:
                     state="missing",
                     expected="PR referencing the environment",
                     actual={"matching_pr_count": 0},
+                    reason="No open or merged PR references the environment.",
+                    present={"matching_pr_count": 0},
+                    missing={"matching_pull_requests": 1},
                     evidence={},
                 )
             )
             return results
 
-        open_prs = [item for item in pull_requests if item["pull_request"].get("state") == "open"]
-        merged_prs = [item for item in pull_requests if item["pull_request"].get("merged_at")]
+        open_prs = [
+            item
+            for item in pull_requests
+            if item["pull_request"].get("state") == "open"
+        ]
+        merged_prs = [
+            item for item in pull_requests if item["pull_request"].get("merged_at")
+        ]
         state = "pr_open" if open_prs else "pr_merged"
         evidence = []
         for item in pull_requests:
@@ -362,9 +674,22 @@ class StatusChecker:
                     "merged": bool(pull.get("merged_at")),
                     "head_sha": pull.get("head", {}).get("sha"),
                     "html_url": pull.get("html_url"),
-                    "changed_files": [file.get("filename") for file in item["files"]],
+                    "changed_files": [
+                        file.get("filename") for file in item["files"]
+                    ],
                 }
             )
+
+        if open_prs:
+            reason = (
+                f"{len(open_prs)} relevant PRs are still open; their changes "
+                "are not declared in main."
+            )
+            missing = {"open_prs_to_merge": len(open_prs)}
+        else:
+            reason = f"All {len(merged_prs)} relevant PRs have been merged into main."
+            missing = None
+
         results.append(
             CheckResult(
                 stage="GitOps configuration",
@@ -379,6 +704,12 @@ class StatusChecker:
                     "open_count": len(open_prs),
                     "merged_count": len(merged_prs),
                 },
+                reason=reason,
+                present={
+                    "matching_pr_count": len(pull_requests),
+                    "merged_pr_count": len(merged_prs),
+                },
+                missing=missing,
                 evidence={"pull_requests": evidence},
             )
         )
@@ -389,7 +720,9 @@ class StatusChecker:
         states = {check.state for check in checks}
         if "pr_open" in states:
             return "CONFIGURATION IN PROGRESS"
-        if states and states.issubset({"declared_in_main", "requested", "pr_merged"}):
+        if states and states.issubset(
+            {"declared_in_main", "requested", "pr_merged"}
+        ):
             return "DECLARED IN MAIN"
         if "declared_in_main" in states or "pr_merged" in states:
             return "PARTIALLY CONFIGURED"

@@ -47,6 +47,9 @@ class CheckResult:
     state: str
     expected: Any
     actual: Any
+    reason: str
+    present: Any = None
+    missing: Any = None
     evidence: dict[str, Any] = field(default_factory=dict)
     url: str | None = None
 
@@ -68,12 +71,30 @@ class StatusReport:
         for check in self.checks:
             state_counts[check.state] = state_counts.get(check.state, 0) + 1
 
+        stages: list[str] = []
+        stage_counts: dict[str, dict[str, int]] = {}
+        for check in self.checks:
+            if check.stage not in stage_counts:
+                stages.append(check.stage)
+                stage_counts[check.stage] = {}
+            stage_counts[check.stage][check.state] = (
+                stage_counts[check.stage].get(check.state, 0) + 1
+            )
+
         return {
             "environment": self.environment.to_dict(),
             "overall_state": self.overall_state,
             "summary": {
                 "check_count": len(self.checks),
                 "state_counts": dict(sorted(state_counts.items())),
+                "stages": [
+                    {
+                        "stage": stage,
+                        "state_counts": dict(sorted(states.items())),
+                        "check_count": sum(states.values()),
+                    }
+                    for stage, states in stage_counts.items()
+                ],
             },
             "checks": [check.to_dict() for check in self.checks],
         }

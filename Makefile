@@ -6,6 +6,7 @@ UV ?= uv
 ENV ?= bu-ist-demo
 FORMAT ?= text
 ARGS ?=
+OUTPUT ?= reports/$(ENV).md
 
 # Set NO_PRS=1 to avoid pull-request API calls.
 ifeq ($(NO_PRS),1)
@@ -17,7 +18,8 @@ endif
 RUN_ARGS := $(ENV) --format $(FORMAT) $(PRS_FLAG) $(ARGS)
 
 .PHONY: help setup sync test run run-text run-json run-markdown \
-        run-no-prs build compile diff-check check lock clean clean-all
+        run-no-prs report-markdown build compile diff-check check lock \
+        clean clean-all
 
 help: ## Show available targets and common variables
 	@printf 'moc-env-status Makefile\n\n'
@@ -32,6 +34,7 @@ help: ## Show available targets and common variables
 	@printf '  %-18s %s\n' 'ARGS' 'Additional CLI arguments, quoted if needed'
 	@printf '  %-18s %s\n' 'UV' 'uv executable (default: uv)'
 	@printf '  %-18s %s\n' 'ENV_FILE' 'Not needed; the CLI reads .env by default'
+	@printf '  %-18s %s\n' 'OUTPUT' 'Markdown report destination (default: reports/ENV.md)'
 	@printf '\nCredential variables are read directly by the CLI:\n'
 	@printf '  GITHUB_TOKEN, GITHUB_BWS_SECRET_ID, GITHUB_BWS_SECRET_ID_KEYCHAIN_SERVICE,\n'
 	@printf '  GITHUB_BWS_SECRET_ID_KEYCHAIN_ACCOUNT, BWS_ACCESS_TOKEN,\n'
@@ -58,6 +61,9 @@ run-markdown: ## Run the CLI with Markdown output
 
 run-no-prs: ## Run the CLI without pull-request discovery
 	$(UV) run --locked moc-env-status $(ENV) --format $(FORMAT) --no-prs $(ARGS)
+
+report-markdown: ## Write a verbose Markdown report to OUTPUT
+	$(UV) run --locked moc-env-status $(ENV) --format markdown --output $(OUTPUT)
 
 build: ## Build source distribution and wheel
 	$(UV) build

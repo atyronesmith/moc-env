@@ -6,6 +6,7 @@ import argparse
 import os
 import sys
 from dataclasses import replace
+from pathlib import Path
 
 from .checks import KNOWN_ISSUES, StatusChecker
 from .credentials import (
@@ -63,6 +64,13 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Optional KEY=VALUE file for non-secret credential selectors "
             "(default: .env; absent file is ignored)"
+        ),
+    )
+    parser.add_argument(
+        "--output",
+        help=(
+            "Write the rendered report to this file instead of stdout; "
+            "useful with --format markdown"
         ),
     )
     parser.add_argument(
@@ -131,7 +139,26 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     client = GitHubClient(token=github_token, timeout=args.timeout)
-    checker = StatusChecker(client=client, include_prs=not args.no_prs)
+    stage_step = 0
+
+    def print_progress(
+        stage: str, action: str, repository: str, path: str
+    ) -> None:
+        nonlocal stage_step
+        stage_step += 1
+        print(
+            f"▶ Step {stage_step}: {stage}\n"
+            f"    Action:     {action}\n"
+            f"    Repository: {repository}\n"
+            f"    Source:     {path}",
+            file=sys.stderr,
+        )
+
+    checker = StatusChecker(
+        client=client,
+        include_prs=not args.no_prs,
+        progress=print_progress,
+    )
 
     try:
         report = checker.run(environment).to_dict()
@@ -140,11 +167,29 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     if args.format == "json":
-        print(render_json(report), end="")
+        rendered = render_json(report)
     elif args.format == "markdown":
-        print(render_markdown(report), end="")
+        rendered = render_markdown(report)
     else:
-        print(render_text(report), end="")
+        rendered = render_text(report)
+
+    if args.output:
+        output_path = Path(args.output)
+        try:
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(rendered, encoding="utf-8")
+        except OSError as exc:
+            print(
+                f"moc-env-status: could not write {output_path}: {exc}",
+                file=sys.stderr,
+            )
+            return 2
+        print(
+            f"moc-env-status: wrote {args.format} report to {output_path}",
+            file=sys.stderr,
+        )
+    else:
+        print(rendered, end="")
     return 0
 
 
