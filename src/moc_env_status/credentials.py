@@ -3,8 +3,12 @@
 Resolution order:
 
 1. ``GITHUB_TOKEN`` in the process environment.
-2. A Bitwarden Secrets Manager secret UUID.
-3. A dedicated macOS Keychain item containing the GitHub token.
+2. A Bitwarden Secrets Manager secret UUID from the environment or CLI.
+3. A macOS Keychain item containing that Bitwarden secret UUID.
+
+The Keychain never stores the GitHub token itself. After selecting a UUID, the
+resolver asks Bitwarden Secrets Manager for the secret whose key is
+``GITHUB_TOKEN``.
 
 No credential value is accepted as a command-line argument. Configured lookup
 failures are terminal so a stale or inaccessible fallback cannot be silently
@@ -39,7 +43,7 @@ class CredentialError(RuntimeError):
 
 
 class CredentialNotFoundError(CredentialError):
-    """The optional default Keychain credential was not present."""
+    """The optional default Keychain UUID selector was not present."""
 
 
 @dataclass(frozen=True)
@@ -49,13 +53,13 @@ class CredentialOptions:
     direct_token: str | None = None
     bws_secret_id: str | None = None
     bws_access_token: str | None = None
-    github_keychain_service: str = "moc-env-status-github-token"
-    github_keychain_account: str | None = None
+    bws_secret_id_keychain_service: str = "moc-env-status-github-token"
+    bws_secret_id_keychain_account: str | None = None
     bws_keychain_service: str = "moc-env-status-bws-access-token"
     bws_keychain_account: str | None = None
 
-    def _github_keychain_account(self) -> str:
-        return self.github_keychain_account or getpass.getuser()
+    def _bws_secret_id_keychain_account(self) -> str:
+        return self.bws_secret_id_keychain_account or getpass.getuser()
 
     def _bws_keychain_account(self) -> str:
         return self.bws_keychain_account or getpass.getuser()
@@ -79,43 +83,53 @@ class CredentialResolver:
         if options.direct_token:
             return self._valid_token(options.direct_token, "GITHUB_TOKEN")
 
-        if options.bws_secret_id:
-            return self._resolve_bitwarden(options)
+        secret_id = options.bws_secret_id
+        if not secret_id:
+            secret_id = self._keychain_secret_id(options)
 
-        return self._resolve_github_keychain(options)
+        return self._resolve_bitwarden(options, secret_id)
 
-    def _resolve_bitwarden(self, options: CredentialOptions) -> str:
-        if not SECRET_UUID.fullmatch(options.bws_secret_id or ""):
+    def _keychain_secret_id(self, options: CredentialOptions) -> str:
+        secret_id = self._keychain(
+            service=options.bws_secret_id_keychain_service,
+            account=options._bws_secret_id_keychain_account(),
+            label="Bitwarden secret UUID",
+        )
+        if not SECRET_UUID.fullmatch(secret_id):
+            raise CredentialError(
+                "macOS Keychain item must contain a Bitwarden secret UUID"
+            )
+        return secret_id
+
+    def _resolve_bitwarden(
+        self, options: CredentialOptions, secret_id: str
+    ) -> str:
+        if not SECRET_UUID.fullmatch(secret_id):
             raise CredentialError("GITHUB_BWS_SECRET_ID must be a Bitwarden secret UUID")
 
         machine_token = options.bws_access_token
         if machine_token:
             machine_token = self._valid_token(machine_token, "BWS_ACCESS_TOKEN")
         else:
-            machine_token = self._keychain(
-                service=options.bws_keychain_service,
-                account=options._bws_keychain_account(),
-                label="Bitwarden machine access token",
-            )
+            try:
+                machine_token = self._keychain(
+                    service=options.bws_keychain_service,
+                    account=options._bws_keychain_account(),
+                    label="Bitwarden machine access token",
+                )
+            except CredentialNotFoundError as exc:
+                raise CredentialError(str(exc)) from exc
 
         bws = self._bws_executable()
         environment = self._sanitized_environment()
         environment["BWS_ACCESS_TOKEN"] = machine_token
         output = self._capture(
-            [bws, "secret", "get", options.bws_secret_id],
+            [bws, "secret", "get", secret_id],
             environment=environment,
             timeout=BITWARDEN_TIMEOUT_SECONDS,
             label="Bitwarden",
         )
         return self._decode_github_secret(output)
-
-    def _resolve_github_keychain(self, options: CredentialOptions) -> str:
-        token = self._keychain(
-            service=options.github_keychain_service,
-            account=options._github_keychain_account(),
-            label="GitHub token",
-        )
-        return self._valid_token(token, "macOS Keychain GitHub token")
 
     def _keychain(self, *, service: str, account: str, label: str) -> str:
         self._validate_selector(service, f"{label} Keychain service")
@@ -259,10 +273,15 @@ def credential_options_from_environment(
     secret_id = values.get("GITHUB_BWS_SECRET_ID") or values.get(
         "MOC_ENV_STATUS_BWS_SECRET_ID"
     )
-    github_account = values.get("GITHUB_TOKEN_KEYCHAIN_ACCOUNT")
+    secret_id_keychain_service = values.get(
+        "GITHUB_BWS_SECRET_ID_KEYCHAIN_SERVICE"
+    ) or values.get("GITHUB_TOKEN_KEYCHAIN_SERVICE")
+    secret_id_keychain_account = values.get(
+        "GITHUB_BWS_SECRET_ID_KEYCHAIN_ACCOUNT"
+    ) or values.get("GITHUB_TOKEN_KEYCHAIN_ACCOUNT")
     bws_account = values.get("BWS_ACCESS_TOKEN_KEYCHAIN_ACCOUNT")
-    if not github_account:
-        github_account = values.get("USER") or getpass.getuser()
+    if not secret_id_keychain_account:
+        secret_id_keychain_account = values.get("USER") or getpass.getuser()
     if not bws_account:
         bws_account = values.get("USER") or getpass.getuser()
 
@@ -270,10 +289,9 @@ def credential_options_from_environment(
         direct_token=values.get("GITHUB_TOKEN"),
         bws_secret_id=secret_id,
         bws_access_token=values.get("BWS_ACCESS_TOKEN"),
-        github_keychain_service=values.get(
-            "GITHUB_TOKEN_KEYCHAIN_SERVICE", "moc-env-status-github-token"
-        ),
-        github_keychain_account=github_account,
+        bws_secret_id_keychain_service=secret_id_keychain_service
+        or "moc-env-status-github-token",
+        bws_secret_id_keychain_account=secret_id_keychain_account,
         bws_keychain_service=values.get(
             "BWS_ACCESS_TOKEN_KEYCHAIN_SERVICE", "moc-env-status-bws-access-token"
         ),

@@ -107,34 +107,39 @@ uv run moc-env-status bu-ist-demo
 
 ### Bitwarden Secrets Manager
 
-Store a secret with key `GITHUB_TOKEN`, then configure its UUID:
+Store the GitHub personal access token in Bitwarden Secrets Manager as a secret
+with key `GITHUB_TOKEN`. Then select that secret by its UUID.
+
+Provide the UUID directly:
 
 ```sh
 export GITHUB_BWS_SECRET_ID="00000000-0000-0000-0000-000000000000"
 uv run moc-env-status bu-ist-demo
 ```
 
-The CLI looks up the Bitwarden machine access token in this order:
+Or pass it as a selector:
 
-1. `BWS_ACCESS_TOKEN` environment variable
-2. macOS Keychain service `moc-env-status-bws-access-token`
+```sh
+uv run moc-env-status bu-ist-demo \
+  --bws-secret-id 00000000-0000-0000-0000-000000000000
+```
 
-The Keychain account defaults to the current user. Override it with
-`BWS_ACCESS_TOKEN_KEYCHAIN_ACCOUNT`. Override the service with
-`BWS_ACCESS_TOKEN_KEYCHAIN_SERVICE`. The secret UUID may also be supplied with
-`--bws-secret-id`; the UUID is a selector, not a secret.
+The UUID is not the GitHub token and is not the Bitwarden machine access token.
 
-### macOS Keychain
+### macOS Keychain-stored Bitwarden UUID
 
-If no direct token or Bitwarden secret UUID is configured, the CLI reads the
-GitHub token from:
+If no direct token or UUID environment variable is configured, the CLI reads the
+Bitwarden secret UUID from:
 
 ```text
 service: moc-env-status-github-token
 account: <current-user>
 ```
 
-Create or update the item with:
+The service name is retained for compatibility with the existing local item, but
+its value must be the **Bitwarden secret UUID**, not a GitHub token.
+
+Create or update the UUID item with:
 
 ```sh
 /usr/bin/security add-generic-password -U \
@@ -144,21 +149,57 @@ Create or update the item with:
   -w
 ```
 
-Paste the GitHub token at the prompt. Override the service or account with
-`GITHUB_TOKEN_KEYCHAIN_SERVICE`, `GITHUB_TOKEN_KEYCHAIN_ACCOUNT`, or the
-corresponding CLI options.
+Paste the Bitwarden secret UUID at the prompt.
+
+Override the UUID item's service or account with:
+
+```text
+GITHUB_BWS_SECRET_ID_KEYCHAIN_SERVICE
+GITHUB_BWS_SECRET_ID_KEYCHAIN_ACCOUNT
+```
+
+The equivalent CLI options are:
+
+```text
+--bws-secret-id-keychain-service
+--bws-secret-id-keychain-account
+```
+
+### Bitwarden machine access token
+
+To read the selected secret, the CLI needs a Bitwarden machine access token. It
+looks for that token in this order:
+
+1. `BWS_ACCESS_TOKEN` environment variable
+2. macOS Keychain service `moc-env-status-bws-access-token`
+
+Create or update the machine-token item with:
+
+```sh
+/usr/bin/security add-generic-password -U \
+  -a "$(id -un)" \
+  -s moc-env-status-bws-access-token \
+  -T /usr/bin/security \
+  -w
+```
+
+Paste the Bitwarden machine access token at the prompt. Override its account or
+service with `BWS_ACCESS_TOKEN_KEYCHAIN_ACCOUNT` or
+`BWS_ACCESS_TOKEN_KEYCHAIN_SERVICE`.
 
 The complete resolution order is:
 
 1. `GITHUB_TOKEN`
 2. `GITHUB_BWS_SECRET_ID` / `MOC_ENV_STATUS_BWS_SECRET_ID`
-3. `moc-env-status-github-token` in macOS Keychain
+3. Bitwarden secret UUID from `moc-env-status-github-token` in macOS Keychain
+4. `bws secret get <uuid>` using the Bitwarden machine access token
 
-If that default Keychain item is absent, the CLI continues unauthenticated. If a
-direct token, Bitwarden UUID, or explicit Keychain selector is configured, lookup
-failures are terminal. The CLI does not silently try another credential source
-after a selected source fails. No token is accepted as a command-line argument or
-passed in command-line arguments to a subprocess.
+The GitHub token itself is never stored in macOS Keychain. If the default UUID
+Keychain item is absent and no direct credential is configured, the CLI continues
+unauthenticated. If a direct token, UUID selector, or explicit Keychain selector
+is configured, lookup failures are terminal. The CLI does not silently try
+another credential source after a selected source fails. No token is accepted as
+a command-line argument or passed in command-line arguments to a subprocess.
 
 Use a fine-grained personal access token with access to public repositories and
 these read-only permissions:
