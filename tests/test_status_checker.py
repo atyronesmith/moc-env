@@ -5,7 +5,10 @@ import unittest
 from moc_env.checks import StatusChecker
 from moc_env.checks import list_environments
 from moc_env.model import Environment
-from moc_env.observed import read_infra_observation
+from moc_env.observed import (
+    read_environment_observation,
+    read_infra_observation,
+)
 
 from fakes import FakeGitHubClient
 
@@ -71,6 +74,67 @@ class StatusCheckerTest(unittest.TestCase):
         self.assertEqual(len(observation.clusters["bu-ist-demo-infra"].hosts), 1)
         self.assertTrue(observation.hub_inventory.cluster_key_present)
         self.assertEqual(observation.hub_variables.values["api_ip"], "10.20.27.11")
+
+    def test_read_environment_observation_normalizes_all_phase_one_sources(self) -> None:
+        environment = Environment(name="bu-ist-demo", issue_number=666)
+        observation = read_environment_observation(FakeGitHubClient(), environment)
+
+        self.assertEqual(observation.issue.state.value, "open")
+        self.assertEqual(observation.issue.state.confidence, "exact")
+        self.assertEqual(
+            observation.keycloak.client.cluster_name.value,
+            "bu-ist-demo-infra",
+        )
+        self.assertEqual(
+            observation.keycloak.client.secret_name.value,
+            "cluster/bu-ist-demo-infra/keycloak-oidc",
+        )
+        self.assertEqual(observation.apps.pull_requests[0].number, 237)
+        self.assertEqual(
+            observation.apps.pull_requests[0].changed_files,
+            ("values/bu-ist-demo-infra/hcp-config.yaml",),
+        )
+        self.assertEqual(observation.infra_cluster.cluster, "bu-ist-demo-infra")
+        self.assertEqual(
+            observation.workload_cluster.inventory.cluster,
+            "bu-ist-demo-workload0",
+        )
+
+    def test_read_environment_observation_handles_missing_keycloak(self) -> None:
+        class MissingKeycloakClient(FakeGitHubClient):
+            def get_tree(self, repository, ref="main"):
+                if repository == "CCI-MOC/moc-keycloak":
+                    return {}
+                return super().get_tree(repository, ref)
+
+        observation = read_environment_observation(
+            MissingKeycloakClient(),
+            Environment(name="bu-ist-demo", issue_number=666),
+        )
+        self.assertFalse(observation.keycloak.path_present)
+        self.assertIsNone(observation.keycloak.client)
+
+    def test_keycloak_observation_reports_partial_declaration(self) -> None:
+        class PartialKeycloakClient(FakeGitHubClient):
+            def get_file(self, repository, path, ref="main"):
+                if repository == "CCI-MOC/moc-keycloak":
+                    return """
+bu_ist_demo_infra = {
+  cluster_name = "bu-ist-demo-infra"
+  openshift_redirect_uri = "https://example.invalid/callback"
+  client_secret_name = "cluster/wrong/keycloak-oidc"
+}
+"""
+                return super().get_file(repository, path, ref)
+
+        report = StatusChecker(PartialKeycloakClient()).run(
+            Environment(name="bu-ist-demo", issue_number=666)
+        ).to_dict()
+        check = next(
+            item for item in report["checks"] if item["check"] == "Infra OIDC client"
+        )
+        self.assertEqual(check["state"], "partial")
+        self.assertEqual(check["missing"]["declarations"], ["redirect_uri", "secret_name"])
 
 
 if __name__ == "__main__":

@@ -29,6 +29,8 @@ class FakeGitHubClient(GitHubClient):
             }
         if repository == "CCI-MOC/oac-apps":
             return {}
+        if repository == "CCI-MOC/moc-keycloak":
+            return {"main.tf": {"path": "main.tf"}}
         raise AssertionError(f"unexpected repository: {repository}")
 
     def get_file(self, repository: str, path: str, ref: str = "main") -> str:
