@@ -13,6 +13,9 @@ first release distinguishes:
 The motivating environment is `bu-ist-demo`, tracked by
 [MOC issue 666](https://github.com/CCI-MOC/MOC-issues/issues/666).
 
+See [docs/roadmap.md](docs/roadmap.md) for the desired-state, validation, and
+future coordinated-PR design.
+
 ## Current scope
 
 Milestone 1 inspects:
