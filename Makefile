@@ -17,7 +17,7 @@ endif
 
 RUN_ARGS := $(ENV) --format $(FORMAT) $(PRS_FLAG) $(ARGS)
 
-.PHONY: help setup sync test run run-text run-json run-markdown \
+.PHONY: help setup sync test list run run-text run-json run-markdown \
         run-no-prs report-markdown build compile diff-check check lock \
         clean clean-all
 
@@ -47,6 +47,9 @@ sync: setup ## Alias for setup
 
 test: ## Run the unit-test suite
 	$(UV) run --locked python -m unittest discover -s tests -v
+
+list: ## List environment names that can be passed to the CLI
+	$(UV) run --locked moc-env-status list
 
 run: run-text ## Run the CLI (default ENV and text format)
 

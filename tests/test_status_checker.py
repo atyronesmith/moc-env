@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from moc_env_status.checks import StatusChecker
+from moc_env_status.checks import list_environments
 from moc_env_status.github import GitHubClient
 from moc_env_status.model import Environment
 
@@ -148,6 +149,17 @@ class StatusCheckerTest(unittest.TestCase):
             _boot_image_state(url, "oac-prod-workload0"),
             "declared_in_main",
         )
+
+    def test_list_environments_returns_base_names_and_workloads(self) -> None:
+        environments = list_environments(FakeGitHubClient())
+        self.assertEqual(len(environments), 1)
+        self.assertEqual(environments[0]["name"], "bu-ist-demo")
+        self.assertEqual(environments[0]["infra_cluster"], "bu-ist-demo-infra")
+        self.assertEqual(
+            environments[0]["workload_clusters"],
+            ["bu-ist-demo-workload0"],
+        )
+        self.assertEqual(environments[0]["status_command"], "moc-env-status bu-ist-demo")
 
 
 if __name__ == "__main__":

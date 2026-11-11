@@ -31,6 +31,20 @@ def _markdown_value(value: Any) -> str:
     return "```json\n" + json.dumps(value, indent=2, sort_keys=True) + "\n```"
 
 
+def _text_value(value: Any, indent: int) -> str:
+    if value is None:
+        return "-"
+    if not isinstance(value, (dict, list)):
+        return str(value)
+
+    rendered = json.dumps(value, indent=2, sort_keys=True)
+    lines = rendered.splitlines()
+    if len(lines) <= 1:
+        return rendered
+    continuation = " " * indent
+    return "\n".join([lines[0], *(continuation + line for line in lines[1:])])
+
+
 def _state(state: str) -> str:
     return f"{STATE_SYMBOLS.get(state, '•')} {state}"
 
@@ -68,10 +82,10 @@ def render_text(report: dict[str, Any]) -> str:
                 f"  Why checked:  {check['reason']}",
                 f"  Repository:   {check['repository']}",
                 f"  Path:         {check['path']} @ {check['ref']}",
-                f"  Expected:     {_value(check['expected'])}",
-                f"  Present:      {_value(check.get('present'))}",
-                f"  Missing:      {_value(check.get('missing'))}",
-                f"  Actual:       {_value(check['actual'])}",
+                f"  Expected:     {_text_value(check['expected'], 16)}",
+                f"  Present:      {_text_value(check.get('present'), 16)}",
+                f"  Missing:      {_text_value(check.get('missing'), 16)}",
+                f"  Actual:       {_text_value(check['actual'], 16)}",
             ]
         )
         if check.get("url"):
@@ -246,3 +260,44 @@ def render_markdown(report: dict[str, Any]) -> str:
 
 def render_json(report: dict[str, Any]) -> str:
     return json.dumps(report, indent=2, sort_keys=True) + "\n"
+
+
+def render_environment_list_text(environments: list[dict[str, Any]]) -> str:
+    lines = [
+        "=" * 78,
+        "Defined MOC environments",
+        "=" * 78,
+    ]
+    if not environments:
+        lines.append("No infra-cluster environments were found in oac-infra.")
+        return "\n".join(lines) + "\n"
+
+    lines.extend(
+        [
+            "",
+            f"{'Environment':<20} {'Infra cluster':<24} Workload clusters",
+            "-" * 78,
+        ]
+    )
+    for environment in environments:
+        workloads = ", ".join(environment["workload_clusters"]) or "-"
+        lines.append(
+            f"{environment['name']:<20} "
+            f"{environment['infra_cluster']:<24} {workloads}"
+        )
+
+    lines.extend(
+        [
+            "",
+            "Get a status report with:",
+            "",
+        ]
+    )
+    for environment in environments:
+        lines.append(f"  {environment['status_command']}")
+    lines.extend(["", "Source: CCI-MOC/oac-infra/hub-images/inventory.yml"])
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def render_environment_list_json(environments: list[dict[str, Any]]) -> str:
+    return json.dumps(environments, indent=2, sort_keys=True) + "\n"
