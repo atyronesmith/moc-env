@@ -44,6 +44,29 @@ uv sync
 uv run moc-env-status bu-ist-demo
 ```
 
+Using the Makefile:
+
+```sh
+make help
+make setup
+make test
+make run ENV=bu-ist-demo
+make run-json ENV=bu-ist-demo
+make run-no-prs ENV=bu-ist-demo
+make check
+```
+
+Common variables:
+
+```sh
+make run ENV=bu-ist-demo FORMAT=markdown
+make run ARGS="--issue 666"
+make run-no-prs ENV=bu-ist-demo
+```
+
+`make check` runs the unit tests, byte-compilation, Git whitespace check, and
+package build.
+
 Produce JSON:
 
 ```sh
