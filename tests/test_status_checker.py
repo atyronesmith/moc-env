@@ -127,6 +127,8 @@ class StatusCheckerTest(unittest.TestCase):
         self.assertIn(("Infra OIDC client", "declared_in_main"), states)
         self.assertIn(("Relevant pull requests", "pr_open"), states)
         self.assertEqual(report["overall_state"], "CONFIGURATION IN PROGRESS")
+        for check in report["checks"]:
+            self.assertNotIn("expected_paths", check.get("present") or {})
 
     def test_environment_name_that_already_ends_in_infra_is_not_suffixed_again(self) -> None:
         environment = Environment(name="oac-prod-infra")

@@ -681,6 +681,23 @@ class StatusChecker:
                 reason = f"No merged main paths were found for {purpose}."
                 missing = {"paths": required_paths or [search_path]}
 
+            expected = (
+                {
+                    "file_count": len(required_paths),
+                    "scope": (exact or prefix or "").rstrip("/"),
+                }
+                if required_paths
+                else "At least one matching path"
+            )
+            present = {"file_count": len(found)}
+            if state != "declared_in_main" and found:
+                present["paths"] = found
+            if missing is not None and missing.get("paths"):
+                missing = {
+                    "file_count": len(missing["paths"]),
+                    "paths": missing["paths"],
+                }
+
             results.append(
                 CheckResult(
                     stage="GitOps configuration",
@@ -689,14 +706,15 @@ class StatusChecker:
                     path=exact or (prefix or "").rstrip("/"),
                     ref="main",
                     state=state,
-                    expected=required_paths or "At least one matching path",
-                    actual={"matched_paths": found},
+                    expected=expected,
+                    actual={"matched_file_count": len(found)},
                     reason=reason,
-                    present={"paths": found, "expected_paths": required_found},
+                    present=present,
                     missing=missing,
                     evidence={
                         "path_count": len(found),
                         "expected_path_count": len(required_paths),
+                        "paths": found,
                     },
                     url=github_url(repository, exact or (prefix or "").rstrip("/")),
                 )
