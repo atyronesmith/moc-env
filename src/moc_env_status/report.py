@@ -70,6 +70,46 @@ def _path_checklist(check: dict[str, Any]) -> list[str] | None:
     return lines
 
 
+def _field_value_checklist(check: dict[str, Any]) -> list[str] | None:
+    """Render simple field/value checks without repeating field-name lists."""
+    expected_fields = check.get("expected")
+    evidence = check.get("evidence") or {}
+    values = evidence.get("values")
+    if (
+        not isinstance(expected_fields, list)
+        or not expected_fields
+        or not all(isinstance(field, str) for field in expected_fields)
+        or not isinstance(values, dict)
+    ):
+        return None
+
+    rendered_values: list[str] = []
+    present_count = 0
+    for field in expected_fields:
+        value = values.get(field)
+        if value is None:
+            rendered_values.append("MISSING")
+            continue
+        if isinstance(value, bool):
+            rendered_value = str(value)
+        elif isinstance(value, (dict, list)):
+            rendered_value = json.dumps(value, sort_keys=True, separators=(",", ":"))
+        else:
+            rendered_value = str(value)
+        rendered_values.append(rendered_value)
+        present_count += 1
+
+    field_width = max(len(field) for field in expected_fields) + 2
+    value_width = max(len(value) for value in rendered_values) + 2
+    lines = ["  Expected fields:"]
+    for field, rendered_value in zip(expected_fields, rendered_values):
+        lines.append(f"    {field:<{field_width}} {rendered_value:>{value_width}}")
+    lines.append(
+        f"  Result:       {present_count} of {len(expected_fields)} expected fields present"
+    )
+    return lines
+
+
 def render_text(report: dict[str, Any]) -> str:
     environment = report["environment"]
     lines = [
@@ -97,6 +137,7 @@ def render_text(report: dict[str, Any]) -> str:
     lines.extend(["", "Detailed checks:"])
     for check in report["checks"]:
         path_lines = _path_checklist(check)
+        field_value_lines = _field_value_checklist(check)
         lines.extend(
             [
                 "-" * 78,
@@ -108,6 +149,8 @@ def render_text(report: dict[str, Any]) -> str:
         )
         if path_lines is not None:
             lines.extend(path_lines)
+        elif field_value_lines is not None:
+            lines.extend(field_value_lines)
         else:
             lines.extend(
                 [
