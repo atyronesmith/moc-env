@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import re
 from typing import Any
 
@@ -72,7 +72,17 @@ def find_cluster_group(node: Any, cluster: str) -> dict[str, Any] | None:
     variables = node.get("vars")
     if isinstance(variables, dict) and variables.get("cluster") == cluster:
         return node
-    for child in node.get("children", {}).values():
+    children = node.get("children", {})
+    child_nodes = children.values() if isinstance(children, dict) else []
+    child_nodes = [
+        *child_nodes,
+        *(
+            value
+            for key, value in node.items()
+            if key not in {"children", "hosts", "vars"} and isinstance(value, dict)
+        ),
+    ]
+    for child in child_nodes:
         found = find_cluster_group(child, cluster)
         if found is not None:
             return found
@@ -88,7 +98,17 @@ def inventory_clusters(node: Any) -> list[str]:
     variables = node.get("vars")
     if isinstance(variables, dict) and isinstance(variables.get("cluster"), str):
         clusters.append(variables["cluster"])
-    for child in node.get("children", {}).values():
+    children = node.get("children", {})
+    child_nodes = children.values() if isinstance(children, dict) else []
+    child_nodes = [
+        *child_nodes,
+        *(
+            value
+            for key, value in node.items()
+            if key not in {"children", "hosts", "vars"} and isinstance(value, dict)
+        ),
+    ]
+    for child in child_nodes:
         clusters.extend(inventory_clusters(child))
     return sorted(set(clusters))
 
@@ -97,16 +117,16 @@ def inventory_clusters(node: Any) -> list[str]:
 class ClusterInventoryObservation:
     """Normalized inventory observation for one infra or workload cluster."""
 
-    cluster: str
-    group_found: bool
-    hosts: list[dict[str, Any]] = field(default_factory=list)
+    cluster: SourceValue
+    group_found: SourceValue
+    hosts: SourceValue
 
     @property
     def boot_image_urls(self) -> list[str]:
         return sorted(
             {
                 host["boot_image_url"]
-                for host in self.hosts
+                for host in self.hosts.value
                 if host.get("boot_image_url")
             }
         )
@@ -119,7 +139,7 @@ class ClusterInventoryObservation:
                 "bmc_addr": host.get("bmc_addr"),
                 "boot_image_url": host.get("boot_image_url"),
             }
-            for host in self.hosts
+            for host in self.hosts.value
         ]
 
 
@@ -127,17 +147,17 @@ class ClusterInventoryObservation:
 class HubInventoryObservation:
     """Normalized hub-image inventory observation."""
 
-    path_present: bool
-    inventory_present: bool
-    cluster_key_present: bool
+    path_present: SourceValue
+    inventory_present: SourceValue
+    cluster_key_present: SourceValue
 
 
 @dataclass(frozen=True)
 class HubVariablesObservation:
     """Normalized hub-image group-variable observation."""
 
-    path_present: bool
-    values: dict[str, Any] = field(default_factory=dict)
+    path_present: SourceValue
+    values: SourceValue
 
 
 @dataclass(frozen=True)
@@ -164,7 +184,7 @@ class KeycloakClientObservation:
 class KeycloakObservation:
     """Normalized moc-keycloak state."""
 
-    path_present: bool
+    path_present: SourceValue
     client: KeycloakClientObservation | None
     source_repository: str
     source_path: str
@@ -174,21 +194,21 @@ class KeycloakObservation:
 class PullRequestObservation:
     """A pull request relevant to an environment."""
 
-    number: int
+    number: SourceValue
     title: SourceValue
     state: SourceValue
     merged: SourceValue
     head_ref: SourceValue
     head_sha: SourceValue
     url: SourceValue
-    changed_files: tuple[str, ...]
+    changed_files: SourceValue
 
 
 @dataclass(frozen=True)
 class AppsObservation:
     """Normalized oac-apps merged-main paths and in-flight pull requests."""
 
-    paths: tuple[str, ...]
+    paths: SourceValue
     pull_requests: tuple[PullRequestObservation, ...]
     source_repository: str
     source_ref: str = "main"
@@ -232,7 +252,7 @@ class InfraObservation:
     inventory_path: str
     hub_inventory_path: str
     variables_path: str
-    inventory_present: bool
+    inventory_present: SourceValue
     clusters: dict[str, ClusterInventoryObservation]
     hub_inventory: HubInventoryObservation
     hub_variables: HubVariablesObservation
@@ -264,14 +284,34 @@ def read_infra_observation(
     inventory_root = (
         inventory.get("all", inventory) if isinstance(inventory, dict) else inventory
     )
+    inventory_supported = inventory is None or isinstance(inventory, dict)
+    inventory_present = SourceValue(
+        inventory is not None,
+        OAC_INFRA_REPOSITORY,
+        INVENTORY_PATH,
+        confidence="exact" if inventory_supported else "unsupported",
+    )
     cluster_observations: dict[str, ClusterInventoryObservation] = {}
     for cluster in (environment.infra_cluster, environment.workload_cluster):
         group = find_cluster_group(inventory_root, cluster)
         hosts = flatten_host(group) if group else []
         cluster_observations[cluster] = ClusterInventoryObservation(
-            cluster=cluster,
-            group_found=group is not None,
-            hosts=hosts,
+            cluster=SourceValue(
+                cluster,
+                OAC_INFRA_REPOSITORY,
+                INVENTORY_PATH,
+                confidence="inferred",
+            ),
+            group_found=SourceValue(
+                group is not None,
+                OAC_INFRA_REPOSITORY,
+                INVENTORY_PATH,
+            ),
+            hosts=SourceValue(
+                tuple(hosts),
+                OAC_INFRA_REPOSITORY,
+                INVENTORY_PATH,
+            ),
         )
 
     emit(
@@ -285,15 +325,29 @@ def read_infra_observation(
         else None
     )
     hub_inventory = yaml.safe_load(hub_text) if hub_text else {}
+    hub_inventory_supported = hub_inventory is None or isinstance(hub_inventory, dict)
     hub_children = (
         hub_inventory.get("all", {}).get("children", {}) or {}
         if isinstance(hub_inventory, dict)
         else {}
     )
     hub_observation = HubInventoryObservation(
-        path_present=HUB_INVENTORY_PATH in tree,
-        inventory_present=bool(hub_inventory),
-        cluster_key_present=environment.infra_cluster in hub_children,
+        path_present=SourceValue(
+            HUB_INVENTORY_PATH in tree,
+            OAC_INFRA_REPOSITORY,
+            HUB_INVENTORY_PATH,
+        ),
+        inventory_present=SourceValue(
+            bool(hub_inventory),
+            OAC_INFRA_REPOSITORY,
+            HUB_INVENTORY_PATH,
+            confidence="exact" if hub_inventory_supported else "unsupported",
+        ),
+        cluster_key_present=SourceValue(
+            environment.infra_cluster in hub_children,
+            OAC_INFRA_REPOSITORY,
+            HUB_INVENTORY_PATH,
+        ),
     )
 
     variables_path = (
@@ -310,10 +364,20 @@ def read_infra_observation(
         else None
     )
     parsed_values = yaml.safe_load(variables_text) if variables_text else {}
+    values_supported = parsed_values is None or isinstance(parsed_values, dict)
     values = parsed_values if isinstance(parsed_values, dict) else {}
     variables_observation = HubVariablesObservation(
-        path_present=variables_path in tree,
-        values=values,
+        path_present=SourceValue(
+            variables_path in tree,
+            OAC_INFRA_REPOSITORY,
+            variables_path,
+        ),
+        values=SourceValue(
+            values,
+            OAC_INFRA_REPOSITORY,
+            variables_path,
+            confidence="exact" if values_supported else "unsupported",
+        ),
     )
 
     return InfraObservation(
@@ -321,7 +385,7 @@ def read_infra_observation(
         inventory_path=INVENTORY_PATH,
         hub_inventory_path=HUB_INVENTORY_PATH,
         variables_path=variables_path,
-        inventory_present=bool(inventory),
+        inventory_present=inventory_present,
         clusters=cluster_observations,
         hub_inventory=hub_observation,
         hub_variables=variables_observation,
@@ -379,7 +443,7 @@ def read_keycloak_observation(
     tree = client.get_tree(repository)
     if KEYCLOAK_PATH not in tree:
         return KeycloakObservation(
-            path_present=False,
+            path_present=SourceValue(False, repository, KEYCLOAK_PATH),
             client=None,
             source_repository=repository,
             source_path=KEYCLOAK_PATH,
@@ -414,7 +478,7 @@ def read_keycloak_observation(
         )
         break
     return KeycloakObservation(
-        path_present=True,
+        path_present=SourceValue(True, repository, KEYCLOAK_PATH),
         client=client_observation,
         source_repository=repository,
         source_path=KEYCLOAK_PATH,
@@ -468,9 +532,14 @@ def read_apps_observation(
                 if file.get("filename") is not None
             )
             source = (repository, f"pulls/{pull['number']}", "all")
+            files_source = (
+                repository,
+                f"pulls/{pull['number']}/files",
+                "all",
+            )
             pull_requests.append(
                 PullRequestObservation(
-                    number=pull["number"],
+                    number=SourceValue(pull["number"], *source),
                     title=SourceValue(pull.get("title"), *source),
                     state=SourceValue(pull.get("state"), *source),
                     merged=SourceValue(bool(pull.get("merged_at")), *source),
@@ -481,11 +550,15 @@ def read_apps_observation(
                         pull.get("head", {}).get("sha"), *source
                     ),
                     url=SourceValue(pull.get("html_url"), *source),
-                    changed_files=files,
+                    changed_files=SourceValue(files, *files_source),
                 )
             )
     return AppsObservation(
-        paths=tuple(sorted(tree)),
+        paths=SourceValue(
+            tuple(sorted(tree)),
+            repository,
+            "git/trees/main?recursive=1",
+        ),
         pull_requests=tuple(pull_requests),
         source_repository=repository,
     )

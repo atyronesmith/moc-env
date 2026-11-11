@@ -34,15 +34,17 @@ The first stabilization slice:
   variables;
 - verified that live `bu-ist-demo` stdout remains byte-for-byte unchanged.
 
-Remaining Phase 0 hardening can be done incrementally:
+The deferred Phase 0 hardening is also complete:
 
 - move issue, Keycloak, `oac-apps`, and pull-request reads behind normalized
   observation models;
-- add no-network tests for all check branches, especially missing and partial
-  repository files;
-- add parser tests for all supported YAML shapes.
+- add no-network tests for check branches covering declared, missing, and
+  partial repository state;
+- add parser tests for supported inventory roots and unsupported YAML shapes.
 
 ## Phase 1 — complete the observed-state model
+
+**Status:** complete
 
 Extend the normalized model before adding export commands:
 
@@ -54,7 +56,7 @@ GitHub repositories
   → status report
 ```
 
-Add:
+Implemented:
 
 - issue observation;
 - Keycloak OIDC observation;
@@ -65,6 +67,12 @@ Add:
 
 Every observation field should distinguish `exact`, `inferred`, and
 `unsupported` extraction confidence.
+
+The completed model uses `SourceValue` for repository-extracted structural
+fields as well as scalar values. Requested cluster names are marked `inferred`;
+values extracted from a supported YAML shape are marked `exact`; values that
+cannot be extracted from an unsupported YAML shape are represented explicitly
+and marked `unsupported`.
 
 ## Phase 2 — `export-infra`
 
