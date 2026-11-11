@@ -317,17 +317,20 @@ class StatusChecker:
         hub_found = environment.infra_cluster in hub_children
         if hub_found:
             hub_state = "declared_in_main"
-            hub_reason = f"The hub-image inventory contains {environment.infra_cluster}."
-            hub_present = {"cluster_entry": environment.infra_cluster}
+            hub_reason = (
+                f"The hub-image inventory contains the "
+                f"all.children.{environment.infra_cluster} key."
+            )
+            hub_present = {"inventory_key": environment.infra_cluster}
             hub_missing = None
         elif hub_inventory:
             hub_state = "partial"
             hub_reason = (
                 "The hub-image inventory is present, but it does not contain "
-                "the infra cluster entry."
+                f"the all.children.{environment.infra_cluster} key."
             )
             hub_present = {"inventory_file": hub_inventory_path}
-            hub_missing = {"cluster_entry": environment.infra_cluster}
+            hub_missing = {"inventory_key": environment.infra_cluster}
         else:
             hub_state = "missing"
             hub_reason = "The hub-image inventory file is absent from main."

@@ -14,12 +14,21 @@ class Environment:
     issue_number: int | None = None
 
     @property
+    def base_name(self) -> str:
+        """Return the environment base name without an infra-cluster suffix."""
+
+        suffix = "-infra"
+        if self.name.endswith(suffix):
+            return self.name[: -len(suffix)]
+        return self.name
+
+    @property
     def infra_cluster(self) -> str:
-        return f"{self.name}-infra"
+        return f"{self.base_name}-infra"
 
     @property
     def workload_cluster(self) -> str:
-        return f"{self.name}-workload0"
+        return f"{self.base_name}-workload0"
 
     @property
     def domain(self) -> str:
