@@ -1,4 +1,4 @@
-"""Core data models for moc-env-status."""
+"""Core data models for moc-env."""
 
 from __future__ import annotations
 

@@ -38,7 +38,7 @@ KEYCHAIN_TIMEOUT_SECONDS = 15.0
 BITWARDEN_TIMEOUT_SECONDS = 30.0
 CREDENTIAL_ENV_FILE_KEYS = {
     "GITHUB_BWS_SECRET_ID",
-    "MOC_ENV_STATUS_BWS_SECRET_ID",
+    "MOC_ENV_BWS_SECRET_ID",
     "GITHUB_BWS_SECRET_ID_KEYCHAIN_SERVICE",
     "GITHUB_BWS_SECRET_ID_KEYCHAIN_ACCOUNT",
     "BWS_ACCESS_TOKEN_KEYCHAIN_SERVICE",
@@ -61,9 +61,9 @@ class CredentialOptions:
     direct_token: str | None = None
     bws_secret_id: str | None = None
     bws_access_token: str | None = None
-    bws_secret_id_keychain_service: str = "moc-env-status-github-token"
+    bws_secret_id_keychain_service: str = "moc-env-github-token"
     bws_secret_id_keychain_account: str | None = None
-    bws_keychain_service: str = "moc-env-status-bws-access-token"
+    bws_keychain_service: str = "moc-env-bws-access-token"
     bws_keychain_account: str | None = None
 
     def _bws_secret_id_keychain_account(self) -> str:
@@ -279,7 +279,7 @@ def credential_options_from_environment(
 
     values = dict(os.environ if environment is None else environment)
     secret_id = values.get("GITHUB_BWS_SECRET_ID") or values.get(
-        "MOC_ENV_STATUS_BWS_SECRET_ID"
+        "MOC_ENV_BWS_SECRET_ID"
     )
     secret_id_keychain_service = values.get(
         "GITHUB_BWS_SECRET_ID_KEYCHAIN_SERVICE"
@@ -298,10 +298,10 @@ def credential_options_from_environment(
         bws_secret_id=secret_id,
         bws_access_token=values.get("BWS_ACCESS_TOKEN"),
         bws_secret_id_keychain_service=secret_id_keychain_service
-        or "moc-env-status-github-token",
+        or "moc-env-github-token",
         bws_secret_id_keychain_account=secret_id_keychain_account,
         bws_keychain_service=values.get(
-            "BWS_ACCESS_TOKEN_KEYCHAIN_SERVICE", "moc-env-status-bws-access-token"
+            "BWS_ACCESS_TOKEN_KEYCHAIN_SERVICE", "moc-env-bws-access-token"
         ),
         bws_keychain_account=bws_account,
     )

@@ -22,7 +22,7 @@ RUN_ARGS := $(ENV) --format $(FORMAT) $(PRS_FLAG) $(ARGS)
         clean clean-all
 
 help: ## Show available targets and common variables
-	@printf 'moc-env-status Makefile\n\n'
+	@printf 'moc-env Makefile\n\n'
 	@printf 'Usage:\n'
 	@printf '  make <target> [ENV=bu-ist-demo] [FORMAT=text|json|markdown] [ARGS="..."]\n\n'
 	@printf 'Targets:\n'
@@ -49,24 +49,24 @@ test: ## Run the unit-test suite
 	$(UV) run --locked python -m unittest discover -s tests -v
 
 list: ## List environment names that can be passed to the CLI
-	$(UV) run --locked moc-env-status list
+	$(UV) run --locked moc-env list
 
 run: run-text ## Run the CLI (default ENV and text format)
 
 run-text: ## Run the CLI with text output
-	$(UV) run --locked moc-env-status $(RUN_ARGS)
+	$(UV) run --locked moc-env $(RUN_ARGS)
 
 run-json: ## Run the CLI with JSON output
-	$(UV) run --locked moc-env-status $(ENV) --format json $(PRS_FLAG) $(ARGS)
+	$(UV) run --locked moc-env $(ENV) --format json $(PRS_FLAG) $(ARGS)
 
 run-markdown: ## Run the CLI with Markdown output
-	$(UV) run --locked moc-env-status $(ENV) --format markdown $(PRS_FLAG) $(ARGS)
+	$(UV) run --locked moc-env $(ENV) --format markdown $(PRS_FLAG) $(ARGS)
 
 run-no-prs: ## Run the CLI without pull-request discovery
-	$(UV) run --locked moc-env-status $(ENV) --format $(FORMAT) --no-prs $(ARGS)
+	$(UV) run --locked moc-env $(ENV) --format $(FORMAT) --no-prs $(ARGS)
 
 report-markdown: ## Write a verbose Markdown report to OUTPUT
-	$(UV) run --locked moc-env-status $(ENV) --format markdown --output $(OUTPUT)
+	$(UV) run --locked moc-env $(ENV) --format markdown --output $(OUTPUT)
 
 build: ## Build source distribution and wheel
 	$(UV) build

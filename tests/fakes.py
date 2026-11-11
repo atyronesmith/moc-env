@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from moc_env_status.github import GitHubClient
+from moc_env.github import GitHubClient
 
 
 class FakeGitHubClient(GitHubClient):

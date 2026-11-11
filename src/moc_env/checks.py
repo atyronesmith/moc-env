@@ -84,7 +84,7 @@ def list_environments(client: GitHubClient) -> list[dict[str, Any]]:
                 "name": base_name,
                 "infra_cluster": infra_cluster,
                 "workload_clusters": workload_clusters,
-                "status_command": f"moc-env-status {base_name}",
+                "status_command": f"moc-env {base_name}",
                 "source_repository": repository,
                 "source_path": hub_inventory_path,
             }

@@ -9,7 +9,7 @@ import unittest
 from collections.abc import Callable
 from pathlib import Path
 
-from moc_env_status.credentials import (
+from moc_env.credentials import (
     CredentialNotFoundError,
     CredentialError,
     CredentialOptions,
@@ -86,7 +86,7 @@ class CredentialResolverTest(unittest.TestCase):
                         [
                             "find-generic-password",
                             "-s",
-                            "moc-env-status-bws-access-token",
+                            "moc-env-bws-access-token",
                             "-a",
                             "fixture-user",
                             "-w",
@@ -139,7 +139,7 @@ class CredentialResolverTest(unittest.TestCase):
                         [
                             "find-generic-password",
                             "-s",
-                            "moc-env-status-github-token",
+                            "moc-env-github-token",
                             "-a",
                             "fixture-user",
                             "-w",
@@ -157,7 +157,7 @@ class CredentialResolverTest(unittest.TestCase):
                         [
                             "find-generic-password",
                             "-s",
-                            "moc-env-status-bws-access-token",
+                            "moc-env-bws-access-token",
                             "-a",
                             "fixture-user",
                             "-w",
@@ -235,7 +235,7 @@ class CredentialResolverTest(unittest.TestCase):
     def test_environment_options_include_defaults_and_aliases(self) -> None:
         options = credential_options_from_environment(
             {
-                "GITHUB_BWS_SECRET_ID": "00000000-0000-0000-0000-000000000000",
+                "MOC_ENV_BWS_SECRET_ID": "00000000-0000-0000-0000-000000000000",
                 "GITHUB_BWS_SECRET_ID_KEYCHAIN_SERVICE": "uuid-service-fixture",
                 "BWS_ACCESS_TOKEN_KEYCHAIN_SERVICE": "bws-service-fixture",
                 "USER": "fixture-user",

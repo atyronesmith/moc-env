@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import unittest
 
-from moc_env_status.model import CheckResult, Environment, StatusReport
-from moc_env_status.report import render_markdown, render_text
+from moc_env.model import CheckResult, Environment, StatusReport
+from moc_env.report import render_markdown, render_text
 
 
 class ReportRenderingTest(unittest.TestCase):
