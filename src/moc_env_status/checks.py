@@ -714,6 +714,7 @@ class StatusChecker:
                     evidence={
                         "path_count": len(found),
                         "expected_path_count": len(required_paths),
+                        "expected_paths": required_paths,
                         "paths": found,
                     },
                     url=github_url(repository, exact or (prefix or "").rstrip("/")),
