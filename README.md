@@ -149,7 +149,7 @@ Then set the non-secret selectors:
 
 ```dotenv
 GITHUB_BWS_SECRET_ID=00000000-0000-0000-0000-000000000000
-BWS_ACCESS_TOKEN_KEYCHAIN_SERVICE=jira-bws-access-token
+BWS_ACCESS_TOKEN_KEYCHAIN_SERVICE=example-bws-access-token
 ```
 
 `.env` is Git-ignored. It may contain only selector values such as UUIDs and
