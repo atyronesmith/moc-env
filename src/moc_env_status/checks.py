@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
+from dataclasses import replace
 from typing import Any
 
 import yaml
@@ -107,7 +108,8 @@ class StatusChecker:
         checks: list[CheckResult] = []
         if environment.issue_number is not None:
             checks.extend(self._issue_checks(environment))
-        checks.extend(self._infra_checks(environment))
+        infra_checks, environment = self._infra_checks(environment)
+        checks.extend(infra_checks)
         checks.extend(self._keycloak_checks(environment))
         checks.extend(self._apps_checks(environment))
         return StatusReport(
@@ -161,7 +163,7 @@ class StatusChecker:
             )
         ]
 
-    def _infra_checks(self, environment: Environment) -> list[CheckResult]:
+    def _infra_checks(self, environment: Environment) -> tuple[list[CheckResult], Environment]:
         repository = f"{ORG}/oac-infra"
         inventory_path = "infra/inventory/00hosts.yaml"
         hub_inventory_path = "hub-images/inventory.yml"
@@ -365,6 +367,13 @@ class StatusChecker:
             self.client.get_file(repository, vars_path) if vars_path in tree else None
         )
         values = yaml.safe_load(vars_text) if vars_text else {}
+        if isinstance(values, dict) and values.get("cluster_domain_name") and values.get("base_domain"):
+            environment = replace(
+                environment,
+                domain_override=(
+                    f"{values['cluster_domain_name']}.{values['base_domain']}"
+                ),
+            )
         expected_fields = [
             "cluster_domain_name",
             "base_domain",
@@ -419,7 +428,7 @@ class StatusChecker:
                 url=github_url(repository, vars_path),
             )
         )
-        return results
+        return results, environment
 
     def _keycloak_checks(self, environment: Environment) -> list[CheckResult]:
         repository = f"{ORG}/moc-keycloak"
