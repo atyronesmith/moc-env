@@ -11,9 +11,13 @@ import yaml
 from .github import GitHubClient, github_url
 from .model import CheckResult, Environment, StatusReport
 from .observed import (
+    AppsObservation,
+    InfraObservation,
+    IssueObservation,
+    KeycloakObservation,
     OAC_INFRA_REPOSITORY,
     inventory_clusters,
-    read_infra_observation,
+    read_environment_observation,
 )
 
 ORG = "CCI-MOC"
@@ -127,43 +131,43 @@ class StatusChecker:
 
     def run(self, environment: Environment) -> StatusReport:
         checks: list[CheckResult] = []
-        if environment.issue_number is not None:
-            checks.extend(self._issue_checks(environment))
-        infra_checks, environment = self._infra_checks(environment)
+        observation = read_environment_observation(
+            self.client,
+            environment,
+            progress=self._emit_progress,
+            include_pull_requests=self.include_prs,
+        )
+        environment = observation.environment
+        if observation.issue is not None:
+            checks.extend(self._issue_checks(observation.issue))
+        infra_checks, environment = self._infra_checks(environment, observation.infra)
         checks.extend(infra_checks)
-        checks.extend(self._keycloak_checks(environment))
-        checks.extend(self._apps_checks(environment))
+        checks.extend(self._keycloak_checks(environment, observation.keycloak))
+        checks.extend(self._apps_checks(environment, observation.apps))
         return StatusReport(
             environment=environment,
             checks=checks,
             overall_state=self._overall_state(checks),
         )
 
-    def _issue_checks(self, environment: Environment) -> list[CheckResult]:
-        assert environment.issue_number is not None
+    def _issue_checks(self, observation: IssueObservation) -> list[CheckResult]:
         repository = f"{ORG}/MOC-issues"
-        path = f"issues/{environment.issue_number}"
-        self._emit_progress(
-            "Request",
-            f"read MOC issue #{environment.issue_number} to establish requested intent",
-            repository,
-            path,
-        )
-        issue = self.client.get_json(f"/repos/{repository}/{path}")
-        state = "requested" if issue.get("state") == "open" else "missing"
+        path = f"issues/{observation.issue_number}"
+        issue_state = observation.state.value
+        state = "requested" if issue_state == "open" else "missing"
         if state == "requested":
             reason = (
-                f"Issue #{environment.issue_number} is open and records the "
+                f"Issue #{observation.issue_number} is open and records the "
                 "environment request."
             )
-            present = {"issue_state": "open", "title": issue.get("title")}
+            present = {"issue_state": "open", "title": observation.title.value}
             missing = None
         else:
             reason = (
-                f"Issue #{environment.issue_number} is {issue.get('state')}; "
+                f"Issue #{observation.issue_number} is {issue_state}; "
                 "it is not an open request."
             )
-            present = {"issue_state": issue.get("state")}
+            present = {"issue_state": issue_state}
             missing = "An open MOC issue"
 
         return [
@@ -175,23 +179,26 @@ class StatusChecker:
                 ref="main",
                 state=state,
                 expected="Open issue recording the environment request",
-                actual=issue.get("state"),
+                actual=issue_state,
                 reason=reason,
                 present=present,
                 missing=missing,
-                evidence={"title": issue.get("title"), "url": issue.get("html_url")},
-                url=issue.get("html_url"),
+                evidence={
+                    "state": observation.state.to_dict(),
+                    "title": observation.title.to_dict(),
+                    "url": observation.url.to_dict(),
+                },
+                url=observation.url.value,
             )
         ]
 
-    def _infra_checks(self, environment: Environment) -> tuple[list[CheckResult], Environment]:
+    def _infra_checks(
+        self,
+        environment: Environment,
+        observation: InfraObservation,
+    ) -> tuple[list[CheckResult], Environment]:
         repository = OAC_INFRA_REPOSITORY
         results: list[CheckResult] = []
-        observation = read_infra_observation(
-            self.client,
-            environment,
-            progress=self._emit_progress,
-        )
         inventory_path = observation.inventory_path
         hub_inventory_path = observation.hub_inventory_path
         vars_path = observation.variables_path
@@ -417,25 +424,34 @@ class StatusChecker:
         )
         return results, environment
 
-    def _keycloak_checks(self, environment: Environment) -> list[CheckResult]:
-        repository = f"{ORG}/moc-keycloak"
-        path = "main.tf"
-        self._emit_progress(
-            "Identity",
-            "read Terraform configuration to verify the infra cluster's Keycloak OIDC client",
-            repository,
-            path,
-        )
-        text = self.client.get_file(repository, path)
+    def _keycloak_checks(
+        self,
+        environment: Environment,
+        observation: KeycloakObservation,
+    ) -> list[CheckResult]:
+        repository = observation.source_repository
+        path = observation.source_path
         expected = {
             "client": environment.infra_cluster,
             "redirect_uri": (
-                f"openshift_redirect_uri = \"https://oauth-openshift.apps."
-                f"{environment.domain}/oauth2callback/mocsso\""
+                f"https://oauth-openshift.apps.{environment.domain}"
+                "/oauth2callback/mocsso"
             ),
-            "secret_name": f'"cluster/{environment.infra_cluster}/keycloak-oidc"',
+            "secret_name": f"cluster/{environment.infra_cluster}/keycloak-oidc",
         }
-        present = {name: value in text for name, value in expected.items()}
+        client = observation.client
+        if not observation.path_present:
+            present = {name: False for name in expected}
+        else:
+            present = {
+                "client": bool(client and client.cluster_name.value == expected["client"]),
+                "redirect_uri": bool(
+                    client and client.redirect_uri.value == expected["redirect_uri"]
+                ),
+                "secret_name": bool(
+                    client and client.secret_name.value == expected["secret_name"]
+                ),
+            }
         present_keys = [name for name, found in present.items() if found]
         missing_keys = [name for name, found in present.items() if not found]
         if not missing_keys:
@@ -467,20 +483,31 @@ class StatusChecker:
                 reason=reason,
                 present={"declarations": present_keys},
                 missing={"declarations": missing_keys} if missing_keys else None,
-                evidence=present,
+                evidence={
+                    "declarations": present,
+                    "client": {
+                        "block_name": client.block_name.to_dict(),
+                        "cluster_name": client.cluster_name.to_dict(),
+                        "redirect_uri": client.redirect_uri.to_dict(),
+                        "secret_name": client.secret_name.to_dict(),
+                    },
+                } if client else {"declarations": present},
+                source={
+                    "repository": repository,
+                    "path": path,
+                    "ref": "main",
+                } if client else None,
                 url=github_url(repository, path),
             )
         ]
 
-    def _apps_checks(self, environment: Environment) -> list[CheckResult]:
-        repository = f"{ORG}/oac-apps"
-        self._emit_progress(
-            "GitOps configuration",
-            "read the repository tree to locate merged infra and workload GitOps paths",
-            repository,
-            "git/trees/main?recursive=1",
-        )
-        tree = self.client.get_tree(repository)
+    def _apps_checks(
+        self,
+        environment: Environment,
+        observation: AppsObservation,
+    ) -> list[CheckResult]:
+        repository = observation.source_repository
+        tree = set(observation.paths)
         infra_defaults = f"hosted-clusters/{environment.infra_cluster}/values.yaml"
         hub_values_prefix = f"values/{environment.infra_cluster}/"
         local_prefix = f"values/{environment.infra_cluster}/local-cluster/"
@@ -629,29 +656,7 @@ class StatusChecker:
         if not self.include_prs:
             return results
 
-        self._emit_progress(
-            "GitOps configuration",
-            "search pull requests for in-flight changes that reference the environment",
-            repository,
-            "pulls?state=all",
-        )
-        pull_requests = []
-        terms = (
-            environment.name,
-            environment.infra_cluster,
-            environment.workload_cluster,
-        )
-        for pull in self.client.pulls(repository):
-            searchable = " ".join(
-                [
-                    str(pull.get("title") or ""),
-                    str(pull.get("body") or ""),
-                    str(pull.get("head", {}).get("ref") or ""),
-                ]
-            )
-            if any(term in searchable for term in terms):
-                files = list(self.client.pr_files(repository, pull["number"]))
-                pull_requests.append({"pull_request": pull, "files": files})
+        pull_requests = observation.pull_requests
 
         if not pull_requests:
             results.append(
@@ -672,29 +677,22 @@ class StatusChecker:
             )
             return results
 
-        open_prs = [
-            item
-            for item in pull_requests
-            if item["pull_request"].get("state") == "open"
-        ]
-        merged_prs = [
-            item for item in pull_requests if item["pull_request"].get("merged_at")
-        ]
+        open_prs = [item for item in pull_requests if item.state.value == "open"]
+        merged_prs = [item for item in pull_requests if item.merged.value]
         state = "pr_open" if open_prs else "pr_merged"
         evidence = []
         for item in pull_requests:
-            pull = item["pull_request"]
+            pull = item
             evidence.append(
                 {
-                    "number": pull["number"],
-                    "title": pull.get("title"),
-                    "state": pull.get("state"),
-                    "merged": bool(pull.get("merged_at")),
-                    "head_sha": pull.get("head", {}).get("sha"),
-                    "html_url": pull.get("html_url"),
-                    "changed_files": [
-                        file.get("filename") for file in item["files"]
-                    ],
+                    "number": pull.number,
+                    "title": pull.title.to_dict(),
+                    "state": pull.state.to_dict(),
+                    "merged": pull.merged.to_dict(),
+                    "head_ref": pull.head_ref.to_dict(),
+                    "head_sha": pull.head_sha.to_dict(),
+                    "html_url": pull.url.to_dict(),
+                    "changed_files": list(pull.changed_files),
                 }
             )
 

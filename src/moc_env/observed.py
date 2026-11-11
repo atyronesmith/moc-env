@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
+import re
 from typing import Any
 
 import yaml
@@ -12,9 +13,35 @@ from .github import GitHubClient
 from .model import Environment
 
 OAC_INFRA_REPOSITORY = "CCI-MOC/oac-infra"
+MOC_ISSUES_REPOSITORY = "CCI-MOC/MOC-issues"
+MOC_KEYCLOAK_REPOSITORY = "CCI-MOC/moc-keycloak"
+OAC_APPS_REPOSITORY = "CCI-MOC/oac-apps"
 INVENTORY_PATH = "infra/inventory/00hosts.yaml"
 HUB_INVENTORY_PATH = "hub-images/inventory.yml"
+KEYCLOAK_PATH = "main.tf"
 ProgressCallback = Callable[[str, str, str, str], None]
+
+
+@dataclass(frozen=True)
+class SourceValue:
+    """One extracted value with its source and extraction confidence."""
+
+    value: Any
+    repository: str
+    path: str
+    ref: str = "main"
+    confidence: str = "exact"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "value": self.value,
+            "provenance": {
+                "repository": self.repository,
+                "path": self.path,
+                "ref": self.ref,
+            },
+            "confidence": self.confidence,
+        }
 
 
 def flatten_host(
@@ -111,6 +138,90 @@ class HubVariablesObservation:
 
     path_present: bool
     values: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class IssueObservation:
+    """Normalized MOC issue intent."""
+
+    issue_number: int
+    state: SourceValue
+    title: SourceValue
+    url: SourceValue
+
+
+@dataclass(frozen=True)
+class KeycloakClientObservation:
+    """Normalized Keycloak OIDC declaration for one infra cluster."""
+
+    block_name: SourceValue
+    cluster_name: SourceValue
+    redirect_uri: SourceValue
+    secret_name: SourceValue
+
+
+@dataclass(frozen=True)
+class KeycloakObservation:
+    """Normalized moc-keycloak state."""
+
+    path_present: bool
+    client: KeycloakClientObservation | None
+    source_repository: str
+    source_path: str
+
+
+@dataclass(frozen=True)
+class PullRequestObservation:
+    """A pull request relevant to an environment."""
+
+    number: int
+    title: SourceValue
+    state: SourceValue
+    merged: SourceValue
+    head_ref: SourceValue
+    head_sha: SourceValue
+    url: SourceValue
+    changed_files: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class AppsObservation:
+    """Normalized oac-apps merged-main paths and in-flight pull requests."""
+
+    paths: tuple[str, ...]
+    pull_requests: tuple[PullRequestObservation, ...]
+    source_repository: str
+    source_ref: str = "main"
+
+
+@dataclass(frozen=True)
+class ObservedWorkloadCluster:
+    """Observed inputs for one workload cluster."""
+
+    inventory: ClusterInventoryObservation
+    apps: AppsObservation
+
+
+@dataclass(frozen=True)
+class ObservedEnvironment:
+    """Combined repository observations for one environment."""
+
+    environment: Environment
+    issue: IssueObservation | None
+    infra: InfraObservation
+    keycloak: KeycloakObservation
+    apps: AppsObservation
+
+    @property
+    def infra_cluster(self) -> ClusterInventoryObservation:
+        return self.infra.clusters[self.environment.infra_cluster]
+
+    @property
+    def workload_cluster(self) -> ObservedWorkloadCluster:
+        return ObservedWorkloadCluster(
+            inventory=self.infra.clusters[self.environment.workload_cluster],
+            apps=self.apps,
+        )
 
 
 @dataclass(frozen=True)
@@ -214,4 +325,193 @@ def read_infra_observation(
         clusters=cluster_observations,
         hub_inventory=hub_observation,
         hub_variables=variables_observation,
+    )
+
+
+def read_issue_observation(
+    client: GitHubClient,
+    environment: Environment,
+    progress: ProgressCallback | None = None,
+) -> IssueObservation | None:
+    """Read and normalize the requested MOC issue."""
+
+    if environment.issue_number is None:
+        return None
+    repository = MOC_ISSUES_REPOSITORY
+    path = f"issues/{environment.issue_number}"
+    if progress is not None:
+        progress(
+            "Request",
+            f"read MOC issue #{environment.issue_number} to establish requested intent",
+            repository,
+            path,
+        )
+    issue = client.get_json(f"/repos/{repository}/{path}")
+    source = (repository, path)
+    return IssueObservation(
+        issue_number=environment.issue_number,
+        state=SourceValue(issue.get("state"), *source),
+        title=SourceValue(issue.get("title"), *source),
+        url=SourceValue(issue.get("html_url"), *source),
+    )
+
+
+def _terraform_string(text: str, key: str) -> str | None:
+    match = re.search(rf'^\s*{re.escape(key)}\s*=\s*"([^"]+)"', text, re.MULTILINE)
+    return match.group(1) if match else None
+
+
+def read_keycloak_observation(
+    client: GitHubClient,
+    environment: Environment,
+    progress: ProgressCallback | None = None,
+) -> KeycloakObservation:
+    """Read and normalize the infra cluster's Keycloak OIDC client."""
+
+    repository = MOC_KEYCLOAK_REPOSITORY
+    if progress is not None:
+        progress(
+            "Identity",
+            "read Terraform configuration to verify the infra cluster's Keycloak OIDC client",
+            repository,
+            KEYCLOAK_PATH,
+        )
+    tree = client.get_tree(repository)
+    if KEYCLOAK_PATH not in tree:
+        return KeycloakObservation(
+            path_present=False,
+            client=None,
+            source_repository=repository,
+            source_path=KEYCLOAK_PATH,
+        )
+
+    text = client.get_file(repository, KEYCLOAK_PATH)
+
+    cluster = environment.infra_cluster
+    pattern = re.compile(
+        rf'^\s*([A-Za-z0-9_-]+)\s*=\s*\{{(.*?)^\s*\}}',
+        re.MULTILINE | re.DOTALL,
+    )
+    client_observation: KeycloakClientObservation | None = None
+    for match in pattern.finditer(text):
+        block_name, block = match.groups()
+        declared_cluster = _terraform_string(block, "cluster_name")
+        if declared_cluster != cluster:
+            continue
+        client_observation = KeycloakClientObservation(
+            block_name=SourceValue(block_name, repository, KEYCLOAK_PATH),
+            cluster_name=SourceValue(declared_cluster, repository, KEYCLOAK_PATH),
+            redirect_uri=SourceValue(
+                _terraform_string(block, "openshift_redirect_uri"),
+                repository,
+                KEYCLOAK_PATH,
+            ),
+            secret_name=SourceValue(
+                _terraform_string(block, "client_secret_name"),
+                repository,
+                KEYCLOAK_PATH,
+            ),
+        )
+        break
+    return KeycloakObservation(
+        path_present=True,
+        client=client_observation,
+        source_repository=repository,
+        source_path=KEYCLOAK_PATH,
+    )
+
+
+def read_apps_observation(
+    client: GitHubClient,
+    environment: Environment,
+    progress: ProgressCallback | None = None,
+    include_pull_requests: bool = True,
+) -> AppsObservation:
+    """Read merged oac-apps paths and environment-relevant pull requests."""
+
+    repository = OAC_APPS_REPOSITORY
+    if progress is not None:
+        progress(
+            "GitOps configuration",
+            "read the repository tree to locate merged infra and workload GitOps paths",
+            repository,
+            "git/trees/main?recursive=1",
+        )
+    tree = client.get_tree(repository)
+    terms = (
+        environment.name,
+        environment.infra_cluster,
+        environment.workload_cluster,
+    )
+    pull_requests: list[PullRequestObservation] = []
+    if include_pull_requests:
+        if progress is not None:
+            progress(
+                "GitOps configuration",
+                "search pull requests for in-flight changes that reference the environment",
+                repository,
+                "pulls?state=all",
+            )
+        for pull in client.pulls(repository):
+            searchable = " ".join(
+                [
+                    str(pull.get("title") or ""),
+                    str(pull.get("body") or ""),
+                    str(pull.get("head", {}).get("ref") or ""),
+                ]
+            )
+            if not any(term in searchable for term in terms):
+                continue
+            files = tuple(
+                file.get("filename")
+                for file in client.pr_files(repository, pull["number"])
+                if file.get("filename") is not None
+            )
+            source = (repository, f"pulls/{pull['number']}", "all")
+            pull_requests.append(
+                PullRequestObservation(
+                    number=pull["number"],
+                    title=SourceValue(pull.get("title"), *source),
+                    state=SourceValue(pull.get("state"), *source),
+                    merged=SourceValue(bool(pull.get("merged_at")), *source),
+                    head_ref=SourceValue(
+                        pull.get("head", {}).get("ref"), *source
+                    ),
+                    head_sha=SourceValue(
+                        pull.get("head", {}).get("sha"), *source
+                    ),
+                    url=SourceValue(pull.get("html_url"), *source),
+                    changed_files=files,
+                )
+            )
+    return AppsObservation(
+        paths=tuple(sorted(tree)),
+        pull_requests=tuple(pull_requests),
+        source_repository=repository,
+    )
+
+
+def read_environment_observation(
+    client: GitHubClient,
+    environment: Environment,
+    progress: ProgressCallback | None = None,
+    include_pull_requests: bool = True,
+) -> ObservedEnvironment:
+    """Read all Phase 1 observations for an environment."""
+
+    issue = read_issue_observation(client, environment, progress)
+    infra = read_infra_observation(client, environment, progress)
+    keycloak = read_keycloak_observation(client, environment, progress)
+    apps = read_apps_observation(
+        client,
+        environment,
+        progress,
+        include_pull_requests=include_pull_requests,
+    )
+    return ObservedEnvironment(
+        environment=environment,
+        issue=issue,
+        infra=infra,
+        keycloak=keycloak,
+        apps=apps,
     )

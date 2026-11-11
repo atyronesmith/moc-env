@@ -64,6 +64,7 @@ class CheckResult:
     present: Any = None
     missing: Any = None
     evidence: dict[str, Any] = field(default_factory=dict)
+    source: dict[str, Any] | None = None
     url: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
