@@ -120,6 +120,50 @@ class ReportRenderingTest(unittest.TestCase):
         self.assertIn("MISSING", rendered)
         self.assertIn("2 of 3 expected fields present", rendered)
 
+    def test_text_path_scope_checks_are_compact(self) -> None:
+        check = self.report["checks"][0]
+        check = {
+            **check,
+            "stage": "GitOps configuration",
+            "check": "Fixture component values",
+            "expected": "At least one matching path",
+            "present": {"file_count": 0},
+            "missing": {"file_count": 1, "paths": ["values/fixture/"]},
+            "actual": {"matched_file_count": 0},
+            "evidence": {
+                "path_count": 0,
+                "expected_path_count": 0,
+                "expected_paths": [],
+                "paths": [],
+            },
+        }
+        report = {**self.report, "checks": [check]}
+        rendered = render_text(report)
+        self.assertIn("Result:       0 matching paths; expected at least one", rendered)
+        self.assertNotIn("Present:", rendered)
+        self.assertNotIn("Missing:", rendered)
+
+    def test_text_pull_request_counts_are_compact(self) -> None:
+        check = self.report["checks"][0]
+        check = {
+            **check,
+            "stage": "GitOps configuration",
+            "check": "Relevant pull requests",
+            "expected": "No open PRs; relevant changes merged into main",
+            "present": {"matching_pr_count": 3, "merged_pr_count": 3},
+            "missing": None,
+            "actual": {"matching_pr_count": 3, "open_count": 0, "merged_count": 3},
+            "evidence": {"pull_requests": []},
+        }
+        report = {**self.report, "checks": [check]}
+        rendered = render_text(report)
+        self.assertIn("Pull request counts:", rendered)
+        self.assertIn("Matching PRs", rendered)
+        self.assertIn("Merged PRs", rendered)
+        self.assertIn("Open PRs", rendered)
+        self.assertNotIn("Present:", rendered)
+        self.assertNotIn("Missing:", rendered)
+
 
 if __name__ == "__main__":
     unittest.main()
