@@ -110,6 +110,51 @@ def _field_value_checklist(check: dict[str, Any]) -> list[str] | None:
     return lines
 
 
+def _path_scope_summary(check: dict[str, Any]) -> list[str] | None:
+    """Summarize open-ended path-scope checks without repeating count objects."""
+    actual = check.get("actual")
+    evidence = check.get("evidence") or {}
+    if (
+        check.get("expected") != "At least one matching path"
+        or not isinstance(actual, dict)
+        or not isinstance(actual.get("matched_file_count"), int)
+    ):
+        return None
+
+    lines: list[str] = []
+    found_paths = evidence.get("paths")
+    if isinstance(found_paths, list) and found_paths:
+        lines.append("  Matching paths:")
+        lines.extend(f"    {path}" for path in found_paths)
+    lines.append(
+        f"  Result:       {actual['matched_file_count']} matching paths; "
+        "expected at least one"
+    )
+    return lines
+
+
+def _pull_request_count_summary(check: dict[str, Any]) -> list[str] | None:
+    """Render pull-request counts once instead of three nested JSON objects."""
+    actual = check.get("actual")
+    required = {"matching_pr_count", "open_count", "merged_count"}
+    if not isinstance(actual, dict) or not required.issubset(actual):
+        return None
+
+    counts = [
+        ("Matching PRs", actual["matching_pr_count"]),
+        ("Merged PRs", actual["merged_count"]),
+        ("Open PRs", actual["open_count"]),
+    ]
+    label_width = max(len(label) for label, _ in counts) + 2
+    value_width = max(len(str(value)) for _, value in counts) + 2
+    lines = ["  Pull request counts:"]
+    lines.extend(
+        f"    {label:<{label_width}} {str(value):>{value_width}}"
+        for label, value in counts
+    )
+    return lines
+
+
 def render_text(report: dict[str, Any]) -> str:
     environment = report["environment"]
     lines = [
@@ -138,6 +183,8 @@ def render_text(report: dict[str, Any]) -> str:
     for check in report["checks"]:
         path_lines = _path_checklist(check)
         field_value_lines = _field_value_checklist(check)
+        path_scope_lines = _path_scope_summary(check)
+        pull_request_lines = _pull_request_count_summary(check)
         lines.extend(
             [
                 "-" * 78,
@@ -151,6 +198,10 @@ def render_text(report: dict[str, Any]) -> str:
             lines.extend(path_lines)
         elif field_value_lines is not None:
             lines.extend(field_value_lines)
+        elif path_scope_lines is not None:
+            lines.extend(path_scope_lines)
+        elif pull_request_lines is not None:
+            lines.extend(pull_request_lines)
         else:
             lines.extend(
                 [
