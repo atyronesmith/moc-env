@@ -49,6 +49,27 @@ def _state(state: str) -> str:
     return f"{STATE_SYMBOLS.get(state, '•')} {state}"
 
 
+def _path_checklist(check: dict[str, Any]) -> list[str] | None:
+    evidence = check.get("evidence") or {}
+    expected_paths = evidence.get("expected_paths")
+    found_paths = set(evidence.get("paths") or [])
+    if not isinstance(expected_paths, list) or not expected_paths:
+        return None
+
+    width = max(len(path) for path in expected_paths) + 2
+    lines = ["  Expected paths:"]
+    present_count = 0
+    for path in expected_paths:
+        present = path in found_paths
+        present_count += int(present)
+        symbol = "✅" if present else "❌"
+        lines.append(f"    {path:<{width}} {symbol}")
+    lines.append(
+        f"  Result:       {present_count} of {len(expected_paths)} expected paths present"
+    )
+    return lines
+
+
 def render_text(report: dict[str, Any]) -> str:
     environment = report["environment"]
     lines = [
@@ -75,6 +96,7 @@ def render_text(report: dict[str, Any]) -> str:
 
     lines.extend(["", "Detailed checks:"])
     for check in report["checks"]:
+        path_lines = _path_checklist(check)
         lines.extend(
             [
                 "-" * 78,
@@ -82,12 +104,19 @@ def render_text(report: dict[str, Any]) -> str:
                 f"  Why checked:  {check['reason']}",
                 f"  Repository:   {check['repository']}",
                 f"  Path:         {check['path']} @ {check['ref']}",
-                f"  Expected:     {_text_value(check['expected'], 16)}",
-                f"  Present:      {_text_value(check.get('present'), 16)}",
-                f"  Missing:      {_text_value(check.get('missing'), 16)}",
-                f"  Actual:       {_text_value(check['actual'], 16)}",
             ]
         )
+        if path_lines is not None:
+            lines.extend(path_lines)
+        else:
+            lines.extend(
+                [
+                    f"  Expected:     {_text_value(check['expected'], 16)}",
+                    f"  Present:      {_text_value(check.get('present'), 16)}",
+                    f"  Missing:      {_text_value(check.get('missing'), 16)}",
+                    f"  Actual:       {_text_value(check['actual'], 16)}",
+                ]
+            )
         if check.get("url"):
             lines.append(f"  URL:          {check['url']}")
         lines.append("")

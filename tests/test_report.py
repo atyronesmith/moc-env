@@ -60,6 +60,32 @@ class ReportRenderingTest(unittest.TestCase):
         self.assertIn("fixture-env-agent-discovery.iso", rendered)
         self.assertIn("## Raw report data", rendered)
 
+    def test_text_path_checks_use_aligned_checklist(self) -> None:
+        check = self.report["checks"][0]
+        check = {
+            **check,
+            "stage": "GitOps configuration",
+            "check": "Fixture path values",
+            "expected": {"file_count": 2, "scope": "values/fixture"},
+            "present": {"file_count": 1},
+            "missing": {"file_count": 1, "paths": ["values/fixture/missing.yaml"]},
+            "actual": {"matched_file_count": 1},
+            "evidence": {
+                "expected_paths": [
+                    "values/fixture/present.yaml",
+                    "values/fixture/missing.yaml",
+                ],
+                "paths": ["values/fixture/present.yaml"],
+            },
+        }
+        report = {**self.report, "checks": [check]}
+        rendered = render_text(report)
+        self.assertIn("Expected paths:", rendered)
+        self.assertIn("values/fixture/present.yaml", rendered)
+        self.assertIn("✅", rendered)
+        self.assertIn("❌", rendered)
+        self.assertIn("1 of 2 expected paths present", rendered)
+
 
 if __name__ == "__main__":
     unittest.main()
