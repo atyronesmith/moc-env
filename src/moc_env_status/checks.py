@@ -75,6 +75,75 @@ def _host_summary(hosts: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
+def _inventory_clusters(node: Any) -> list[str]:
+    """Return all values of vars.cluster in an Ansible inventory."""
+
+    clusters: list[str] = []
+    if not isinstance(node, dict):
+        return clusters
+    variables = node.get("vars")
+    if isinstance(variables, dict) and isinstance(variables.get("cluster"), str):
+        clusters.append(variables["cluster"])
+    for child in node.get("children", {}).values():
+        clusters.extend(_inventory_clusters(child))
+    return sorted(set(clusters))
+
+
+def list_environments(client: GitHubClient) -> list[dict[str, Any]]:
+    """List environment base names supported by the status checker."""
+
+    repository = f"{ORG}/oac-infra"
+    tree = client.get_tree(repository)
+    hub_inventory_path = "hub-images/inventory.yml"
+    inventory_path = "infra/inventory/00hosts.yaml"
+
+    hub_text = (
+        client.get_file(repository, hub_inventory_path)
+        if hub_inventory_path in tree
+        else None
+    )
+    hub_inventory = yaml.safe_load(hub_text) if hub_text else {}
+    hub_children = (
+        hub_inventory.get("all", {}).get("children", {}) or {}
+        if isinstance(hub_inventory, dict)
+        else {}
+    )
+    infra_clusters = sorted(
+        cluster
+        for cluster in hub_children
+        if isinstance(cluster, str) and cluster.endswith("-infra")
+    )
+
+    inventory_text = (
+        client.get_file(repository, inventory_path)
+        if inventory_path in tree
+        else None
+    )
+    inventory = yaml.safe_load(inventory_text) if inventory_text else {}
+    inventory_root = inventory.get("all", inventory) if isinstance(inventory, dict) else inventory
+    all_clusters = _inventory_clusters(inventory_root)
+
+    environments: list[dict[str, Any]] = []
+    for infra_cluster in infra_clusters:
+        base_name = infra_cluster[: -len("-infra")]
+        workload_clusters = sorted(
+            cluster
+            for cluster in all_clusters
+            if cluster.startswith(f"{base_name}-") and cluster != infra_cluster
+        )
+        environments.append(
+            {
+                "name": base_name,
+                "infra_cluster": infra_cluster,
+                "workload_clusters": workload_clusters,
+                "status_command": f"moc-env-status {base_name}",
+                "source_repository": repository,
+                "source_path": hub_inventory_path,
+            }
+        )
+    return environments
+
+
 def _boot_image_state(url: str | None, cluster: str) -> str:
     if not url:
         return "missing"

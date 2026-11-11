@@ -50,6 +50,7 @@ Using the Makefile:
 make help
 make setup
 make test
+make list
 make run ENV=bu-ist-demo
 make run-json ENV=bu-ist-demo
 make run-no-prs ENV=bu-ist-demo
@@ -63,6 +64,18 @@ Common variables:
 make run ENV=bu-ist-demo FORMAT=markdown
 make run ARGS="--issue 666"
 make run-no-prs ENV=bu-ist-demo
+```
+
+List all environment names that can be used for status checks:
+
+```sh
+uv run moc-env-status list
+```
+
+JSON output:
+
+```sh
+uv run moc-env-status list --format json
 ```
 
 `make check` runs the unit tests, byte-compilation, Git whitespace check, and

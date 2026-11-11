@@ -38,6 +38,14 @@ class ReportRenderingTest(unittest.TestCase):
         self.assertIn("A URL exists, but it points to the generic discovery.iso.", rendered)
         self.assertIn("fixture-env-agent-discovery.iso", rendered)
         self.assertIn("Stage summary:", rendered)
+        self.assertIn(
+            "  Present:      {\n"
+            + " " * 18
+            + "\"boot_image_url\": \"http://10.2.0.82/boot/discovery.iso\"\n"
+            + " " * 16
+            + "}",
+            rendered,
+        )
 
     def test_markdown_is_verbose_and_actionable(self) -> None:
         rendered = render_markdown(self.report)

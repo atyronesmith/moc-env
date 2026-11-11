@@ -8,7 +8,7 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
-from .checks import KNOWN_ISSUES, StatusChecker
+from .checks import KNOWN_ISSUES, StatusChecker, list_environments
 from .credentials import (
     CredentialError,
     CredentialNotFoundError,
@@ -18,31 +18,16 @@ from .credentials import (
 )
 from .github import GitHubClient, GitHubError, RateLimitError
 from .model import Environment
-from .report import render_json, render_markdown, render_text
+from .report import (
+    render_environment_list_json,
+    render_environment_list_text,
+    render_json,
+    render_markdown,
+    render_text,
+)
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="moc-env-status",
-        description="Report CCI-MOC environment configuration state from public GitHub repositories",
-    )
-    parser.add_argument("environment", help="Environment name, such as bu-ist-demo")
-    parser.add_argument(
-        "--issue",
-        type=int,
-        help="MOC-issues number; defaults to 666 for bu-ist-demo",
-    )
-    parser.add_argument(
-        "--format",
-        choices=("text", "json", "markdown"),
-        default="text",
-        help="Output format",
-    )
-    parser.add_argument(
-        "--no-prs",
-        action="store_true",
-        help="Do not inspect pull requests",
-    )
+def _add_credential_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--bws-secret-id",
         help="Bitwarden Secrets Manager UUID whose key is GITHUB_TOKEN",
@@ -67,34 +52,70 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--timeout",
+        type=float,
+        default=20.0,
+        help="GitHub request timeout in seconds",
+    )
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="moc-env-status",
+        description="Report CCI-MOC environment configuration state from public GitHub repositories",
+        epilog="Run 'moc-env-status list' to discover environment names that can be checked.",
+    )
+    parser.add_argument("environment", help="Environment name, such as bu-ist-demo")
+    parser.add_argument(
+        "--issue",
+        type=int,
+        help="MOC-issues number; defaults to 666 for bu-ist-demo",
+    )
+    parser.add_argument(
+        "--format",
+        choices=("text", "json", "markdown"),
+        default="text",
+        help="Output format",
+    )
+    parser.add_argument(
+        "--no-prs",
+        action="store_true",
+        help="Do not inspect pull requests",
+    )
+    _add_credential_arguments(parser)
+    parser.add_argument(
         "--output",
         help=(
             "Write the rendered report to this file instead of stdout; "
             "useful with --format markdown"
         ),
     )
-    parser.add_argument(
-        "--timeout",
-        type=float,
-        default=20.0,
-        help="GitHub request timeout in seconds",
-    )
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
-    issue_number = args.issue
-    if issue_number is None:
-        issue_number = KNOWN_ISSUES.get(args.environment)
+def build_list_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="moc-env-status list",
+        description="List environment names that can be passed to moc-env-status",
+    )
+    parser.add_argument(
+        "--format",
+        choices=("text", "json"),
+        default="text",
+        help="Output format",
+    )
+    _add_credential_arguments(parser)
+    return parser
 
-    environment = Environment(name=args.environment, issue_number=issue_number)
+
+def _resolve_github_token(args: argparse.Namespace) -> str | None:
     try:
         credential_environment = load_credential_environment_file(args.env_file)
         credential_options = credential_options_from_environment(credential_environment)
     except CredentialError as exc:
         print(f"moc-env-status: {exc}", file=sys.stderr)
-        return 2
+        raise SystemExit(2)
+
     credential_overrides = {
         key: value
         for key, value in {
@@ -105,10 +126,7 @@ def main(argv: list[str] | None = None) -> int:
         if value is not None
     }
     if credential_overrides:
-        credential_options = replace(
-            credential_options,
-            **credential_overrides,
-        )
+        credential_options = replace(credential_options, **credential_overrides)
 
     resolver = CredentialResolver()
     explicit_keychain_selector = bool(
@@ -121,7 +139,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     try:
         try:
-            github_token = resolver.resolve(credential_options)
+            return resolver.resolve(credential_options)
         except CredentialNotFoundError:
             if (
                 credential_options.direct_token
@@ -133,10 +151,37 @@ def main(argv: list[str] | None = None) -> int:
                 "moc-env-status: no GitHub credential found; continuing unauthenticated",
                 file=sys.stderr,
             )
-            github_token = None
+            return None
     except CredentialError as exc:
         print(f"moc-env-status: {exc}", file=sys.stderr)
-        return 2
+        raise SystemExit(2)
+
+
+def main(argv: list[str] | None = None) -> int:
+    arguments = sys.argv[1:] if argv is None else argv
+    if arguments and arguments[0] == "list":
+        argv = arguments
+        args = build_list_parser().parse_args(argv[1:])
+        github_token = _resolve_github_token(args)
+        client = GitHubClient(token=github_token, timeout=args.timeout)
+        try:
+            environments = list_environments(client)
+        except (GitHubError, RateLimitError) as exc:
+            print(f"moc-env-status: {exc}", file=sys.stderr)
+            return 2
+        if args.format == "json":
+            print(render_environment_list_json(environments), end="")
+        else:
+            print(render_environment_list_text(environments), end="")
+        return 0
+
+    args = build_parser().parse_args(argv)
+    issue_number = args.issue
+    if issue_number is None:
+        issue_number = KNOWN_ISSUES.get(args.environment)
+
+    environment = Environment(name=args.environment, issue_number=issue_number)
+    github_token = _resolve_github_token(args)
 
     client = GitHubClient(token=github_token, timeout=args.timeout)
     stage_step = 0
