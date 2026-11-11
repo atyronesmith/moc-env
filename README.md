@@ -96,6 +96,31 @@ uv run moc-env-status bu-ist-demo --no-prs
 The CLI works without authentication against public repositories, but GitHub's
 unauthenticated REST quota is small.
 
+### Local selector file
+
+Copy `.env.example` to `.env`:
+
+```sh
+cp .env.example .env
+```
+
+Then set the non-secret selectors:
+
+```dotenv
+GITHUB_BWS_SECRET_ID=00000000-0000-0000-0000-000000000000
+BWS_ACCESS_TOKEN_KEYCHAIN_SERVICE=jira-bws-access-token
+```
+
+`.env` is Git-ignored. It may contain only selector values such as UUIDs and
+Keychain service/account names. It must not contain `GITHUB_TOKEN` or
+`BWS_ACCESS_TOKEN`. Real environment variables override `.env` values.
+
+Use another file with:
+
+```sh
+uv run moc-env-status bu-ist-demo --env-file /path/to/selectors.env
+```
+
 ### Direct token
 
 To use a token directly:

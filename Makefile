@@ -31,6 +31,7 @@ help: ## Show available targets and common variables
 	@printf '  %-18s %s\n' 'NO_PRS' 'Set to 1 to add --no-prs'
 	@printf '  %-18s %s\n' 'ARGS' 'Additional CLI arguments, quoted if needed'
 	@printf '  %-18s %s\n' 'UV' 'uv executable (default: uv)'
+	@printf '  %-18s %s\n' 'ENV_FILE' 'Not needed; the CLI reads .env by default'
 	@printf '\nCredential variables are read directly by the CLI:\n'
 	@printf '  GITHUB_TOKEN, GITHUB_BWS_SECRET_ID, GITHUB_BWS_SECRET_ID_KEYCHAIN_SERVICE,\n'
 	@printf '  GITHUB_BWS_SECRET_ID_KEYCHAIN_ACCOUNT, BWS_ACCESS_TOKEN,\n'

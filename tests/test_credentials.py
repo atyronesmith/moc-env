@@ -15,6 +15,7 @@ from moc_env_status.credentials import (
     CredentialOptions,
     CredentialResolver,
     credential_options_from_environment,
+    load_credential_environment_file,
 )
 
 
@@ -249,6 +250,67 @@ class CredentialResolverTest(unittest.TestCase):
         self.assertEqual(options.bws_keychain_service, "bws-service-fixture")
         self.assertEqual(options.bws_secret_id_keychain_account, "fixture-user")
         self.assertEqual(options.bws_keychain_account, "fixture-user")
+
+    def test_credential_environment_file_loads_selectors(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            env_file = Path(temporary_directory) / "selectors.env"
+            env_file.write_text(
+                "\n"
+                "# selectors only\n"
+                "GITHUB_BWS_SECRET_ID='00000000-0000-0000-0000-000000000000'\n"
+                'BWS_ACCESS_TOKEN_KEYCHAIN_SERVICE="jira-bws-access-token"\n',
+                encoding="utf-8",
+            )
+            environment = load_credential_environment_file(
+                env_file, base={"OTHER_VALUE": "kept"}
+            )
+
+        self.assertEqual(
+            environment["GITHUB_BWS_SECRET_ID"],
+            "00000000-0000-0000-0000-000000000000",
+        )
+        self.assertEqual(
+            environment["BWS_ACCESS_TOKEN_KEYCHAIN_SERVICE"],
+            "jira-bws-access-token",
+        )
+        self.assertEqual(environment["OTHER_VALUE"], "kept")
+
+    def test_environment_file_does_not_override_process_environment(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            env_file = Path(temporary_directory) / "selectors.env"
+            env_file.write_text(
+                "GITHUB_BWS_SECRET_ID=00000000-0000-0000-0000-000000000000\n",
+                encoding="utf-8",
+            )
+            environment = load_credential_environment_file(
+                env_file,
+                base={
+                    "GITHUB_BWS_SECRET_ID": "11111111-1111-1111-1111-111111111111"
+                },
+            )
+
+        self.assertEqual(
+            environment["GITHUB_BWS_SECRET_ID"],
+            "11111111-1111-1111-1111-111111111111",
+        )
+
+    def test_environment_file_rejects_plaintext_tokens(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            env_file = Path(temporary_directory) / "selectors.env"
+            env_file.write_text(
+                "GITHUB_TOKEN=must-not-be-stored-here\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                CredentialError, "must not contain GITHUB_TOKEN"
+            ):
+                load_credential_environment_file(env_file, base={})
+
+    def test_missing_environment_file_is_ignored(self) -> None:
+        environment = load_credential_environment_file(
+            "/path/does/not/exist", base={"KEEP": "value"}
+        )
+        self.assertEqual(environment, {"KEEP": "value"})
 
     @staticmethod
     def _fail_if_called(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
