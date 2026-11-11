@@ -36,16 +36,13 @@ class ReportRenderingTest(unittest.TestCase):
         rendered = render_text(self.report)
         self.assertIn("Why checked:", rendered)
         self.assertIn("A URL exists, but it points to the generic discovery.iso.", rendered)
-        self.assertIn("fixture-env-agent-discovery.iso", rendered)
+        self.assertIn("Fields:", rendered)
+        self.assertIn("boot_image_url", rendered)
+        self.assertIn("http://10.2.0.82/boot/discovery.iso", rendered)
+        self.assertIn("Missing fields:", rendered)
+        self.assertIn("cluster_specific_image", rendered)
+        self.assertIn("MISSING", rendered)
         self.assertIn("Stage summary:", rendered)
-        self.assertIn(
-            "  Present:      {\n"
-            + " " * 18
-            + "\"boot_image_url\": \"http://10.2.0.82/boot/discovery.iso\"\n"
-            + " " * 16
-            + "}",
-            rendered,
-        )
 
     def test_markdown_is_verbose_and_actionable(self) -> None:
         rendered = render_markdown(self.report)
@@ -163,6 +160,55 @@ class ReportRenderingTest(unittest.TestCase):
         self.assertIn("Open PRs", rendered)
         self.assertNotIn("Present:", rendered)
         self.assertNotIn("Missing:", rendered)
+
+    def test_text_scalar_fields_are_compact(self) -> None:
+        check = self.report["checks"][0]
+        check = {
+            **check,
+            "stage": "Hardware and inventory",
+            "check": "Fixture host inventory",
+            "expected": "Inventory group for fixture-env",
+            "present": {"cluster_group": "fixture-env", "host_count": 3},
+            "missing": None,
+            "actual": {"found": True, "host_count": 3},
+            "evidence": {"hosts": []},
+        }
+        report = {**self.report, "checks": [check]}
+        rendered = render_text(report)
+        self.assertIn("Fields:", rendered)
+        self.assertIn("cluster_group", rendered)
+        self.assertIn("fixture-env", rendered)
+        self.assertIn("host_count", rendered)
+        self.assertIn("3", rendered)
+        self.assertNotIn("Present:", rendered)
+        self.assertNotIn("Actual:", rendered)
+
+    def test_text_expected_declarations_are_compact(self) -> None:
+        check = self.report["checks"][0]
+        check = {
+            **check,
+            "stage": "Identity",
+            "check": "Fixture OIDC client",
+            "expected": ["client", "redirect_uri", "secret_name"],
+            "present": {"declarations": ["client", "secret_name"]},
+            "missing": {"declarations": ["redirect_uri"]},
+            "actual": ["client", "secret_name"],
+            "evidence": {
+                "client": True,
+                "redirect_uri": False,
+                "secret_name": True,
+            },
+        }
+        report = {**self.report, "checks": [check]}
+        rendered = render_text(report)
+        self.assertIn("Expected fields:", rendered)
+        self.assertIn("client", rendered)
+        self.assertIn("present", rendered)
+        self.assertIn("redirect_uri", rendered)
+        self.assertIn("MISSING", rendered)
+        self.assertIn("2 of 3 expected fields present", rendered)
+        self.assertNotIn("Present:", rendered)
+        self.assertNotIn("Actual:", rendered)
 
 
 if __name__ == "__main__":

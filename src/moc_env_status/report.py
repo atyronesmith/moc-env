@@ -71,10 +71,20 @@ def _path_checklist(check: dict[str, Any]) -> list[str] | None:
 
 
 def _field_value_checklist(check: dict[str, Any]) -> list[str] | None:
-    """Render simple field/value checks without repeating field-name lists."""
+    """Render expected fields and their present values or MISSING."""
     expected_fields = check.get("expected")
     evidence = check.get("evidence") or {}
     values = evidence.get("values")
+    if (
+        values is None
+        and isinstance(expected_fields, list)
+        and expected_fields
+        and all(isinstance(field, str) for field in expected_fields)
+        and isinstance(evidence, dict)
+        and all(field in evidence for field in expected_fields)
+        and all(isinstance(evidence[field], bool) for field in expected_fields)
+    ):
+        values = {field: "present" if evidence[field] else None for field in expected_fields}
     if (
         not isinstance(expected_fields, list)
         or not expected_fields
@@ -108,6 +118,47 @@ def _field_value_checklist(check: dict[str, Any]) -> list[str] | None:
         f"  Result:       {present_count} of {len(expected_fields)} expected fields present"
     )
     return lines
+
+
+def _mapping_summary(check: dict[str, Any]) -> list[str] | None:
+    """Render present and missing scalar fields without duplicate JSON."""
+    present = check.get("present")
+    missing = check.get("missing")
+    if not isinstance(present, dict) or not present:
+        return None
+    if any(isinstance(value, dict) for value in present.values()):
+        return None
+
+    lines: list[str] = []
+    present_items = [
+        (str(field), "MISSING" if value is None else _inline_value(value))
+        for field, value in present.items()
+    ]
+    field_width = max(len(field) for field, _ in present_items) + 2
+    value_width = max(len(value) for _, value in present_items) + 2
+    lines.append("  Fields:")
+    lines.extend(
+        f"    {field:<{field_width}} {value:>{value_width}}"
+        for field, value in present_items
+    )
+
+    if isinstance(missing, dict) and missing:
+        missing_fields = [str(field) for field in missing]
+        missing_width = max(len(field) for field in missing_fields) + 2
+        lines.append("  Missing fields:")
+        lines.extend(
+            f"    {field:<{missing_width}} {'MISSING':>{value_width}}"
+            for field in missing_fields
+        )
+    return lines
+
+
+def _inline_value(value: Any) -> str:
+    if isinstance(value, bool):
+        return str(value)
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, sort_keys=True, separators=(",", ":"))
+    return str(value)
 
 
 def _path_scope_summary(check: dict[str, Any]) -> list[str] | None:
@@ -155,6 +206,17 @@ def _pull_request_count_summary(check: dict[str, Any]) -> list[str] | None:
     return lines
 
 
+def _structured_summary(check: dict[str, Any]) -> list[str] | None:
+    """Route a check to the most specific compact text renderer."""
+    return (
+        _path_checklist(check)
+        or _field_value_checklist(check)
+        or _path_scope_summary(check)
+        or _pull_request_count_summary(check)
+        or _mapping_summary(check)
+    )
+
+
 def render_text(report: dict[str, Any]) -> str:
     environment = report["environment"]
     lines = [
@@ -181,10 +243,7 @@ def render_text(report: dict[str, Any]) -> str:
 
     lines.extend(["", "Detailed checks:"])
     for check in report["checks"]:
-        path_lines = _path_checklist(check)
-        field_value_lines = _field_value_checklist(check)
-        path_scope_lines = _path_scope_summary(check)
-        pull_request_lines = _pull_request_count_summary(check)
+        summary_lines = _structured_summary(check)
         lines.extend(
             [
                 "-" * 78,
@@ -194,14 +253,8 @@ def render_text(report: dict[str, Any]) -> str:
                 f"  Path:         {check['path']} @ {check['ref']}",
             ]
         )
-        if path_lines is not None:
-            lines.extend(path_lines)
-        elif field_value_lines is not None:
-            lines.extend(field_value_lines)
-        elif path_scope_lines is not None:
-            lines.extend(path_scope_lines)
-        elif pull_request_lines is not None:
-            lines.extend(pull_request_lines)
+        if summary_lines is not None:
+            lines.extend(summary_lines)
         else:
             lines.extend(
                 [
