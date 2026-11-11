@@ -140,6 +140,15 @@ class StatusCheckerTest(unittest.TestCase):
         self.assertEqual(environment.domain, "infra.oac.ocp.massopen.cloud")
         self.assertEqual(environment.to_dict()["domain_source"], "repository")
 
+    def test_boot_image_accepts_oac_shortened_workload_name(self) -> None:
+        from moc_env_status.checks import _boot_image_state
+
+        url = "http://10.2.0.82/boot/prod-workload0-agent-discovery.iso"
+        self.assertEqual(
+            _boot_image_state(url, "oac-prod-workload0"),
+            "declared_in_main",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -78,9 +78,13 @@ def _host_summary(hosts: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
 def _boot_image_state(url: str | None, cluster: str) -> str:
     if not url:
         return "missing"
-    if url.endswith("discovery.iso"):
+    image_name = url.rsplit("/", 1)[-1]
+    if image_name == "discovery.iso":
         return "partial"
-    if cluster in url:
+    cluster_aliases = [cluster]
+    if cluster.startswith("oac-"):
+        cluster_aliases.append(cluster.removeprefix("oac-"))
+    if any(alias in image_name for alias in cluster_aliases):
         return "declared_in_main"
     return "partial"
 
@@ -261,15 +265,24 @@ class StatusChecker:
                 )
                 boot_present = {"boot_image_url": selected_url}
                 boot_missing = {
-                    "cluster_specific_image": f"{cluster}-agent-discovery.iso"
+                    "cluster_specific_image": (
+                        f"an image name containing {environment.base_name}-workload0"
+                        if cluster == environment.workload_cluster
+                        else f"an image name containing {environment.infra_cluster}"
+                    )
                 }
             elif selected_url:
                 boot_reason = (
                     "A boot image URL is present, but it does not identify the "
-                    "expected cluster."
+                    "expected cluster by its full name or oac-shortened name."
                 )
                 boot_present = {"boot_image_url": selected_url}
-                boot_missing = {"cluster_name_in_url": cluster}
+                boot_missing = {
+                    "cluster_name_in_image": [
+                        cluster,
+                        cluster.removeprefix("oac-"),
+                    ]
+                }
             else:
                 boot_reason = "No boot image URL is inherited by the cluster host group."
                 boot_present = {"boot_image_url": None}
