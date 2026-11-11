@@ -32,8 +32,8 @@ help: ## Show available targets and common variables
 	@printf '  %-18s %s\n' 'ARGS' 'Additional CLI arguments, quoted if needed'
 	@printf '  %-18s %s\n' 'UV' 'uv executable (default: uv)'
 	@printf '\nCredential variables are read directly by the CLI:\n'
-	@printf '  GITHUB_TOKEN, GITHUB_BWS_SECRET_ID, GITHUB_TOKEN_KEYCHAIN_SERVICE,\n'
-	@printf '  GITHUB_TOKEN_KEYCHAIN_ACCOUNT, BWS_ACCESS_TOKEN,\n'
+	@printf '  GITHUB_TOKEN, GITHUB_BWS_SECRET_ID, GITHUB_BWS_SECRET_ID_KEYCHAIN_SERVICE,\n'
+	@printf '  GITHUB_BWS_SECRET_ID_KEYCHAIN_ACCOUNT, BWS_ACCESS_TOKEN,\n'
 	@printf '  BWS_ACCESS_TOKEN_KEYCHAIN_SERVICE, BWS_ACCESS_TOKEN_KEYCHAIN_ACCOUNT\n'
 
 setup: ## Install the locked virtual environment

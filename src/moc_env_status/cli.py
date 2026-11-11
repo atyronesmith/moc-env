@@ -46,12 +46,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Bitwarden Secrets Manager UUID whose key is GITHUB_TOKEN",
     )
     parser.add_argument(
-        "--github-keychain-service",
-        help="macOS Keychain service for the GitHub token (default: moc-env-status-github-token)",
+        "--bws-secret-id-keychain-service",
+        help=(
+            "macOS Keychain service containing the Bitwarden secret UUID "
+            "(default: moc-env-status-github-token)"
+        ),
     )
     parser.add_argument(
-        "--github-keychain-account",
-        help="macOS Keychain account for the GitHub token (default: current user)",
+        "--bws-secret-id-keychain-account",
+        help="macOS Keychain account for the Bitwarden secret UUID (default: current user)",
     )
     parser.add_argument(
         "--timeout",
@@ -74,8 +77,8 @@ def main(argv: list[str] | None = None) -> int:
         key: value
         for key, value in {
             "bws_secret_id": args.bws_secret_id,
-            "github_keychain_service": args.github_keychain_service,
-            "github_keychain_account": args.github_keychain_account,
+            "bws_secret_id_keychain_service": args.bws_secret_id_keychain_service,
+            "bws_secret_id_keychain_account": args.bws_secret_id_keychain_account,
         }.items()
         if value is not None
     }
@@ -87,10 +90,12 @@ def main(argv: list[str] | None = None) -> int:
 
     resolver = CredentialResolver()
     explicit_keychain_selector = bool(
-        os.environ.get("GITHUB_TOKEN_KEYCHAIN_SERVICE")
+        os.environ.get("GITHUB_BWS_SECRET_ID_KEYCHAIN_SERVICE")
+        or os.environ.get("GITHUB_BWS_SECRET_ID_KEYCHAIN_ACCOUNT")
+        or os.environ.get("GITHUB_TOKEN_KEYCHAIN_SERVICE")
         or os.environ.get("GITHUB_TOKEN_KEYCHAIN_ACCOUNT")
-        or args.github_keychain_service
-        or args.github_keychain_account
+        or args.bws_secret_id_keychain_service
+        or args.bws_secret_id_keychain_account
     )
     try:
         try:

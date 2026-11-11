@@ -121,35 +121,77 @@ class CredentialResolverTest(unittest.TestCase):
         self.assertNotIn("BWS_ACCESS_TOKEN", calls[0][1])
         self.assertEqual(calls[1][1]["BWS_ACCESS_TOKEN"], "machine-token-fixture")
 
-    def test_github_token_keychain_fallback(self) -> None:
-        calls: list[list[str]] = []
+    def test_keychain_supplies_bitwarden_secret_uuid(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            bws = Path(temporary_directory) / "bws"
+            bws.write_text("#!/bin/sh\nexit 0\n")
+            bws.chmod(bws.stat().st_mode | stat.S_IXUSR)
+            calls: list[list[str]] = []
 
-        def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
-            calls.append(command)
-            return subprocess.CompletedProcess(
-                command, 0, stdout=b"github-token-fixture\n", stderr=b""
+            def run(
+                command: list[str], **kwargs: object
+            ) -> subprocess.CompletedProcess[bytes]:
+                calls.append(command)
+                if len(calls) == 1:
+                    self.assertEqual(
+                        command[1:],
+                        [
+                            "find-generic-password",
+                            "-s",
+                            "moc-env-status-github-token",
+                            "-a",
+                            "fixture-user",
+                            "-w",
+                        ],
+                    )
+                    return subprocess.CompletedProcess(
+                        command,
+                        0,
+                        stdout=b"00000000-0000-0000-0000-000000000000\n",
+                        stderr=b"",
+                    )
+                if len(calls) == 2:
+                    self.assertEqual(
+                        command[1:],
+                        [
+                            "find-generic-password",
+                            "-s",
+                            "moc-env-status-bws-access-token",
+                            "-a",
+                            "fixture-user",
+                            "-w",
+                        ],
+                    )
+                    return subprocess.CompletedProcess(
+                        command, 0, stdout=b"machine-token-fixture\n", stderr=b""
+                    )
+                self.assertEqual(command[0], str(bws))
+                return subprocess.CompletedProcess(
+                    command,
+                    0,
+                    stdout=json.dumps(
+                        {"key": "GITHUB_TOKEN", "value": "github-token-fixture"}
+                    ).encode(),
+                    stderr=b"",
+                )
+
+            resolver = CredentialResolver(
+                platform="darwin",
+                environment={"PATH": temporary_directory},
+                run=run,
+            )
+            token = resolver.resolve(
+                CredentialOptions(
+                    bws_secret_id_keychain_account="fixture-user",
+                    bws_keychain_account="fixture-user",
+                )
             )
 
-        resolver = CredentialResolver(
-            platform="darwin",
-            environment={"PATH": "/usr/bin:/bin"},
-            run=run,
-        )
-        token = resolver.resolve(
-            CredentialOptions(github_keychain_account="fixture-user")
-        )
-
         self.assertEqual(token, "github-token-fixture")
+        self.assertEqual(len(calls), 3)
         self.assertEqual(
-            calls[0][1:],
-            [
-                "find-generic-password",
-                "-s",
-                "moc-env-status-github-token",
-                "-a",
-                "fixture-user",
-                "-w",
-            ],
+            calls[2][1:4],
+            ["secret", "get", "00000000-0000-0000-0000-000000000000"],
         )
 
     def test_missing_default_keychain_item_is_reported(self) -> None:
@@ -160,7 +202,27 @@ class CredentialResolverTest(unittest.TestCase):
             platform="darwin", environment={"PATH": "/usr/bin:/bin"}, run=run
         )
         with self.assertRaises(CredentialNotFoundError):
-            resolver.resolve(CredentialOptions(github_keychain_account="fixture-user"))
+            resolver.resolve(
+                CredentialOptions(bws_secret_id_keychain_account="fixture-user")
+            )
+
+    def test_invalid_keychain_uuid_is_rejected(self) -> None:
+        def run(
+            command: list[str], **kwargs: object
+        ) -> subprocess.CompletedProcess[bytes]:
+            return subprocess.CompletedProcess(
+                command, 0, stdout=b"not-a-uuid\n", stderr=b""
+            )
+
+        resolver = CredentialResolver(
+            platform="darwin", environment={"PATH": "/usr/bin:/bin"}, run=run
+        )
+        with self.assertRaisesRegex(
+            CredentialError, "Keychain item must contain a Bitwarden secret UUID"
+        ):
+            resolver.resolve(
+                CredentialOptions(bws_secret_id_keychain_account="fixture-user")
+            )
 
     def test_invalid_secret_uuid_is_rejected(self) -> None:
         resolver = CredentialResolver(
@@ -173,7 +235,7 @@ class CredentialResolverTest(unittest.TestCase):
         options = credential_options_from_environment(
             {
                 "GITHUB_BWS_SECRET_ID": "00000000-0000-0000-0000-000000000000",
-                "GITHUB_TOKEN_KEYCHAIN_SERVICE": "github-service-fixture",
+                "GITHUB_BWS_SECRET_ID_KEYCHAIN_SERVICE": "uuid-service-fixture",
                 "BWS_ACCESS_TOKEN_KEYCHAIN_SERVICE": "bws-service-fixture",
                 "USER": "fixture-user",
             }
@@ -181,9 +243,11 @@ class CredentialResolverTest(unittest.TestCase):
         self.assertEqual(
             options.bws_secret_id, "00000000-0000-0000-0000-000000000000"
         )
-        self.assertEqual(options.github_keychain_service, "github-service-fixture")
+        self.assertEqual(
+            options.bws_secret_id_keychain_service, "uuid-service-fixture"
+        )
         self.assertEqual(options.bws_keychain_service, "bws-service-fixture")
-        self.assertEqual(options.github_keychain_account, "fixture-user")
+        self.assertEqual(options.bws_secret_id_keychain_account, "fixture-user")
         self.assertEqual(options.bws_keychain_account, "fixture-user")
 
     @staticmethod
