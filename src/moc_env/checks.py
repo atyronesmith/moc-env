@@ -204,9 +204,9 @@ class StatusChecker:
         vars_path = observation.variables_path
 
         for cluster_observation in observation.clusters.values():
-            cluster = cluster_observation.cluster
-            group = cluster_observation.group_found
-            hosts = cluster_observation.hosts
+            cluster = cluster_observation.cluster.value
+            group = cluster_observation.group_found.value
+            hosts = cluster_observation.hosts.value
             boot_urls = cluster_observation.boot_image_urls
 
             if group:
@@ -214,7 +214,7 @@ class StatusChecker:
                 reason = f"The inventory contains a {cluster} group with {len(hosts)} hosts."
                 present = {"cluster_group": cluster, "host_count": len(hosts)}
                 missing = None
-            elif observation.inventory_present:
+            elif observation.inventory_present.value:
                 state = "partial"
                 reason = (
                     "The inventory file is present in main, but no group has "
@@ -317,7 +317,7 @@ class StatusChecker:
                 )
             )
 
-        hub_found = observation.hub_inventory.cluster_key_present
+        hub_found = observation.hub_inventory.cluster_key_present.value
         if hub_found:
             hub_state = "declared_in_main"
             hub_reason = (
@@ -326,7 +326,7 @@ class StatusChecker:
             )
             hub_present = {"inventory_key": environment.infra_cluster}
             hub_missing = None
-        elif observation.hub_inventory.inventory_present:
+        elif observation.hub_inventory.path_present.value:
             hub_state = "partial"
             hub_reason = (
                 "The hub-image inventory is present, but it does not contain "
@@ -354,13 +354,13 @@ class StatusChecker:
                 present=hub_present,
                 missing=hub_missing,
                     evidence={
-                        "path_present": observation.hub_inventory.path_present
+                        "path_present": observation.hub_inventory.path_present.value
                     },
                 url=github_url(repository, hub_inventory_path),
             )
         )
 
-        values = observation.hub_variables.values
+        values = observation.hub_variables.values.value
         if isinstance(values, dict) and values.get("cluster_domain_name") and values.get("base_domain"):
             environment = replace(
                 environment,
@@ -382,10 +382,10 @@ class StatusChecker:
         missing_fields = [
             field for field in expected_fields if values.get(field) is None
         ]
-        if observation.hub_variables.path_present and not missing_fields:
+        if observation.hub_variables.path_present.value and not missing_fields:
             state = "declared_in_main"
             reason = "All required hub-image variables are present in main."
-        elif observation.hub_variables.path_present:
+        elif observation.hub_variables.path_present.value:
             state = "partial"
             reason = (
                 "The hub-image variable file is present, but required fields are "
@@ -412,7 +412,7 @@ class StatusChecker:
                 },
                 missing={"fields": missing_fields} if missing_fields else None,
                 evidence={
-                    "path_present": observation.hub_variables.path_present,
+                    "path_present": observation.hub_variables.path_present.value,
                     "values": {
                         key: values.get(key)
                         for key in expected_fields
@@ -440,7 +440,7 @@ class StatusChecker:
             "secret_name": f"cluster/{environment.infra_cluster}/keycloak-oidc",
         }
         client = observation.client
-        if not observation.path_present:
+        if not observation.path_present.value:
             present = {name: False for name in expected}
         else:
             present = {
@@ -507,7 +507,7 @@ class StatusChecker:
         observation: AppsObservation,
     ) -> list[CheckResult]:
         repository = observation.source_repository
-        tree = set(observation.paths)
+        tree = set(observation.paths.value)
         infra_defaults = f"hosted-clusters/{environment.infra_cluster}/values.yaml"
         hub_values_prefix = f"values/{environment.infra_cluster}/"
         local_prefix = f"values/{environment.infra_cluster}/local-cluster/"
@@ -602,13 +602,6 @@ class StatusChecker:
                     "are missing: " + ", ".join(required_missing) + "."
                 )
                 missing = {"paths": required_missing}
-            elif found:
-                state = "partial"
-                reason = (
-                    f"Unexpected files exist for {purpose}, but none of the "
-                    "expected paths were found."
-                )
-                missing = {"paths": required_paths}
             else:
                 reason = f"No merged main paths were found for {purpose}."
                 missing = {"paths": required_paths or [search_path]}
@@ -685,14 +678,14 @@ class StatusChecker:
             pull = item
             evidence.append(
                 {
-                    "number": pull.number,
+                    "number": pull.number.value,
                     "title": pull.title.to_dict(),
                     "state": pull.state.to_dict(),
                     "merged": pull.merged.to_dict(),
                     "head_ref": pull.head_ref.to_dict(),
                     "head_sha": pull.head_sha.to_dict(),
                     "html_url": pull.url.to_dict(),
-                    "changed_files": list(pull.changed_files),
+                    "changed_files": list(pull.changed_files.value),
                 }
             )
 
