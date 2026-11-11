@@ -12,6 +12,7 @@ class Environment:
 
     name: str
     issue_number: int | None = None
+    domain_override: str | None = None
 
     @property
     def base_name(self) -> str:
@@ -32,7 +33,9 @@ class Environment:
 
     @property
     def domain(self) -> str:
-        return f"{self.name}.int.massopen.cloud"
+        if self.domain_override:
+            return self.domain_override
+        return f"{self.base_name}.int.massopen.cloud"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -41,6 +44,7 @@ class Environment:
             "infra_cluster": self.infra_cluster,
             "workload_cluster": self.workload_cluster,
             "domain": self.domain,
+            "domain_source": "repository" if self.domain_override else "derived",
         }
 
 

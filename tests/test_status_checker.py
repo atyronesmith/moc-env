@@ -132,6 +132,14 @@ class StatusCheckerTest(unittest.TestCase):
         self.assertEqual(environment.infra_cluster, "oac-prod-infra")
         self.assertEqual(environment.workload_cluster, "oac-prod-workload0")
 
+    def test_environment_domain_override_is_reported(self) -> None:
+        environment = Environment(
+            name="oac-prod-infra",
+            domain_override="infra.oac.ocp.massopen.cloud",
+        )
+        self.assertEqual(environment.domain, "infra.oac.ocp.massopen.cloud")
+        self.assertEqual(environment.to_dict()["domain_source"], "repository")
+
 
 if __name__ == "__main__":
     unittest.main()
