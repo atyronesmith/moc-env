@@ -13,6 +13,7 @@ from .credentials import (
     CredentialNotFoundError,
     CredentialResolver,
     credential_options_from_environment,
+    load_credential_environment_file,
 )
 from .github import GitHubClient, GitHubError, RateLimitError
 from .model import Environment
@@ -57,6 +58,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="macOS Keychain account for the Bitwarden secret UUID (default: current user)",
     )
     parser.add_argument(
+        "--env-file",
+        default=".env",
+        help=(
+            "Optional KEY=VALUE file for non-secret credential selectors "
+            "(default: .env; absent file is ignored)"
+        ),
+    )
+    parser.add_argument(
         "--timeout",
         type=float,
         default=20.0,
@@ -72,7 +81,12 @@ def main(argv: list[str] | None = None) -> int:
         issue_number = KNOWN_ISSUES.get(args.environment)
 
     environment = Environment(name=args.environment, issue_number=issue_number)
-    credential_options = credential_options_from_environment()
+    try:
+        credential_environment = load_credential_environment_file(args.env_file)
+        credential_options = credential_options_from_environment(credential_environment)
+    except CredentialError as exc:
+        print(f"moc-env-status: {exc}", file=sys.stderr)
+        return 2
     credential_overrides = {
         key: value
         for key, value in {

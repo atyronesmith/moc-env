@@ -36,6 +36,14 @@ SECRET_UUID = re.compile(
 MAX_OUTPUT_BYTES = 1024 * 1024
 KEYCHAIN_TIMEOUT_SECONDS = 15.0
 BITWARDEN_TIMEOUT_SECONDS = 30.0
+CREDENTIAL_ENV_FILE_KEYS = {
+    "GITHUB_BWS_SECRET_ID",
+    "MOC_ENV_STATUS_BWS_SECRET_ID",
+    "GITHUB_BWS_SECRET_ID_KEYCHAIN_SERVICE",
+    "GITHUB_BWS_SECRET_ID_KEYCHAIN_ACCOUNT",
+    "BWS_ACCESS_TOKEN_KEYCHAIN_SERVICE",
+    "BWS_ACCESS_TOKEN_KEYCHAIN_ACCOUNT",
+}
 
 
 class CredentialError(RuntimeError):
@@ -297,3 +305,61 @@ def credential_options_from_environment(
         ),
         bws_keychain_account=bws_account,
     )
+
+
+def load_credential_environment_file(
+    path: str | Path, base: Mapping[str, str] | None = None
+) -> dict[str, str]:
+    """Load only non-secret credential selectors from an optional dotenv file.
+
+    Values already present in ``base`` win, matching ordinary dotenv behavior.
+    Secret-bearing keys are deliberately rejected so a local ``.env`` remains a
+    selector file rather than plaintext token storage.
+    """
+
+    environment = dict(os.environ if base is None else base)
+    env_path = Path(path)
+    if not env_path.exists():
+        return environment
+    if not env_path.is_file():
+        raise CredentialError(f"Credential environment file is not a regular file: {env_path}")
+
+    try:
+        lines = env_path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        raise CredentialError(f"Could not read credential environment file: {env_path}") from exc
+
+    for line_number, raw_line in enumerate(lines, start=1):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            raise CredentialError(
+                f"Invalid credential environment line {line_number}: expected KEY=VALUE"
+            )
+
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if not key or not value:
+            raise CredentialError(
+                f"Invalid credential environment line {line_number}: KEY and VALUE must be nonempty"
+            )
+        if key in {"GITHUB_TOKEN", "BWS_ACCESS_TOKEN"}:
+            raise CredentialError(
+                f"Credential environment file must not contain {key}; "
+                "export direct tokens or store them in an approved secret manager"
+            )
+        if key not in CREDENTIAL_ENV_FILE_KEYS:
+            raise CredentialError(f"Unsupported credential environment key: {key}")
+
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1]
+        if any(unicodedata.category(character).startswith("C") for character in value):
+            raise CredentialError(
+                f"Invalid credential environment value on line {line_number}"
+            )
+
+        environment.setdefault(key, value)
+
+    return environment
