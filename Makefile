@@ -18,7 +18,7 @@ endif
 RUN_ARGS := $(ENV) --format $(FORMAT) $(PRS_FLAG) $(ARGS)
 
 .PHONY: help setup sync test list run run-text run-json run-markdown \
-        run-no-prs report-markdown build compile diff-check check lock \
+        run-no-prs report-markdown build compile diff-check pii-check check lock \
         clean clean-all
 
 help: ## Show available targets and common variables
@@ -77,7 +77,10 @@ compile: ## Byte-compile source and tests
 diff-check: ## Check the Git worktree diff for whitespace errors
 	git diff --check
 
-check: test compile diff-check build ## Run tests, compilation, whitespace check, and build
+pii-check: ## Check tracked files for personal identifiers
+	$(UV) run --locked python tools/check_pii.py
+
+check: test compile diff-check pii-check build ## Run tests, compilation, checks, and build
 
 lock: ## Refresh uv.lock
 	$(UV) lock
