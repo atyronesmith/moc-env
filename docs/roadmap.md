@@ -1,8 +1,8 @@
-# `moc-env-status` roadmap
+# `moc-env` roadmap
 
 ## Direction
 
-`moc-env-status` remains one CLI with separate infra-cluster and workload-cluster
+`moc-env` remains one CLI with separate infra-cluster and workload-cluster
 check suites. The implementation moves through three connected capabilities:
 
 1. **Observe** current repository configuration.
@@ -71,8 +71,8 @@ Every observation field should distinguish `exact`, `inferred`, and
 Add a deterministic read-only exporter:
 
 ```sh
-uv run moc-env-status export-infra bu-ist-demo
-uv run moc-env-status export-infra bu-ist-demo \
+uv run moc-env export-infra bu-ist-demo
+uv run moc-env export-infra bu-ist-demo \
   --output desired-state/infra-clusters/bu-ist-demo-infra.yaml
 ```
 
@@ -90,7 +90,7 @@ state, not a claim that a cluster is deployed. It must:
 Add:
 
 ```sh
-uv run moc-env-status validate desired-state/infra-clusters/bu-ist-demo-infra.yaml
+uv run moc-env validate desired-state/infra-clusters/bu-ist-demo-infra.yaml
 ```
 
 Validate:
@@ -108,7 +108,7 @@ Validate:
 Compare reviewed desired state to current merged repository state:
 
 ```sh
-uv run moc-env-status check-infra \
+uv run moc-env check-infra \
   desired-state/infra-clusters/bu-ist-demo-infra.yaml
 ```
 
@@ -130,7 +130,7 @@ Changing one desired value should produce exactly one `value_mismatch`.
 Add:
 
 ```sh
-uv run moc-env-status export-workload bu-ist-demo workload0
+uv run moc-env export-workload bu-ist-demo workload0
 ```
 
 Extract:
@@ -150,7 +150,7 @@ Missing values must remain explicit; they must not disappear from the YAML.
 Add:
 
 ```sh
-uv run moc-env-status check-workload \
+uv run moc-env check-workload \
   desired-state/workload-clusters/bu-ist-demo-workload0.yaml
 ```
 
@@ -188,7 +188,7 @@ Then validate and check the complete environment.
 Planning remains read-only:
 
 ```sh
-uv run moc-env-status plan-infra \
+uv run moc-env plan-infra \
   desired-state/infra-clusters/bu-ist-demo-infra.yaml
 ```
 
@@ -210,7 +210,7 @@ Stacking is optional; the default is one branch per repository.
 Generate local branches without pushing:
 
 ```sh
-uv run moc-env-status generate-infra \
+uv run moc-env generate-infra \
   desired-state/infra-clusters/bu-ist-demo-infra.yaml \
   --output-worktree generated-changes
 ```
@@ -232,7 +232,7 @@ must not push or create PRs.
 Add:
 
 ```sh
-uv run moc-env-status validate-plan generated-changes
+uv run moc-env validate-plan generated-changes
 ```
 
 Validate:
@@ -250,7 +250,7 @@ Validate:
 Only this phase mutates GitHub:
 
 ```sh
-uv run moc-env-status publish-plan generated-changes \
+uv run moc-env publish-plan generated-changes \
   --draft \
   --create-prs
 ```

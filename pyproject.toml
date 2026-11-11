@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "moc-env-status"
+name = "moc-env"
 version = "0.1.0"
-description = "Read-only configuration-state reporter for Mass Open Cloud environments"
+description = "Configuration-state and desired-state tooling for Mass Open Cloud environments"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -16,10 +16,10 @@ authors = [
 ]
 
 [project.scripts]
-moc-env-status = "moc_env_status.cli:main"
+moc-env = "moc_env.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/moc_env_status"]
+packages = ["src/moc_env"]
 
 [tool.ruff]
 line-length = 100

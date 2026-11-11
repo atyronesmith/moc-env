@@ -36,7 +36,7 @@ def _add_credential_arguments(parser: argparse.ArgumentParser) -> None:
         "--bws-secret-id-keychain-service",
         help=(
             "macOS Keychain service containing the Bitwarden secret UUID "
-            "(default: moc-env-status-github-token)"
+            "(default: moc-env-github-token)"
         ),
     )
     parser.add_argument(
@@ -61,9 +61,9 @@ def _add_credential_arguments(parser: argparse.ArgumentParser) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="moc-env-status",
+        prog="moc-env",
         description="Report CCI-MOC environment configuration state from public GitHub repositories",
-        epilog="Run 'moc-env-status list' to discover environment names that can be checked.",
+        epilog="Run 'moc-env list' to discover environment names that can be checked.",
     )
     parser.add_argument("environment", help="Environment name, such as bu-ist-demo")
     parser.add_argument(
@@ -95,8 +95,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def build_list_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="moc-env-status list",
-        description="List environment names that can be passed to moc-env-status",
+        prog="moc-env list",
+        description="List environment names that can be passed to moc-env",
     )
     parser.add_argument(
         "--format",
@@ -113,7 +113,7 @@ def _resolve_github_token(args: argparse.Namespace) -> str | None:
         credential_environment = load_credential_environment_file(args.env_file)
         credential_options = credential_options_from_environment(credential_environment)
     except CredentialError as exc:
-        print(f"moc-env-status: {exc}", file=sys.stderr)
+        print(f"moc-env: {exc}", file=sys.stderr)
         raise SystemExit(2)
 
     credential_overrides = {
@@ -148,12 +148,12 @@ def _resolve_github_token(args: argparse.Namespace) -> str | None:
             ):
                 raise
             print(
-                "moc-env-status: no GitHub credential found; continuing unauthenticated",
+                "moc-env: no GitHub credential found; continuing unauthenticated",
                 file=sys.stderr,
             )
             return None
     except CredentialError as exc:
-        print(f"moc-env-status: {exc}", file=sys.stderr)
+        print(f"moc-env: {exc}", file=sys.stderr)
         raise SystemExit(2)
 
 
@@ -167,7 +167,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             environments = list_environments(client)
         except (GitHubError, RateLimitError) as exc:
-            print(f"moc-env-status: {exc}", file=sys.stderr)
+            print(f"moc-env: {exc}", file=sys.stderr)
             return 2
         if args.format == "json":
             print(render_environment_list_json(environments), end="")
@@ -208,7 +208,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         report = checker.run(environment).to_dict()
     except (CredentialError, GitHubError, RateLimitError) as exc:
-        print(f"moc-env-status: {exc}", file=sys.stderr)
+        print(f"moc-env: {exc}", file=sys.stderr)
         return 2
 
     if args.format == "json":
@@ -225,12 +225,12 @@ def main(argv: list[str] | None = None) -> int:
             output_path.write_text(rendered, encoding="utf-8")
         except OSError as exc:
             print(
-                f"moc-env-status: could not write {output_path}: {exc}",
+                f"moc-env: could not write {output_path}: {exc}",
                 file=sys.stderr,
             )
             return 2
         print(
-            f"moc-env-status: wrote {args.format} report to {output_path}",
+            f"moc-env: wrote {args.format} report to {output_path}",
             file=sys.stderr,
         )
     else:

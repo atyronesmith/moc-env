@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import unittest
 
-from moc_env_status.checks import StatusChecker
-from moc_env_status.checks import list_environments
-from moc_env_status.model import Environment
-from moc_env_status.observed import read_infra_observation
+from moc_env.checks import StatusChecker
+from moc_env.checks import list_environments
+from moc_env.model import Environment
+from moc_env.observed import read_infra_observation
 
 from fakes import FakeGitHubClient
 
@@ -41,7 +41,7 @@ class StatusCheckerTest(unittest.TestCase):
         self.assertEqual(environment.to_dict()["domain_source"], "repository")
 
     def test_boot_image_accepts_oac_shortened_workload_name(self) -> None:
-        from moc_env_status.checks import _boot_image_state
+        from moc_env.checks import _boot_image_state
 
         url = "http://10.2.0.82/boot/prod-workload0-agent-discovery.iso"
         self.assertEqual(
@@ -58,7 +58,7 @@ class StatusCheckerTest(unittest.TestCase):
             environments[0]["workload_clusters"],
             ["bu-ist-demo-workload0"],
         )
-        self.assertEqual(environments[0]["status_command"], "moc-env-status bu-ist-demo")
+        self.assertEqual(environments[0]["status_command"], "moc-env bu-ist-demo")
 
     def test_read_infra_observation_normalizes_repository_inputs(self) -> None:
         environment = Environment(name="bu-ist-demo", issue_number=666)

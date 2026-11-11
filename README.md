@@ -1,7 +1,8 @@
-# moc-env-status
+# moc-env
 
-`moc-env-status` is a read-only CLI that reports the **configuration state** of a
-Mass Open Cloud (MOC) environment across public CCI-MOC GitHub repositories.
+`moc-env` is a CLI for inspecting and, in later milestones, declaring the
+configuration of Mass Open Cloud (MOC) environments across public CCI-MOC
+GitHub repositories.
 
 It intentionally does **not** claim that a cluster is deployed or healthy. Its
 first release distinguishes:
@@ -10,7 +11,8 @@ first release distinguishes:
 - what is declared in merged repository `main` branches;
 - what exists only in an open pull request.
 
-The motivating environment is `bu-ist-demo`, tracked by
+The current milestone is a read-only configuration-state reporter. The
+motivating environment is `bu-ist-demo`, tracked by
 [MOC issue 666](https://github.com/CCI-MOC/MOC-issues/issues/666).
 
 See [docs/roadmap.md](docs/roadmap.md) for the desired-state, validation, and
@@ -44,7 +46,7 @@ Using `uv`:
 
 ```sh
 uv sync
-uv run moc-env-status bu-ist-demo
+uv run moc-env bu-ist-demo
 ```
 
 Using the Makefile:
@@ -72,13 +74,13 @@ make run-no-prs ENV=bu-ist-demo
 List all environment names that can be used for status checks:
 
 ```sh
-uv run moc-env-status list
+uv run moc-env list
 ```
 
 JSON output:
 
 ```sh
-uv run moc-env-status list --format json
+uv run moc-env list --format json
 ```
 
 `make check` runs the unit tests, byte-compilation, Git whitespace check, and
@@ -103,31 +105,31 @@ missing values.
 Produce JSON:
 
 ```sh
-uv run moc-env-status bu-ist-demo --format json
+uv run moc-env bu-ist-demo --format json
 ```
 
 Produce Markdown:
 
 ```sh
-uv run moc-env-status bu-ist-demo --format markdown
+uv run moc-env bu-ist-demo --format markdown
 ```
 
 Write Markdown directly to a file:
 
 ```sh
-uv run moc-env-status bu-ist-demo --format markdown --output reports/bu-ist-demo.md
+uv run moc-env bu-ist-demo --format markdown --output reports/bu-ist-demo.md
 ```
 
 Override the associated MOC issue:
 
 ```sh
-uv run moc-env-status bu-ist-demo --issue 666
+uv run moc-env bu-ist-demo --issue 666
 ```
 
 Skip pull-request discovery:
 
 ```sh
-uv run moc-env-status bu-ist-demo --no-prs
+uv run moc-env bu-ist-demo --no-prs
 ```
 
 ## GitHub authentication
@@ -157,7 +159,7 @@ Keychain service/account names. It must not contain `GITHUB_TOKEN` or
 Use another file with:
 
 ```sh
-uv run moc-env-status bu-ist-demo --env-file /path/to/selectors.env
+uv run moc-env bu-ist-demo --env-file /path/to/selectors.env
 ```
 
 ### Direct token
@@ -166,7 +168,7 @@ To use a token directly:
 
 ```sh
 export GITHUB_TOKEN="..."
-uv run moc-env-status bu-ist-demo
+uv run moc-env bu-ist-demo
 ```
 
 ### Bitwarden Secrets Manager
@@ -178,13 +180,13 @@ Provide the UUID directly:
 
 ```sh
 export GITHUB_BWS_SECRET_ID="00000000-0000-0000-0000-000000000000"
-uv run moc-env-status bu-ist-demo
+uv run moc-env bu-ist-demo
 ```
 
 Or pass it as a selector:
 
 ```sh
-uv run moc-env-status bu-ist-demo \
+uv run moc-env bu-ist-demo \
   --bws-secret-id 00000000-0000-0000-0000-000000000000
 ```
 
@@ -196,7 +198,7 @@ If no direct token or UUID environment variable is configured, the CLI reads the
 Bitwarden secret UUID from:
 
 ```text
-service: moc-env-status-github-token
+service: moc-env-github-token
 account: <current-user>
 ```
 
@@ -208,7 +210,7 @@ Create or update the UUID item with:
 ```sh
 /usr/bin/security add-generic-password -U \
   -a "$(id -un)" \
-  -s moc-env-status-github-token \
+  -s moc-env-github-token \
   -T /usr/bin/security \
   -w
 ```
@@ -235,14 +237,14 @@ To read the selected secret, the CLI needs a Bitwarden machine access token. It
 looks for that token in this order:
 
 1. `BWS_ACCESS_TOKEN` environment variable
-2. macOS Keychain service `moc-env-status-bws-access-token`
+2. macOS Keychain service `moc-env-bws-access-token`
 
 Create or update the machine-token item with:
 
 ```sh
 /usr/bin/security add-generic-password -U \
   -a "$(id -un)" \
-  -s moc-env-status-bws-access-token \
+  -s moc-env-bws-access-token \
   -T /usr/bin/security \
   -w
 ```
@@ -254,8 +256,8 @@ service with `BWS_ACCESS_TOKEN_KEYCHAIN_ACCOUNT` or
 The complete resolution order is:
 
 1. `GITHUB_TOKEN`
-2. `GITHUB_BWS_SECRET_ID` / `MOC_ENV_STATUS_BWS_SECRET_ID`
-3. Bitwarden secret UUID from `moc-env-status-github-token` in macOS Keychain
+2. `GITHUB_BWS_SECRET_ID` / `MOC_ENV_BWS_SECRET_ID`
+3. Bitwarden secret UUID from `moc-env-github-token` in macOS Keychain
 4. `bws secret get <uuid>` using the Bitwarden machine access token
 
 The GitHub token itself is never stored in macOS Keychain. If the default UUID

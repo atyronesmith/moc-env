@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from moc_env_status import cli
+from moc_env import cli
 
 from fakes import FakeGitHubClient
 
@@ -30,7 +30,7 @@ class CliDispatchTest(unittest.TestCase):
         exit_code, stdout, stderr = self.run_cli(["list"])
         self.assertEqual(exit_code, 0)
         self.assertIn("bu-ist-demo", stdout)
-        self.assertIn("moc-env-status bu-ist-demo", stdout)
+        self.assertIn("moc-env bu-ist-demo", stdout)
         self.assertEqual(stderr, "")
 
     def test_list_json_dispatch(self) -> None:
