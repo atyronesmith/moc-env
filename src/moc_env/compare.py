@@ -382,7 +382,7 @@ def compare_infra(
             )
         )
 
-    return ComparisonReport(environment=environment, checks=checks)
+    return ComparisonReport(environment=environment, kind="Hub", checks=checks)
 
 
 def _workload_boot_image_is_specific(url: Any, workload_cluster: str) -> bool:
@@ -451,9 +451,9 @@ def compare_workload(
             ),
             state="matches_main" if referenced_infra_present else "missing_from_main",
             reason=(
-                "The referenced parent infra cluster exists in merged main."
+                "The referenced parent hub cluster exists in merged main."
                 if referenced_infra_present
-                else "The referenced parent infra cluster is absent from merged main."
+                else "The referenced parent hub cluster is absent from merged main."
             ),
         )
     )
@@ -732,7 +732,7 @@ def render_comparison_text(report: ComparisonReport) -> str:
         "=" * 78,
         f"MOC {report.kind.lower()} comparison: {data['environment']['name']}",
         "=" * 78,
-        f"Infra cluster: {data['environment']['infra_cluster']}",
+        f"Hub cluster: {data['environment']['infra_cluster']}",
         f"Overall:       {data['overall_state']}",
         "",
         "State summary:",

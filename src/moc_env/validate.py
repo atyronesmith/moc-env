@@ -645,7 +645,7 @@ def validate_infra_cluster(document: Any) -> ValidationResult:
         and infra_name != f"{environment_name}-infra"
     ):
         errors.append(
-            "metadata: infra-cluster name must be ENVIRONMENT-infra; "
+            "metadata: hub-cluster name must be ENVIRONMENT-infra; "
             f"expected {environment_name}-infra, got {infra_name}"
         )
 

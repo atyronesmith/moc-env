@@ -232,7 +232,7 @@ all:
             f"wrote markdown comparison report to {output_path}",
             stderr,
         )
-        self.assertIn("# 🔍 Infra Desired-State Comparison", rendered)
+        self.assertIn("# 🔍 Hub Desired-State Comparison", rendered)
         self.assertIn("## Detailed comparison", rendered)
         self.assertIn("`matches_main`", rendered)
 

@@ -392,7 +392,7 @@ def render_text(report: dict[str, Any]) -> str:
         "=" * 78,
         f"MOC environment status: {environment['name']}",
         "=" * 78,
-        f"Infra cluster:    {environment['infra_cluster']}",
+        f"Hub cluster:      {environment['infra_cluster']}",
         f"Workload cluster: {environment['workload_cluster']}",
         f"Domain:           {environment['domain']}",
         f"Overall:          {report['overall_state']}",
@@ -505,7 +505,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         "|---|---|",
         f"| Environment | `{environment['name']}` |",
         f"| MOC issue | `{environment['issue_number']}` |",
-        f"| Infra cluster | `{environment['infra_cluster']}` |",
+        f"| Hub cluster | `{environment['infra_cluster']}` |",
         f"| Workload cluster | `{environment['workload_cluster']}` |",
         f"| Domain | `{environment['domain']}` |",
         f"| Overall state | **{report['overall_state']}** |",
@@ -596,13 +596,13 @@ def render_environment_list_text(environments: list[dict[str, Any]]) -> str:
         "=" * 78,
     ]
     if not environments:
-        lines.append("No infra-cluster environments were found in oac-infra.")
+        lines.append("No hub-cluster environments were found in oac-infra.")
         return "\n".join(lines) + "\n"
 
     lines.extend(
         [
             "",
-            f"{'Environment':<20} {'Infra cluster':<24} Workload clusters",
+            f"{'Environment':<20} {'Hub cluster':<24} Hosted workload clusters",
             "-" * 78,
         ]
     )
