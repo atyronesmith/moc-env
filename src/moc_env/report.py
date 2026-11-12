@@ -25,10 +25,176 @@ def _value(value: Any) -> str:
     return str(value)
 
 
-def _markdown_value(value: Any) -> str:
+def _markdown_inline(value: Any) -> str:
+    """Render a compact, human-readable Markdown table cell."""
+
     if value is None:
-        return "None"
-    return "```json\n" + json.dumps(value, indent=2, sort_keys=True) + "\n```"
+        return "—"
+    if value is True:
+        return "Yes"
+    if value is False:
+        return "No"
+    if isinstance(value, str) and value in {"Present", "Missing"}:
+        return f"**{value}**"
+    if isinstance(value, dict):
+        if "value" in value:
+            return _markdown_inline(value["value"])
+        return ", ".join(
+            f"{_markdown_inline(key)}: {_markdown_inline(item)}"
+            for key, item in value.items()
+        )
+    if isinstance(value, (list, tuple)):
+        if not value:
+            return "—"
+        return "<br>".join(_markdown_inline(item) for item in value)
+    if isinstance(value, str):
+        return f"`{_markdown_escape_cell(value)}`" if value else "—"
+    return f"`{value}`"
+
+
+def _markdown_table(
+    headers: list[str],
+    rows: list[list[Any]],
+    plain_first_column: bool = False,
+) -> list[str]:
+    if not rows:
+        return []
+    lines = [
+        "| " + " | ".join(_markdown_escape_cell(header) for header in headers) + " |",
+        "|" + "|".join("---" for _ in headers) + "|",
+    ]
+    for row in rows:
+        cells = [
+            _markdown_escape_cell(str(value))
+            if plain_first_column and index == 0
+            else _markdown_inline(value)
+            for index, value in enumerate(row)
+        ]
+        lines.append("| " + " | ".join(cells) + " |")
+    lines.append("")
+    return lines
+
+
+def _markdown_escape_cell(value: str) -> str:
+    return value.replace("|", "\\|").replace("\n", "<br>")
+
+
+def _host_table(evidence: dict[str, Any]) -> list[str]:
+    hosts = evidence.get("hosts")
+    if not isinstance(hosts, list) or not all(isinstance(host, dict) for host in hosts):
+        return []
+    rows = [
+        [
+            host.get("name"),
+            host.get("node_name"),
+            host.get("bmc_addr"),
+            host.get("boot_image_url"),
+        ]
+        for host in hosts
+    ]
+    return [
+        "**Observed hosts**",
+        "",
+        *_markdown_table(["Host", "Node name", "BMC address", "Boot image URL"], rows),
+    ]
+
+
+def _path_table(check: dict[str, Any], evidence: dict[str, Any]) -> list[str]:
+    expected_paths = evidence.get("expected_paths")
+    found_paths = evidence.get("paths")
+    if not isinstance(expected_paths, list) or not expected_paths:
+        return []
+    found = set(found_paths or [])
+    rows = [
+        [path, "Present" if path in found else "Missing"]
+        for path in expected_paths
+    ]
+    return [
+        "**Expected paths**",
+        "",
+        *_markdown_table(["Path", "Status"], rows),
+    ]
+
+
+def _field_table(check: dict[str, Any], evidence: dict[str, Any]) -> list[str]:
+    expected_fields = check.get("expected")
+    values = evidence.get("values")
+    declarations = evidence.get("declarations")
+    if isinstance(declarations, dict):
+        values = declarations
+    if (
+        not isinstance(expected_fields, list)
+        or not expected_fields
+        or not isinstance(values, dict)
+    ):
+        return []
+    rows = [
+        [
+            field,
+            values.get(field),
+            "Present" if values.get(field) not in (None, False) else "Missing",
+        ]
+        for field in expected_fields
+    ]
+    return [
+        "**Expected fields**",
+        "",
+        *_markdown_table(["Field", "Observed value", "Status"], rows),
+    ]
+
+
+def _source_value_table(evidence: dict[str, Any]) -> list[str]:
+    client = evidence.get("client")
+    if not isinstance(client, dict):
+        return []
+    rows: list[list[Any]] = []
+    for field, source_value in client.items():
+        if not isinstance(source_value, dict):
+            continue
+        provenance = source_value.get("provenance", {})
+        rows.append(
+            [
+                field,
+                source_value.get("value"),
+                source_value.get("confidence"),
+                (
+                    f"{provenance.get('repository', '—')} / "
+                    f"{provenance.get('path', '—')} @ {provenance.get('ref', '—')}"
+                ),
+            ]
+        )
+    if not rows:
+        return []
+    return [
+        "**Observed declarations**",
+        "",
+        *_markdown_table(["Field", "Value", "Confidence", "Source"], rows),
+    ]
+
+
+def _pull_request_table(evidence: dict[str, Any]) -> list[str]:
+    pull_requests = evidence.get("pull_requests")
+    if not isinstance(pull_requests, list) or not pull_requests:
+        return []
+    rows = [
+        [
+            pull.get("number"),
+            pull.get("title"),
+            pull.get("state"),
+            pull.get("merged"),
+            pull.get("head_ref"),
+            pull.get("changed_files"),
+        ]
+        for pull in pull_requests
+    ]
+    return [
+        "**Relevant pull requests**",
+        "",
+        *_markdown_table(
+            ["PR", "Title", "State", "Merged", "Head branch", "Changed files"],
+            rows,
+        ),
+    ]
 
 
 def _text_value(value: Any, indent: int) -> str:
@@ -280,6 +446,7 @@ def render_text(report: dict[str, Any]) -> str:
 
 
 def _check_markdown(check: dict[str, Any], number: int) -> list[str]:
+    evidence = check.get("evidence") or {}
     lines = [
         f"#### {_state(check['state'])} — {number}. {check['check']}",
         "",
@@ -297,31 +464,25 @@ def _check_markdown(check: dict[str, Any], number: int) -> list[str]:
     lines.extend(
         [
             "",
-            "**Expected**",
-            "",
-            _markdown_value(check["expected"]),
-            "",
-            "**What is present**",
-            "",
-            _markdown_value(check.get("present")),
-            "",
-            "**What is missing**",
-            "",
-            _markdown_value(check.get("missing")),
-            "",
-            "**Actual repository state**",
-            "",
-            _markdown_value(check["actual"]),
-            "",
-            "<details>",
-            "<summary>Evidence</summary>",
-            "",
-            _markdown_value(check.get("evidence", {})),
-            "",
-            "</details>",
+            "**Result**",
             "",
         ]
     )
+    result_rows = [
+        ["Expected", check.get("expected")],
+        ["Present", check.get("present")],
+    ]
+    if check.get("missing") is not None:
+        result_rows.append(["Missing", check.get("missing")])
+    result_rows.append(["Actual", check.get("actual")])
+    lines.extend(
+        _markdown_table(["Aspect", "Value"], result_rows, plain_first_column=True)
+    )
+    lines.extend(_host_table(evidence))
+    lines.extend(_path_table(check, evidence))
+    lines.extend(_field_table(check, evidence))
+    lines.extend(_source_value_table(evidence))
+    lines.extend(_pull_request_table(evidence))
     return lines
 
 
@@ -400,12 +561,10 @@ def render_markdown(report: dict[str, Any]) -> str:
             ]
         )
         for priority, (check, missing_value) in enumerate(followups, start=1):
-            gap = _value(missing_value)
+            gap = _markdown_inline(missing_value)
             if check["state"] == "pr_open":
                 gap = "Merge or close the relevant open pull request."
-            lines.append(
-                f"| {priority} | {check['stage']} / {check['check']} | `{gap}` |"
-            )
+            lines.append(f"| {priority} | {check['stage']} / {check['check']} | {gap} |")
 
     lines.extend(
         [
@@ -417,17 +576,6 @@ def render_markdown(report: dict[str, Any]) -> str:
             "- `missing` means the expected repository path or declaration was not found.",
             "- `pr_open` means configuration exists only in an open pull request and is not yet merged desired state.",
             "- This report does **not** prove live cluster synchronization, node readiness, or application health.",
-            "",
-            "## Raw report data",
-            "",
-            "<details>",
-            "<summary>Expand the normalized JSON report</summary>",
-            "",
-            "```json",
-            json.dumps(report, indent=2, sort_keys=True),
-            "```",
-            "",
-            "</details>",
             "",
         ]
     )

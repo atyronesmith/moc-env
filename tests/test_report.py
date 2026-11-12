@@ -51,11 +51,95 @@ class ReportRenderingTest(unittest.TestCase):
         self.assertIn("## Stage summary", rendered)
         self.assertIn("## Detailed findings by stage", rendered)
         self.assertIn("Why this was checked", rendered)
-        self.assertIn("What is present", rendered)
-        self.assertIn("What is missing", rendered)
+        self.assertIn("**Result**", rendered)
+        self.assertIn("| Aspect | Value |", rendered)
+        self.assertIn("| Expected |", rendered)
+        self.assertIn("| Present |", rendered)
+        self.assertIn("| Missing |", rendered)
+        self.assertIn("| Actual |", rendered)
         self.assertIn("## Suggested next actions", rendered)
         self.assertIn("fixture-env-agent-discovery.iso", rendered)
-        self.assertIn("## Raw report data", rendered)
+        self.assertNotIn("## Raw report data", rendered)
+        self.assertNotIn("```json", rendered)
+
+    def test_markdown_renders_host_table(self) -> None:
+        check = {
+            **self.report["checks"][0],
+            "evidence": {
+                "hosts": [
+                    {
+                        "name": "control-0",
+                        "node_name": "MOC-R4PAC10U31-S1A",
+                        "bmc_addr": "10.20.27.1",
+                        "boot_image_url": "http://example.invalid/image.iso",
+                    }
+                ]
+            },
+        }
+        rendered = render_markdown({**self.report, "checks": [check]})
+        self.assertIn("**Observed hosts**", rendered)
+        self.assertIn("| Host | Node name | BMC address | Boot image URL |", rendered)
+        self.assertIn("`control-0`", rendered)
+        self.assertIn("`MOC-R4PAC10U31-S1A`", rendered)
+
+    def test_markdown_renders_expected_path_table(self) -> None:
+        check = {
+            **self.report["checks"][0],
+            "expected": {"file_count": 2, "scope": "values/fixture"},
+            "evidence": {
+                "expected_paths": [
+                    "values/fixture/present.yaml",
+                    "values/fixture/missing.yaml",
+                ],
+                "paths": ["values/fixture/present.yaml"],
+            },
+        }
+        rendered = render_markdown({**self.report, "checks": [check]})
+        self.assertIn("**Expected paths**", rendered)
+        self.assertIn("| Path | Status |", rendered)
+        self.assertIn("`values/fixture/present.yaml` | **Present**", rendered)
+        self.assertIn("`values/fixture/missing.yaml` | **Missing**", rendered)
+
+    def test_markdown_renders_expected_field_table(self) -> None:
+        check = {
+            **self.report["checks"][0],
+            "expected": ["cluster_domain_name", "base_domain", "api_ip"],
+            "evidence": {
+                "values": {
+                    "cluster_domain_name": "fixture-env",
+                    "base_domain": "example.test",
+                }
+            },
+        }
+        rendered = render_markdown({**self.report, "checks": [check]})
+        self.assertIn("**Expected fields**", rendered)
+        self.assertIn("| Field | Observed value | Status |", rendered)
+        self.assertIn("`cluster_domain_name` | `fixture-env` | **Present**", rendered)
+        self.assertIn("`api_ip` | — | **Missing**", rendered)
+
+    def test_markdown_renders_pull_request_table(self) -> None:
+        check = {
+            **self.report["checks"][0],
+            "evidence": {
+                "pull_requests": [
+                    {
+                        "number": 237,
+                        "title": {"value": "Fixture buildout"},
+                        "state": {"value": "open"},
+                        "merged": {"value": False},
+                        "head_ref": {"value": "fixture-buildout"},
+                        "changed_files": ["values/fixture/hcp-config.yaml"],
+                    }
+                ]
+            },
+        }
+        rendered = render_markdown({**self.report, "checks": [check]})
+        self.assertIn("**Relevant pull requests**", rendered)
+        self.assertIn(
+            "| PR | Title | State | Merged | Head branch | Changed files |",
+            rendered,
+        )
+        self.assertIn("`237` | `Fixture buildout` | `open` | No", rendered)
 
     def test_text_path_checks_use_aligned_checklist(self) -> None:
         check = self.report["checks"][0]
