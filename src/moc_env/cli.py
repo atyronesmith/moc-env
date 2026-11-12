@@ -24,7 +24,11 @@ from .compare import (
     render_comparison_markdown,
     render_comparison_text,
 )
-from .export import render_infra_export
+from .export import (
+    render_infra_export,
+    render_workload_export,
+    workload_cluster_name,
+)
 from .model import Environment
 from .observed import read_apps_observation, read_infra_observation
 from .report import (
@@ -130,6 +134,29 @@ def build_export_infra_parser() -> argparse.ArgumentParser:
         description="Export a deterministic draft InfraCluster snapshot from merged main",
     )
     parser.add_argument("environment", help="Environment name, such as bu-ist-demo")
+    parser.add_argument(
+        "--output",
+        help=(
+            "Write the YAML snapshot to this file instead of stdout; "
+            "the command never creates or updates GitHub content"
+        ),
+    )
+    _add_credential_arguments(parser)
+    return parser
+
+
+def build_export_workload_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="moc-env export-workload",
+        description=(
+            "Export a deterministic draft WorkloadCluster snapshot from merged main"
+        ),
+    )
+    parser.add_argument("environment", help="Environment name, such as bu-ist-demo")
+    parser.add_argument(
+        "workload",
+        help="Workload name, such as workload0 or bu-ist-demo-workload0",
+    )
     parser.add_argument(
         "--output",
         help=(
@@ -295,6 +322,72 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 return 2
             print(f"moc-env: wrote InfraCluster YAML to {output_path}", file=sys.stderr)
+        else:
+            print(rendered, end="")
+        return 0
+
+    if arguments and arguments[0] == "export-workload":
+        args = build_export_workload_parser().parse_args(arguments[1:])
+        environment = Environment(name=args.environment)
+        try:
+            workload_cluster = workload_cluster_name(environment, args.workload)
+        except ValueError as exc:
+            print(f"moc-env: {exc}", file=sys.stderr)
+            return 2
+        github_token = _resolve_github_token(args)
+        client = GitHubClient(token=github_token, timeout=args.timeout)
+        stage_step = 0
+
+        def print_workload_export_progress(
+            stage: str, action: str, repository: str, path: str
+        ) -> None:
+            nonlocal stage_step
+            stage_step += 1
+            print(
+                f"▶ Step {stage_step}: {stage}\n"
+                f"    Action:     {action}\n"
+                f"    Repository: {repository}\n"
+                f"    Source:     {path}",
+                file=sys.stderr,
+            )
+
+        try:
+            infra_observation = read_infra_observation(
+                client,
+                environment,
+                progress=print_workload_export_progress,
+            )
+            apps_observation = read_apps_observation(
+                client,
+                environment,
+                progress=print_workload_export_progress,
+                include_pull_requests=False,
+            )
+            rendered = render_workload_export(
+                environment,
+                workload_cluster,
+                infra_observation,
+                apps_observation,
+            )
+        except (GitHubError, RateLimitError) as exc:
+            print(f"moc-env: {exc}", file=sys.stderr)
+            return 2
+
+        if args.output:
+            output_path = Path(args.output)
+            try:
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_text(rendered, encoding="utf-8")
+            except OSError as exc:
+                print(
+                    f"moc-env: could not write {output_path}: {exc}",
+                    file=sys.stderr,
+                )
+                return 2
+            print(
+                f"moc-env: wrote WorkloadCluster YAML to {output_path}",
+                file=sys.stderr,
+            )
         else:
             print(rendered, end="")
         return 0

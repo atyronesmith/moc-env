@@ -4,6 +4,7 @@ SHELL := /bin/sh
 
 UV ?= uv
 ENV ?= bu-ist-demo
+WORKLOAD ?= workload0
 FORMAT ?= text
 ARGS ?=
 OUTPUT ?= reports/$(ENV).md
@@ -20,9 +21,10 @@ endif
 
 RUN_ARGS := $(ENV) --format $(FORMAT) $(PRS_FLAG) $(ARGS)
 
-.PHONY: help setup sync test list export-infra export-infra-file validate \
-        validate-markdown check-infra check-infra-markdown run run-text run-json \
-        run-markdown run-no-prs report-markdown \
+.PHONY: help setup sync test list export-infra export-infra-file \
+        export-workload export-workload-file validate validate-markdown \
+        check-infra check-infra-markdown run run-text run-json run-markdown \
+        run-no-prs report-markdown \
         report-gist-secret report-gist-public build compile \
         diff-check pii-check check lock \
         clean clean-all
@@ -62,6 +64,13 @@ export-infra: ## Print a deterministic draft InfraCluster YAML snapshot
 
 export-infra-file: ## Write a draft InfraCluster YAML snapshot to OUTPUT
 	$(UV) run --locked moc-env export-infra $(ENV) --output $(OUTPUT) $(ARGS)
+
+export-workload: ## Print a draft WorkloadCluster YAML snapshot
+	$(UV) run --locked moc-env export-workload $(ENV) $(WORKLOAD) $(ARGS)
+
+export-workload-file: ## Write a draft WorkloadCluster YAML snapshot to OUTPUT
+	$(UV) run --locked moc-env export-workload $(ENV) $(WORKLOAD) \
+	  --output $(OUTPUT) $(ARGS)
 
 validate: ## Validate the desired-state document in FILE
 	$(UV) run --locked moc-env validate $(FILE) $(ARGS)

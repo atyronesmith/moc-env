@@ -7,11 +7,13 @@ from typing import Any
 import yaml
 
 from .model import Environment
-from .observed import InfraObservation, SourceValue
+from .observed import AppsObservation, InfraObservation, SourceValue
 
 EXPORT_API_VERSION = "moc-env/v1alpha1"
 INFRA_EXPORT_KIND = "InfraCluster"
 INFRA_EXPORT_SCHEMA_VERSION = "1"
+WORKLOAD_EXPORT_KIND = "WorkloadCluster"
+WORKLOAD_EXPORT_SCHEMA_VERSION = "1"
 
 
 def _source(source_value: SourceValue) -> dict[str, Any]:
@@ -81,6 +83,186 @@ def _boot_image(
         ],
         "selected": selected,
         "ambiguous": ambiguous,
+    }
+
+
+def _apps_source(
+    apps: AppsObservation,
+    value: Any,
+    confidence: str = "exact",
+) -> dict[str, Any]:
+    return SourceValue(
+        value,
+        apps.source_repository,
+        "git/trees/main?recursive=1",
+        apps.source_ref,
+        confidence=confidence,
+    ).to_dict()
+
+
+def workload_cluster_name(environment: Environment, workload: str) -> str:
+    """Resolve a full or shortened workload name for the current model."""
+
+    if workload == environment.workload_cluster:
+        return workload
+    if workload == environment.workload_cluster.removeprefix(
+        f"{environment.base_name}-"
+    ):
+        return environment.workload_cluster
+    raise ValueError(
+        f"workload must be {environment.workload_cluster} or "
+        f"{environment.workload_cluster.removeprefix(f'{environment.base_name}-')}"
+    )
+
+
+def _workload_boot_image(
+    cluster: InfraObservation,
+    workload_cluster: str,
+) -> dict[str, Any]:
+    observation = cluster.clusters[workload_cluster]
+    urls = observation.boot_image_urls
+    if len(urls) == 1:
+        selected = SourceValue(
+            urls[0],
+            observation.hosts.repository,
+            observation.hosts.path,
+        ).to_dict()
+        ambiguous = False
+    else:
+        selected = SourceValue(
+            None,
+            observation.hosts.repository,
+            observation.hosts.path,
+            confidence="unsupported",
+        ).to_dict()
+        ambiguous = len(urls) > 1
+    return {
+        "urls": [
+            SourceValue(
+                url,
+                observation.hosts.repository,
+                observation.hosts.path,
+            ).to_dict()
+            for url in urls
+        ],
+        "selected": selected,
+        "ambiguous": ambiguous,
+    }
+
+
+def build_workload_export(
+    environment: Environment,
+    workload_cluster: str,
+    infra_observation: InfraObservation,
+    apps_observation: AppsObservation,
+) -> dict[str, Any]:
+    """Build a deterministic draft WorkloadCluster snapshot."""
+
+    if workload_cluster not in infra_observation.clusters:
+        raise ValueError(f"unknown workload cluster: {workload_cluster}")
+    inventory = infra_observation.clusters[workload_cluster]
+    paths = set(apps_observation.paths.value)
+    hosted_values_path = (
+        f"hosted-clusters/{environment.infra_cluster}/"
+        f"{workload_cluster}/values.yaml"
+    )
+    component_prefix = f"values/{environment.infra_cluster}/{workload_cluster}/"
+    application_prefix = f"apps/{environment.infra_cluster}/{workload_cluster}/"
+    component_paths = list(
+        sorted(path for path in paths if path.startswith(component_prefix))
+    )
+    application_paths = list(
+        sorted(path for path in paths if path.startswith(application_prefix))
+    )
+
+    return {
+        "apiVersion": EXPORT_API_VERSION,
+        "kind": WORKLOAD_EXPORT_KIND,
+        "schemaVersion": WORKLOAD_EXPORT_SCHEMA_VERSION,
+        "metadata": {
+            "name": SourceValue(
+                workload_cluster,
+                infra_observation.repository,
+                infra_observation.inventory_path,
+                confidence="inferred",
+            ).to_dict(),
+            "environment": SourceValue(
+                environment.name,
+                infra_observation.repository,
+                infra_observation.inventory_path,
+                confidence="inferred",
+            ).to_dict(),
+            "parentInfraCluster": SourceValue(
+                environment.infra_cluster,
+                infra_observation.repository,
+                infra_observation.inventory_path,
+                confidence="inferred",
+            ).to_dict(),
+        },
+        "spec": {
+            "inventory": {
+                "path": SourceValue(
+                    infra_observation.inventory_path,
+                    infra_observation.repository,
+                    infra_observation.inventory_path,
+                    confidence="inferred",
+                ).to_dict(),
+                "present": infra_observation.inventory_present.to_dict(),
+                "groupPresent": inventory.group_found.to_dict(),
+                "hostCount": SourceValue(
+                    len(inventory.hosts.value),
+                    inventory.hosts.repository,
+                    inventory.hosts.path,
+                ).to_dict(),
+                "hosts": inventory.hosts.to_dict(),
+                "bootImage": _workload_boot_image(
+                    infra_observation,
+                    workload_cluster,
+                ),
+            },
+            "gitOps": {
+                "sourceRepository": _apps_source(
+                    apps_observation,
+                    apps_observation.source_repository,
+                    confidence="inferred",
+                ),
+                "hostedClusterValues": {
+                    "path": _apps_source(
+                        apps_observation,
+                        hosted_values_path,
+                        confidence="inferred",
+                    ),
+                    "present": _apps_source(
+                        apps_observation,
+                        hosted_values_path in paths,
+                    ),
+                },
+                "componentValues": {
+                    "prefix": _apps_source(
+                        apps_observation,
+                        component_prefix,
+                        confidence="inferred",
+                    ),
+                    "present": _apps_source(
+                        apps_observation,
+                        bool(component_paths),
+                    ),
+                    "paths": _apps_source(apps_observation, component_paths),
+                },
+                "applications": {
+                    "prefix": _apps_source(
+                        apps_observation,
+                        application_prefix,
+                        confidence="inferred",
+                    ),
+                    "present": _apps_source(
+                        apps_observation,
+                        bool(application_paths),
+                    ),
+                    "paths": _apps_source(apps_observation, application_paths),
+                },
+            },
+        },
     }
 
 
@@ -195,6 +377,28 @@ def render_infra_export(
     """Render a deterministic InfraCluster YAML document."""
 
     document = build_infra_export(environment, observation)
+    return yaml.safe_dump(
+        document,
+        sort_keys=True,
+        default_flow_style=False,
+        allow_unicode=True,
+    )
+
+
+def render_workload_export(
+    environment: Environment,
+    workload_cluster: str,
+    infra_observation: InfraObservation,
+    apps_observation: AppsObservation,
+) -> str:
+    """Render a deterministic WorkloadCluster YAML document."""
+
+    document = build_workload_export(
+        environment,
+        workload_cluster,
+        infra_observation,
+        apps_observation,
+    )
     return yaml.safe_dump(
         document,
         sort_keys=True,
