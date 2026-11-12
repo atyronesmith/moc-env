@@ -252,6 +252,18 @@ Create a public GitHub gist:
 make report-gist-public ENV=bu-ist-demo
 ```
 
+Create a gist from any existing file. The gist is secret by default:
+
+```sh
+tools/create-gist.sh reports/bu-ist-demo.md
+```
+
+Create a public gist from any existing file:
+
+```sh
+tools/create-gist.sh --public reports/bu-ist-demo.md
+```
+
 The CLI prints each inspection step to stderr, including the action, repository,
 and source path. Partial results include a reason plus explicit present and
 missing values.
