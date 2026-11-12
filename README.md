@@ -128,6 +128,10 @@ Or with the Makefile:
 make validate-markdown ENV=bu-ist-demo
 ```
 
+The Markdown report includes a category summary and a detailed table of every
+validation check, including expected value, actual value, result, and failure
+detail.
+
 Validation is local and read-only. Invalid documents return exit code 2.
 Unknown fields produce warnings; duplicate keys, secret-like fields, invalid
 IP/CIDR values, naming mismatches, and unsupported required values are errors.

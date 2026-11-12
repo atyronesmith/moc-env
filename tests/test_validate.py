@@ -33,6 +33,13 @@ class ValidateTest(unittest.TestCase):
         self.assertTrue(result.valid, result.errors)
         self.assertEqual(result.errors, [])
         self.assertEqual(result.warnings, [])
+        self.assertGreater(len(result.checks), 20)
+        self.assertTrue(all(check.status == "pass" for check in result.checks))
+        categories = {check.category for check in result.checks}
+        self.assertIn("Document", categories)
+        self.assertIn("Metadata", categories)
+        self.assertIn("Network and domain", categories)
+        self.assertIn("Security", categories)
 
     def test_known_working_oac_prod_extraction_validates(self) -> None:
         fixture = Path(__file__).parent / "fixtures" / "oac-prod-infra.yaml"
@@ -116,6 +123,18 @@ class ValidateTest(unittest.TestCase):
             "spec.extra: unknown field (warning)",
             result.warnings,
         )
+        unknown_check = next(
+            check
+            for check in result.checks
+            if check.name == "Unknown fields"
+        )
+        self.assertEqual(unknown_check.status, "warning")
+        secret_check = next(
+            check
+            for check in result.checks
+            if check.name == "Secret-like field names"
+        )
+        self.assertEqual(secret_check.status, "fail")
 
     def test_duplicate_keys_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -198,6 +217,11 @@ metadata:
         self.assertIn("| Document |", rendered)
         self.assertIn("| Error count | 0 |", rendered)
         self.assertIn("| Warning count | 0 |", rendered)
+        self.assertIn("## Check summary by category", rendered)
+        self.assertIn("## Detailed checks", rendered)
+        self.assertIn("| Check | Path | Expected | Actual | Result | Detail |", rendered)
+        self.assertIn("✅ Pass", rendered)
+        self.assertIn("### Network and domain", rendered)
         self.assertEqual(stderr.getvalue(), "")
 
     def test_cli_writes_markdown_validation_report(self) -> None:
@@ -237,6 +261,8 @@ metadata:
         self.assertIn("invalid IP address", rendered)
         self.assertIn("## Warnings", rendered)
         self.assertIn("unknown field", rendered)
+        self.assertIn("❌ Fail", rendered)
+        self.assertIn("⚠️ Warning", rendered)
 
 
 if __name__ == "__main__":

@@ -78,11 +78,36 @@ _CLUSTER_SCHEMA: dict[str, Any] = {
 
 
 @dataclass(frozen=True)
+class ValidationCheck:
+    """One discrete desired-state validation check."""
+
+    category: str
+    name: str
+    path: str
+    expected: str
+    actual: str
+    status: str
+    detail: str = ""
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "category": self.category,
+            "name": self.name,
+            "path": self.path,
+            "expected": self.expected,
+            "actual": self.actual,
+            "status": self.status,
+            "detail": self.detail,
+        }
+
+
+@dataclass(frozen=True)
 class ValidationResult:
     """The outcome of validating one desired-state document."""
 
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    checks: list[ValidationCheck] = field(default_factory=list)
 
     @property
     def valid(self) -> bool:
@@ -93,6 +118,7 @@ class ValidationResult:
             "valid": self.valid,
             "errors": self.errors,
             "warnings": self.warnings,
+            "checks": [check.to_dict() for check in self.checks],
         }
 
 
@@ -240,13 +266,351 @@ def _find_secret_fields(node: Any, path: tuple[str, ...], errors: list[str]) -> 
         _find_secret_fields(value, (*path, str(key)), errors)
 
 
+def _has_error(errors: list[str], prefix: str) -> bool:
+    return any(error == prefix or error.startswith(f"{prefix}:") for error in errors)
+
+
+def _source_actual(parent: Any, field_name: str) -> str:
+    if not isinstance(parent, dict):
+        return "missing parent mapping"
+    source = parent.get(field_name)
+    if not isinstance(source, dict):
+        return "missing source object"
+    value = source.get("value")
+    confidence = source.get("confidence", "missing")
+    return f"{value!r} ({confidence})"
+
+
+def _validation_checks(
+    document: Any,
+    errors: list[str],
+    warnings: list[str],
+) -> list[ValidationCheck]:
+    """Build a detailed ledger from the validator's errors and warnings."""
+
+    checks: list[ValidationCheck] = []
+
+    def record(
+        category: str,
+        name: str,
+        path: str,
+        expected: str,
+        actual: str,
+        passed: bool,
+        detail: str = "",
+    ) -> None:
+        checks.append(
+            ValidationCheck(
+                category=category,
+                name=name,
+                path=path,
+                expected=expected,
+                actual=actual,
+                status="pass" if passed else "fail",
+                detail=detail,
+            )
+        )
+
+    if not isinstance(document, dict):
+        record(
+            "Document",
+            "YAML document shape",
+            "document",
+            "Mapping",
+            type(document).__name__,
+            False,
+            "The document must be a YAML mapping.",
+        )
+        return checks
+
+    record(
+        "Document",
+        "YAML document shape",
+        "document",
+        "Mapping",
+        "Mapping",
+        True,
+    )
+    record(
+        "Document",
+        "API version",
+        "apiVersion",
+        EXPORT_API_VERSION,
+        repr(document.get("apiVersion")),
+        document.get("apiVersion") == EXPORT_API_VERSION,
+    )
+    record(
+        "Document",
+        "Resource kind",
+        "kind",
+        INFRA_EXPORT_KIND,
+        repr(document.get("kind")),
+        document.get("kind") == INFRA_EXPORT_KIND,
+    )
+    record(
+        "Document",
+        "Schema version",
+        "schemaVersion",
+        INFRA_EXPORT_SCHEMA_VERSION,
+        repr(document.get("schemaVersion")),
+        str(document.get("schemaVersion")) == INFRA_EXPORT_SCHEMA_VERSION,
+    )
+
+    metadata = document.get("metadata")
+    metadata_mapping = isinstance(metadata, dict)
+    record(
+        "Metadata",
+        "Metadata mapping",
+        "metadata",
+        "Mapping",
+        "Mapping" if metadata_mapping else type(metadata).__name__,
+        metadata_mapping,
+    )
+    metadata = metadata if metadata_mapping else {}
+    infra_name = (
+        metadata.get("name", {}).get("value")
+        if isinstance(metadata.get("name"), dict)
+        else None
+    )
+    environment_name = (
+        metadata.get("environment", {}).get("value")
+        if isinstance(metadata.get("environment"), dict)
+        else None
+    )
+    record(
+        "Metadata",
+        "Infra-cluster metadata",
+        "metadata.name",
+        "Source object with cluster name",
+        _source_actual(metadata, "name"),
+        not _has_error(errors, "metadata.name"),
+    )
+    record(
+        "Metadata",
+        "Environment metadata",
+        "metadata.environment",
+        "Source object with environment name",
+        _source_actual(metadata, "environment"),
+        not _has_error(errors, "metadata.environment"),
+    )
+    record(
+        "Metadata",
+        "Infra-cluster name format",
+        "metadata.name.value",
+        "Valid DNS-like cluster name",
+        repr(infra_name),
+        not _has_error(errors, "metadata.name.value"),
+    )
+    record(
+        "Metadata",
+        "Environment name format",
+        "metadata.environment.value",
+        "Valid DNS-like environment name",
+        repr(environment_name),
+        not _has_error(errors, "metadata.environment.value"),
+    )
+    expected_infra_name = (
+        f"{environment_name}-infra"
+        if isinstance(environment_name, str)
+        else None
+    )
+    record(
+        "Metadata",
+        "Environment and infra naming",
+        "metadata",
+        f"ENVIRONMENT-infra ({expected_infra_name!r})",
+        repr(infra_name),
+        not _has_error(errors, "metadata: infra-cluster name"),
+    )
+
+    spec = document.get("spec")
+    spec_mapping = isinstance(spec, dict)
+    record(
+        "Specification",
+        "Specification mapping",
+        "spec",
+        "Mapping",
+        "Mapping" if spec_mapping else type(spec).__name__,
+        spec_mapping,
+    )
+    spec = spec if spec_mapping else {}
+    inventory = spec.get("inventory")
+    inventory_mapping = isinstance(inventory, dict)
+    record(
+        "Inventory",
+        "Inventory mapping",
+        "spec.inventory",
+        "Mapping",
+        "Mapping" if inventory_mapping else type(inventory).__name__,
+        inventory_mapping,
+    )
+    inventory = inventory if inventory_mapping else {}
+    clusters = inventory.get("clusters")
+    clusters_mapping = isinstance(clusters, dict)
+    record(
+        "Inventory",
+        "Inventory cluster mapping",
+        "spec.inventory.clusters",
+        "Mapping of cluster names",
+        "Mapping" if clusters_mapping else type(clusters).__name__,
+        clusters_mapping,
+    )
+    clusters = clusters if clusters_mapping else {}
+    expected_cluster_present = isinstance(infra_name, str) and infra_name in clusters
+    record(
+        "Inventory",
+        "Expected inventory cluster",
+        "spec.inventory.clusters",
+        repr(infra_name),
+        "present" if expected_cluster_present else "missing",
+        expected_cluster_present,
+    )
+    cluster = clusters.get(infra_name, {}) if isinstance(infra_name, str) else {}
+    cluster_name = (
+        cluster.get("name", {}).get("value")
+        if isinstance(cluster, dict) and isinstance(cluster.get("name"), dict)
+        else None
+    )
+    record(
+        "Inventory",
+        "Inventory cluster name",
+        f"spec.inventory.clusters.{infra_name}.name.value"
+        if isinstance(infra_name, str)
+        else "spec.inventory.clusters",
+        repr(infra_name),
+        repr(cluster_name),
+        cluster_name == infra_name and isinstance(infra_name, str),
+    )
+
+    variables = spec.get("variables")
+    variables_mapping = isinstance(variables, dict)
+    record(
+        "Network and domain",
+        "Variables mapping",
+        "spec.variables",
+        "Mapping",
+        "Mapping" if variables_mapping else type(variables).__name__,
+        variables_mapping,
+    )
+    variables = variables if variables_mapping else {}
+    variable_fields = variables.get("fields")
+    fields_mapping = isinstance(variable_fields, dict)
+    record(
+        "Network and domain",
+        "Variable fields mapping",
+        "spec.variables.fields",
+        "Mapping of required fields",
+        "Mapping" if fields_mapping else type(variable_fields).__name__,
+        fields_mapping,
+    )
+    variable_fields = variable_fields if fields_mapping else {}
+    values: dict[str, Any] = {}
+    for variable_name in REQUIRED_VARIABLE_FIELDS:
+        path = f"spec.variables.fields.{variable_name}"
+        values[variable_name] = (
+            variable_fields.get(variable_name, {}).get("value")
+            if isinstance(variable_fields.get(variable_name), dict)
+            else None
+        )
+        record(
+            "Network and domain",
+            f"Required field: {variable_name}",
+            path,
+            "Source object with value, provenance, and confidence",
+            _source_actual(variable_fields, variable_name),
+            not _has_error(errors, path),
+        )
+
+    record(
+        "Network and domain",
+        "Machine network CIDR syntax",
+        "spec.variables.fields.machine_network.value",
+        "Valid IPv4 or IPv6 CIDR",
+        repr(values.get("machine_network")),
+        not _has_error(errors, "spec.variables.fields.machine_network.value"),
+    )
+    for ip_field in ("api_ip", "ingress_ip", "dns_ip"):
+        path = f"spec.variables.fields.{ip_field}.value"
+        record(
+            "Network and domain",
+            f"{ip_field} syntax",
+            path,
+            "Valid IPv4 or IPv6 address",
+            repr(values.get(ip_field)),
+            not _has_error(errors, path),
+        )
+    for domain_field in ("cluster_domain_name", "base_domain"):
+        path = f"spec.variables.fields.{domain_field}.value"
+        record(
+            "Network and domain",
+            f"{domain_field} syntax",
+            path,
+            "Valid DNS name",
+            repr(values.get(domain_field)),
+            not _has_error(errors, path),
+        )
+
+    domain = (
+        spec.get("domain", {}).get("value")
+        if isinstance(spec.get("domain"), dict)
+        else None
+    )
+    expected_domain = (
+        f"{values.get('cluster_domain_name')}.{values.get('base_domain')}"
+        if isinstance(values.get("cluster_domain_name"), str)
+        and isinstance(values.get("base_domain"), str)
+        else None
+    )
+    record(
+        "Network and domain",
+        "Domain consistency",
+        "spec.domain.value",
+        "cluster_domain_name.base_domain "
+        f"({expected_domain!r})",
+        repr(domain),
+        not _has_error(errors, "spec.domain.value"),
+    )
+
+    secret_errors = [
+        error for error in errors if "secret-like fields are not allowed" in error
+    ]
+    record(
+        "Security",
+        "Secret-like field names",
+        "document",
+        "No fields named secret, token, password, or credential",
+        f"{len(secret_errors)} prohibited field(s)",
+        not secret_errors,
+        "; ".join(secret_errors),
+    )
+
+    unknown_warnings = [
+        warning for warning in warnings if warning.endswith("unknown field (warning)")
+    ]
+    checks.append(
+        ValidationCheck(
+            category="Schema compatibility",
+            name="Unknown fields",
+            path="document",
+            expected="Only fields defined by schema version 1",
+            actual=f"{len(unknown_warnings)} unknown field(s)",
+            status="warning" if unknown_warnings else "pass",
+            detail="; ".join(unknown_warnings),
+        )
+    )
+    return checks
+
+
 def validate_infra_cluster(document: Any) -> ValidationResult:
     """Validate an InfraCluster desired-state document."""
 
     errors: list[str] = []
     warnings: list[str] = []
     if not isinstance(document, dict):
-        return ValidationResult(errors=["document: expected a YAML mapping"])
+        return ValidationResult(
+            errors=["document: expected a YAML mapping"],
+            checks=_validation_checks(document, ["document: expected a YAML mapping"], []),
+        )
 
     if document.get("apiVersion") != EXPORT_API_VERSION:
         errors.append(f"apiVersion: expected {EXPORT_API_VERSION}")
@@ -357,7 +721,11 @@ def validate_infra_cluster(document: Any) -> ValidationResult:
 
     _walk_unknown_fields(document, _DOCUMENT_SCHEMA, (), warnings)
     _find_secret_fields(document, (), errors)
-    return ValidationResult(errors=errors, warnings=warnings)
+    return ValidationResult(
+        errors=errors,
+        warnings=warnings,
+        checks=_validation_checks(document, errors, warnings),
+    )
 
 
 def load_validation_result(path: Path) -> ValidationResult:
@@ -370,8 +738,37 @@ def load_validation_result(path: Path) -> ValidationResult:
     try:
         document = yaml.load(text, Loader=_UniqueKeyLoader)
     except yaml.YAMLError as exc:
-        return ValidationResult(errors=[f"invalid YAML: {exc}"])
-    return validate_infra_cluster(document)
+        error = f"invalid YAML: {exc}"
+        return ValidationResult(
+            errors=[error],
+            checks=[
+                ValidationCheck(
+                    category="Document",
+                    name="YAML parsing and duplicate keys",
+                    path="document",
+                    expected="Parseable YAML without duplicate mapping keys",
+                    actual="Invalid YAML",
+                    status="fail",
+                    detail=error,
+                )
+            ],
+        )
+    result = validate_infra_cluster(document)
+    return ValidationResult(
+        errors=result.errors,
+        warnings=result.warnings,
+        checks=[
+            ValidationCheck(
+                category="Document",
+                name="YAML parsing and duplicate keys",
+                path="document",
+                expected="Parseable YAML without duplicate mapping keys",
+                actual="Valid",
+                status="pass",
+            ),
+            *result.checks,
+        ],
+    )
 
 
 def render_validation_text(result: ValidationResult) -> str:
@@ -404,6 +801,14 @@ def render_validation_markdown(
 
     status = "✅ VALID" if result.valid else "❌ INVALID"
     document = str(path) if path is not None else "—"
+    passed_count = sum(check.status == "pass" for check in result.checks)
+    failed_count = sum(check.status == "fail" for check in result.checks)
+    warning_count = sum(check.status == "warning" for check in result.checks)
+    status_symbols = {
+        "pass": "✅ Pass",
+        "fail": "❌ Fail",
+        "warning": "⚠️ Warning",
+    }
     lines = [
         "# 🧪 Desired-State Validation",
         "",
@@ -414,7 +819,72 @@ def render_validation_markdown(
         f"| Document | `{_markdown_cell(document)}` |",
         f"| Error count | {len(result.errors)} |",
         f"| Warning count | {len(result.warnings)} |",
+        f"| Checks passed | {passed_count} |",
+        f"| Checks failed | {failed_count} |",
+        f"| Checks with warnings | {warning_count} |",
+        f"| Total checks | {len(result.checks)} |",
     ]
+
+    if result.checks:
+        categories: list[str] = []
+        for check in result.checks:
+            if check.category not in categories:
+                categories.append(check.category)
+
+        lines.extend(
+            [
+                "",
+                "## Check summary by category",
+                "",
+                "| Category | Passed | Failed | Warnings | Total |",
+                "|---|---:|---:|---:|---:|",
+            ]
+        )
+        for category in categories:
+            category_checks = [
+                check for check in result.checks if check.category == category
+            ]
+            lines.append(
+                f"| {category} | "
+                f"{sum(check.status == 'pass' for check in category_checks)} | "
+                f"{sum(check.status == 'fail' for check in category_checks)} | "
+                f"{sum(check.status == 'warning' for check in category_checks)} | "
+                f"{len(category_checks)} |"
+            )
+
+        lines.extend(
+            [
+                "",
+                "## Detailed checks",
+                "",
+            ]
+        )
+        for category in categories:
+            category_checks = [
+                check for check in result.checks if check.category == category
+            ]
+            category_pass = sum(check.status == "pass" for check in category_checks)
+            lines.extend(
+                [
+                    f"### {category}",
+                    "",
+                    f"{category_pass} of {len(category_checks)} checks passed.",
+                    "",
+                    "| Check | Path | Expected | Actual | Result | Detail |",
+                    "|---|---|---|---|---|---|",
+                ]
+            )
+            for check in category_checks:
+                lines.append(
+                    "| "
+                    f"{_markdown_cell(check.name)} | "
+                    f"`{_markdown_cell(check.path)}` | "
+                    f"{_markdown_cell(check.expected)} | "
+                    f"{_markdown_cell(check.actual)} | "
+                    f"{status_symbols.get(check.status, check.status)} | "
+                    f"{_markdown_cell(check.detail or '—')} |"
+                )
+            lines.append("")
 
     if result.errors:
         lines.extend(
