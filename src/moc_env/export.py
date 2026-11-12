@@ -200,6 +200,53 @@ def build_workload_export(
             ).to_dict(),
         },
         "spec": {
+            "parent": {
+                "domain": SourceValue(
+                    (
+                        f"{infra_observation.hub_variables.values.value.get('cluster_domain_name')}"
+                        f".{infra_observation.hub_variables.values.value.get('base_domain')}"
+                        if isinstance(infra_observation.hub_variables.values.value, dict)
+                        and isinstance(
+                            infra_observation.hub_variables.values.value.get(
+                                "cluster_domain_name"
+                            ),
+                            str,
+                        )
+                        and isinstance(
+                            infra_observation.hub_variables.values.value.get(
+                                "base_domain"
+                            ),
+                            str,
+                        )
+                        else None
+                    ),
+                    infra_observation.repository,
+                    infra_observation.variables_path,
+                    confidence=(
+                        "inferred"
+                        if isinstance(infra_observation.hub_variables.values.value, dict)
+                        and isinstance(
+                            infra_observation.hub_variables.values.value.get(
+                                "cluster_domain_name"
+                            ),
+                            str,
+                        )
+                        and isinstance(
+                            infra_observation.hub_variables.values.value.get(
+                                "base_domain"
+                            ),
+                            str,
+                        )
+                        else "unsupported"
+                    ),
+                ).to_dict(),
+                "network": {
+                    "machineNetwork": _hub_variable_field(
+                        infra_observation,
+                        "machine_network",
+                    ),
+                },
+            },
             "inventory": {
                 "path": SourceValue(
                     infra_observation.inventory_path,

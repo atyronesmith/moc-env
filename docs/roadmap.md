@@ -193,6 +193,8 @@ timestamp.
 
 ## Phase 6 — `check-workload`
 
+**Status:** complete
+
 Add:
 
 ```sh
@@ -209,6 +211,14 @@ Cross-check:
 - hosted-cluster and component values exist;
 - applications reference the correct infra and workload clusters;
 - identity and domain references are consistent.
+
+The workload check validates the document structure, reads current `oac-infra`
+and `oac-apps` observations, and compares the workload against its parent.
+It checks parent existence, naming, parent domain and machine-network
+references, inventory and host count, boot-image specificity, hosted-cluster
+and component values, application path references, and relevant pull requests.
+Application absence is valid when desired state records it as absent. Text,
+JSON, and Markdown output are available; hard differences return exit code 1.
 
 ## Phase 7 — environment bundles
 

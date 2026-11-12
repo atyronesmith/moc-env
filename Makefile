@@ -9,8 +9,10 @@ FORMAT ?= text
 ARGS ?=
 OUTPUT ?= reports/$(ENV).md
 FILE ?= desired-state/infra-clusters/$(ENV)-infra.yaml
+WORKLOAD_FILE ?= desired-state/workload-clusters/$(ENV)-$(WORKLOAD).yaml
 VALIDATION_OUTPUT ?= reports/$(ENV)-validation.md
 COMPARISON_OUTPUT ?= reports/$(ENV)-infra-comparison.md
+WORKLOAD_COMPARISON_OUTPUT ?= reports/$(ENV)-$(WORKLOAD)-comparison.md
 
 # Set NO_PRS=1 to avoid pull-request API calls.
 ifeq ($(NO_PRS),1)
@@ -23,7 +25,8 @@ RUN_ARGS := $(ENV) --format $(FORMAT) $(PRS_FLAG) $(ARGS)
 
 .PHONY: help setup sync test list export-infra export-infra-file \
         export-workload export-workload-file validate validate-markdown \
-        check-infra check-infra-markdown run run-text run-json run-markdown \
+        check-infra check-infra-markdown check-workload \
+        check-workload-markdown run run-text run-json run-markdown \
         run-no-prs report-markdown \
         report-gist-secret report-gist-public build compile \
         diff-check pii-check check lock \
@@ -85,6 +88,13 @@ check-infra: ## Compare FILE against merged main
 check-infra-markdown: ## Write a Markdown infra comparison to COMPARISON_OUTPUT
 	$(UV) run --locked moc-env check-infra $(FILE) --format markdown \
 	  --output $(COMPARISON_OUTPUT)
+
+check-workload: ## Compare WORKLOAD_FILE against merged main
+	$(UV) run --locked moc-env check-workload $(WORKLOAD_FILE) $(ARGS)
+
+check-workload-markdown: ## Write a Markdown workload comparison
+	$(UV) run --locked moc-env check-workload $(WORKLOAD_FILE) --format markdown \
+	  --output $(WORKLOAD_COMPARISON_OUTPUT)
 
 run: run-text ## Run the CLI (default ENV and text format)
 

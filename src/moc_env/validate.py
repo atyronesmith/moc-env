@@ -11,7 +11,12 @@ from typing import Any
 
 import yaml
 
-from .export import EXPORT_API_VERSION, INFRA_EXPORT_KIND, INFRA_EXPORT_SCHEMA_VERSION
+from .export import (
+    EXPORT_API_VERSION,
+    INFRA_EXPORT_KIND,
+    INFRA_EXPORT_SCHEMA_VERSION,
+    WORKLOAD_EXPORT_KIND,
+)
 
 REQUIRED_VARIABLE_FIELDS = (
     "cluster_domain_name",
@@ -770,6 +775,101 @@ def load_infra_cluster_document(path: Path) -> tuple[Any, ValidationResult]:
         ],
     )
     return document, checked_result
+
+
+def load_yaml_document(path: Path) -> tuple[Any, ValidationResult]:
+    """Load YAML while rejecting duplicate mapping keys."""
+
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return None, ValidationResult(errors=[f"could not read {path}: {exc}"])
+    try:
+        document = yaml.load(text, Loader=_UniqueKeyLoader)
+    except yaml.YAMLError as exc:
+        return None, ValidationResult(errors=[f"invalid YAML: {exc}"])
+    return document, ValidationResult()
+
+
+def validate_workload_cluster(document: Any) -> ValidationResult:
+    """Validate the structural requirements of a WorkloadCluster document."""
+
+    errors: list[str] = []
+    warnings: list[str] = []
+    if not isinstance(document, dict):
+        return ValidationResult(errors=["document: expected a YAML mapping"])
+
+    if document.get("apiVersion") != EXPORT_API_VERSION:
+        errors.append(f"apiVersion: expected {EXPORT_API_VERSION}")
+    if document.get("kind") != WORKLOAD_EXPORT_KIND:
+        errors.append(f"kind: expected {WORKLOAD_EXPORT_KIND}")
+    if str(document.get("schemaVersion")) != INFRA_EXPORT_SCHEMA_VERSION:
+        errors.append(f"schemaVersion: expected {INFRA_EXPORT_SCHEMA_VERSION}")
+
+    metadata = document.get("metadata")
+    if not isinstance(metadata, dict):
+        errors.append("metadata: expected a mapping")
+        metadata = {}
+    for field_name in ("name", "environment", "parentInfraCluster"):
+        _required_source(
+            metadata,
+            field_name,
+            f"metadata.{field_name}",
+            errors,
+        )
+
+    spec = document.get("spec")
+    if not isinstance(spec, dict):
+        errors.append("spec: expected a mapping")
+        spec = {}
+    inventory = spec.get("inventory")
+    if not isinstance(inventory, dict):
+        errors.append("spec.inventory: expected a mapping")
+        inventory = {}
+    for field_name in ("groupPresent", "hostCount", "hosts"):
+        _required_source(
+            inventory,
+            field_name,
+            f"spec.inventory.{field_name}",
+            errors,
+        )
+    boot_image = inventory.get("bootImage")
+    if not isinstance(boot_image, dict):
+        errors.append("spec.inventory.bootImage: expected a mapping")
+    else:
+        _required_source(
+            boot_image,
+            "selected",
+            "spec.inventory.bootImage.selected",
+            errors,
+        )
+
+    gitops = spec.get("gitOps")
+    if not isinstance(gitops, dict):
+        errors.append("spec.gitOps: expected a mapping")
+        gitops = {}
+    for section in ("hostedClusterValues", "componentValues", "applications"):
+        mapping = gitops.get(section)
+        if not isinstance(mapping, dict):
+            errors.append(f"spec.gitOps.{section}: expected a mapping")
+            continue
+        required_fields = (
+            ("present", "path")
+            if section == "hostedClusterValues"
+            else ("present", "paths")
+        )
+        for field_name in required_fields:
+            if field_name not in mapping:
+                errors.append(
+                    f"spec.gitOps.{section}.{field_name}: missing required field"
+                )
+        if section != "hostedClusterValues" and "prefix" not in mapping:
+            errors.append(f"spec.gitOps.{section}.prefix: missing required field")
+    if "path" not in gitops.get("hostedClusterValues", {}):
+        errors.append("spec.gitOps.hostedClusterValues.path: missing required field")
+
+    _find_secret_fields(document, (), errors)
+    return ValidationResult(errors=errors, warnings=warnings)
 
 
 def load_validation_result(path: Path) -> ValidationResult:
