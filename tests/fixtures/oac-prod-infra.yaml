@@ -1,0 +1,137 @@
+apiVersion: moc-env/v1alpha1
+kind: InfraCluster
+schemaVersion: "1"
+metadata:
+  name:
+    value: oac-prod-infra
+    confidence: inferred
+    provenance:
+      repository: CCI-MOC/oac-infra
+      path: infra/inventory/00hosts.yaml
+      ref: main
+  environment:
+    value: oac-prod
+    confidence: inferred
+    provenance:
+      repository: CCI-MOC/oac-infra
+      path: infra/inventory/00hosts.yaml
+      ref: main
+spec:
+  inventory:
+    path:
+      value: infra/inventory/00hosts.yaml
+      confidence: inferred
+      provenance:
+        repository: CCI-MOC/oac-infra
+        path: infra/inventory/00hosts.yaml
+        ref: main
+    present:
+      value: true
+      confidence: exact
+      provenance:
+        repository: CCI-MOC/oac-infra
+        path: infra/inventory/00hosts.yaml
+        ref: main
+    clusters:
+      oac-prod-infra:
+        name:
+          value: oac-prod-infra
+          confidence: inferred
+          provenance:
+            repository: CCI-MOC/oac-infra
+            path: infra/inventory/00hosts.yaml
+            ref: main
+  hubInventory:
+    path:
+      value: hub-images/inventory.yml
+      confidence: inferred
+      provenance:
+        repository: CCI-MOC/oac-infra
+        path: hub-images/inventory.yml
+        ref: main
+    present:
+      value: true
+      confidence: exact
+      provenance:
+        repository: CCI-MOC/oac-infra
+        path: hub-images/inventory.yml
+        ref: main
+    inventoryPresent:
+      value: true
+      confidence: exact
+      provenance:
+        repository: CCI-MOC/oac-infra
+        path: hub-images/inventory.yml
+        ref: main
+    clusterKeyPresent:
+      value: true
+      confidence: exact
+      provenance:
+        repository: CCI-MOC/oac-infra
+        path: hub-images/inventory.yml
+        ref: main
+  variables:
+    path:
+      value: hub-images/group_vars/oac-prod-infra/vars.yml
+      confidence: inferred
+      provenance:
+        repository: CCI-MOC/oac-infra
+        path: hub-images/group_vars/oac-prod-infra/vars.yml
+        ref: main
+    present:
+      value: true
+      confidence: exact
+      provenance:
+        repository: CCI-MOC/oac-infra
+        path: hub-images/group_vars/oac-prod-infra/vars.yml
+        ref: main
+    fields:
+      cluster_domain_name:
+        value: infra
+        confidence: exact
+        provenance:
+          repository: CCI-MOC/oac-infra
+          path: hub-images/group_vars/oac-prod-infra/vars.yml
+          ref: main
+      base_domain:
+        value: oac.ocp.massopen.cloud
+        confidence: exact
+        provenance:
+          repository: CCI-MOC/oac-infra
+          path: hub-images/group_vars/oac-prod-infra/vars.yml
+          ref: main
+      machine_network:
+        value: 10.20.8.0/23
+        confidence: exact
+        provenance:
+          repository: CCI-MOC/oac-infra
+          path: hub-images/group_vars/oac-prod-infra/vars.yml
+          ref: main
+      api_ip:
+        value: 10.20.9.11
+        confidence: exact
+        provenance:
+          repository: CCI-MOC/oac-infra
+          path: hub-images/group_vars/oac-prod-infra/vars.yml
+          ref: main
+      ingress_ip:
+        value: 10.20.9.12
+        confidence: exact
+        provenance:
+          repository: CCI-MOC/oac-infra
+          path: hub-images/group_vars/oac-prod-infra/vars.yml
+          ref: main
+      dns_ip:
+        value: 8.8.8.8
+        confidence: exact
+        provenance:
+          repository: CCI-MOC/oac-infra
+          path: hub-images/group_vars/oac-prod-infra/vars.yml
+          ref: main
+  domain:
+    value: infra.oac.ocp.massopen.cloud
+    confidence: inferred
+    provenance:
+      repository: CCI-MOC/oac-infra
+      path: hub-images/group_vars/oac-prod-infra/vars.yml
+      ref: main

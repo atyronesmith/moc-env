@@ -34,6 +34,14 @@ class ValidateTest(unittest.TestCase):
         self.assertEqual(result.errors, [])
         self.assertEqual(result.warnings, [])
 
+    def test_known_working_oac_prod_extraction_validates(self) -> None:
+        fixture = Path(__file__).parent / "fixtures" / "oac-prod-infra.yaml"
+        result = load_validation_result(fixture)
+
+        self.assertTrue(result.valid, result.errors)
+        self.assertEqual(result.errors, [])
+        self.assertEqual(result.warnings, [])
+
     def test_invalid_network_values_and_naming(self) -> None:
         document = copy.deepcopy(self.document)
         document["metadata"]["name"]["value"] = "wrong-infra"
