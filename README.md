@@ -116,6 +116,18 @@ The default destination is `reports/bu-ist-demo.md`. Override it with:
 make report-markdown ENV=bu-ist-demo OUTPUT=/tmp/bu-ist-demo.md
 ```
 
+Create a secret GitHub gist from the generated report:
+
+```sh
+make report-gist-secret ENV=bu-ist-demo
+```
+
+Create a public GitHub gist:
+
+```sh
+make report-gist-public ENV=bu-ist-demo
+```
+
 The CLI prints each inspection step to stderr, including the action, repository,
 and source path. Partial results include a reason plus explicit present and
 missing values.
