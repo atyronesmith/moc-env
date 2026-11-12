@@ -7,6 +7,7 @@ ENV ?= bu-ist-demo
 FORMAT ?= text
 ARGS ?=
 OUTPUT ?= reports/$(ENV).md
+FILE ?= desired-state/infra-clusters/$(ENV)-infra.yaml
 
 # Set NO_PRS=1 to avoid pull-request API calls.
 ifeq ($(NO_PRS),1)
@@ -17,9 +18,9 @@ endif
 
 RUN_ARGS := $(ENV) --format $(FORMAT) $(PRS_FLAG) $(ARGS)
 
-.PHONY: help setup sync test list export-infra export-infra-file run run-text \
-        run-json run-markdown run-no-prs report-markdown report-gist-secret \
-        report-gist-public build compile \
+.PHONY: help setup sync test list export-infra export-infra-file validate run \
+        run-text run-json run-markdown run-no-prs report-markdown \
+        report-gist-secret report-gist-public build compile \
         diff-check pii-check check lock \
         clean clean-all
 
@@ -58,6 +59,9 @@ export-infra: ## Print a deterministic draft InfraCluster YAML snapshot
 
 export-infra-file: ## Write a draft InfraCluster YAML snapshot to OUTPUT
 	$(UV) run --locked moc-env export-infra $(ENV) --output $(OUTPUT) $(ARGS)
+
+validate: ## Validate the desired-state document in FILE
+	$(UV) run --locked moc-env validate $(FILE) $(ARGS)
 
 run: run-text ## Run the CLI (default ENV and text format)
 
