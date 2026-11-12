@@ -127,7 +127,8 @@ Validation is local and read-only. It accepts the Phase 2 `InfraCluster` export
 schema, rejects duplicate YAML keys and secret-like field names, checks naming
 and domain consistency, validates IP and CIDR syntax, and rejects unsupported
 required values. Unknown fields produce warnings without failing validation.
-Text and JSON output are available; invalid documents return exit code 2.
+Text, JSON, and standalone Markdown output are available; invalid documents
+return exit code 2.
 
 ## Phase 4 — `check-infra`
 

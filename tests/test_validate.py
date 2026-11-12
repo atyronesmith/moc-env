@@ -177,6 +177,67 @@ metadata:
         )
         self.assertEqual(stderr.getvalue(), "")
 
+    def test_cli_renders_markdown_validation_report(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            path = Path(temporary_directory) / "infra.yaml"
+            path.write_text(yaml.safe_dump(self.document), encoding="utf-8")
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with (
+                contextlib.redirect_stdout(stdout),
+                contextlib.redirect_stderr(stderr),
+            ):
+                exit_code = cli.main(
+                    ["validate", str(path), "--format", "markdown"]
+                )
+
+        self.assertEqual(exit_code, 0)
+        rendered = stdout.getvalue()
+        self.assertIn("# 🧪 Desired-State Validation", rendered)
+        self.assertIn("**Result:** ✅ VALID", rendered)
+        self.assertIn("| Document |", rendered)
+        self.assertIn("| Error count | 0 |", rendered)
+        self.assertIn("| Warning count | 0 |", rendered)
+        self.assertEqual(stderr.getvalue(), "")
+
+    def test_cli_writes_markdown_validation_report(self) -> None:
+        document = copy.deepcopy(self.document)
+        document["spec"]["variables"]["fields"]["api_ip"]["value"] = "not-an-ip"
+        document["spec"]["extra"] = {"value": "unexpected"}
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            input_path = Path(temporary_directory) / "infra.yaml"
+            output_path = Path(temporary_directory) / "validation.md"
+            input_path.write_text(yaml.safe_dump(document), encoding="utf-8")
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with (
+                contextlib.redirect_stdout(stdout),
+                contextlib.redirect_stderr(stderr),
+            ):
+                exit_code = cli.main(
+                    [
+                        "validate",
+                        str(input_path),
+                        "--format",
+                        "markdown",
+                        "--output",
+                        str(output_path),
+                    ]
+                )
+            rendered = output_path.read_text(encoding="utf-8")
+
+        self.assertEqual(exit_code, 2)
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertIn(
+            f"wrote markdown validation report to {output_path}",
+            stderr.getvalue(),
+        )
+        self.assertIn("**Result:** ❌ INVALID", rendered)
+        self.assertIn("## Errors", rendered)
+        self.assertIn("invalid IP address", rendered)
+        self.assertIn("## Warnings", rendered)
+        self.assertIn("unknown field", rendered)
+
 
 if __name__ == "__main__":
     unittest.main()
