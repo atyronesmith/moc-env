@@ -101,6 +101,23 @@ confidence for observed values; derived names and paths are marked `inferred`,
 and unsupported or ambiguous values are represented explicitly. It does not
 claim that a cluster is deployed.
 
+Validate a desired-state document:
+
+```sh
+uv run moc-env validate desired-state/infra-clusters/bu-ist-demo-infra.yaml
+```
+
+JSON validation output:
+
+```sh
+uv run moc-env validate desired-state/infra-clusters/bu-ist-demo-infra.yaml \
+  --format json
+```
+
+Validation is local and read-only. Invalid documents return exit code 2.
+Unknown fields produce warnings; duplicate keys, secret-like fields, invalid
+IP/CIDR values, naming mismatches, and unsupported required values are errors.
+
 `make check` runs the unit tests, byte-compilation, Git whitespace check, and
 package build.
 

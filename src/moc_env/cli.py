@@ -27,6 +27,11 @@ from .report import (
     render_markdown,
     render_text,
 )
+from .validate import (
+    load_validation_result,
+    render_validation_json,
+    render_validation_text,
+)
 
 
 def _add_credential_arguments(parser: argparse.ArgumentParser) -> None:
@@ -124,6 +129,21 @@ def build_export_infra_parser() -> argparse.ArgumentParser:
         ),
     )
     _add_credential_arguments(parser)
+    return parser
+
+
+def build_validate_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="moc-env validate",
+        description="Validate a local desired-state YAML document",
+    )
+    parser.add_argument("file", help="Path to a desired-state YAML file")
+    parser.add_argument(
+        "--format",
+        choices=("text", "json"),
+        default="text",
+        help="Output format",
+    )
     return parser
 
 
@@ -240,6 +260,15 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(rendered, end="")
         return 0
+
+    if arguments and arguments[0] == "validate":
+        args = build_validate_parser().parse_args(arguments[1:])
+        result = load_validation_result(Path(args.file))
+        if args.format == "json":
+            print(render_validation_json(result), end="")
+        else:
+            print(render_validation_text(result), end="")
+        return 0 if result.valid else 2
 
     args = build_parser().parse_args(argv)
     issue_number = args.issue
