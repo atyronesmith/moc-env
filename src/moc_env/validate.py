@@ -390,3 +390,72 @@ def render_validation_text(result: ValidationResult) -> str:
 
 def render_validation_json(result: ValidationResult) -> str:
     return json.dumps(result.to_dict(), indent=2, sort_keys=True) + "\n"
+
+
+def _markdown_cell(value: str) -> str:
+    return value.replace("|", "\\|").replace("\n", "<br>")
+
+
+def render_validation_markdown(
+    result: ValidationResult,
+    path: Path | None = None,
+) -> str:
+    """Render a standalone human-readable validation report."""
+
+    status = "✅ VALID" if result.valid else "❌ INVALID"
+    document = str(path) if path is not None else "—"
+    lines = [
+        "# 🧪 Desired-State Validation",
+        "",
+        f"**Result:** {status}",
+        "",
+        "| Field | Value |",
+        "|---|---|",
+        f"| Document | `{_markdown_cell(document)}` |",
+        f"| Error count | {len(result.errors)} |",
+        f"| Warning count | {len(result.warnings)} |",
+    ]
+
+    if result.errors:
+        lines.extend(
+            [
+                "",
+                "## Errors",
+                "",
+                "| # | Issue |",
+                "|---:|---|",
+            ]
+        )
+        lines.extend(
+            f"| {number} | {_markdown_cell(error)} |"
+            for number, error in enumerate(result.errors, start=1)
+        )
+
+    if result.warnings:
+        lines.extend(
+            [
+                "",
+                "## Warnings",
+                "",
+                "| # | Issue |",
+                "|---:|---|",
+            ]
+        )
+        lines.extend(
+            f"| {number} | {_markdown_cell(warning)} |"
+            for number, warning in enumerate(result.warnings, start=1)
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Interpretation",
+            "",
+            "- **VALID** means the document satisfies the current desired-state schema and validation rules.",
+            "- **INVALID** means at least one error must be corrected before the document is reviewed as desired state.",
+            "- Warnings identify unknown fields or unusual content; they do not fail validation.",
+            "- This report validates repository-derived desired state only. It does not prove live cluster health or synchronization.",
+            "",
+        ]
+    )
+    return "\n".join(lines).rstrip() + "\n"

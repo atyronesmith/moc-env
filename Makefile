@@ -8,6 +8,7 @@ FORMAT ?= text
 ARGS ?=
 OUTPUT ?= reports/$(ENV).md
 FILE ?= desired-state/infra-clusters/$(ENV)-infra.yaml
+VALIDATION_OUTPUT ?= reports/$(ENV)-validation.md
 
 # Set NO_PRS=1 to avoid pull-request API calls.
 ifeq ($(NO_PRS),1)
@@ -18,8 +19,8 @@ endif
 
 RUN_ARGS := $(ENV) --format $(FORMAT) $(PRS_FLAG) $(ARGS)
 
-.PHONY: help setup sync test list export-infra export-infra-file validate run \
-        run-text run-json run-markdown run-no-prs report-markdown \
+.PHONY: help setup sync test list export-infra export-infra-file validate \
+        validate-markdown run run-text run-json run-markdown run-no-prs report-markdown \
         report-gist-secret report-gist-public build compile \
         diff-check pii-check check lock \
         clean clean-all
@@ -62,6 +63,10 @@ export-infra-file: ## Write a draft InfraCluster YAML snapshot to OUTPUT
 
 validate: ## Validate the desired-state document in FILE
 	$(UV) run --locked moc-env validate $(FILE) $(ARGS)
+
+validate-markdown: ## Write a Markdown validation report to VALIDATION_OUTPUT
+	$(UV) run --locked moc-env validate $(FILE) --format markdown \
+	  --output $(VALIDATION_OUTPUT)
 
 run: run-text ## Run the CLI (default ENV and text format)
 

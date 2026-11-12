@@ -29,6 +29,7 @@ from .report import (
 )
 from .validate import (
     load_validation_result,
+    render_validation_markdown,
     render_validation_json,
     render_validation_text,
 )
@@ -140,9 +141,13 @@ def build_validate_parser() -> argparse.ArgumentParser:
     parser.add_argument("file", help="Path to a desired-state YAML file")
     parser.add_argument(
         "--format",
-        choices=("text", "json"),
+        choices=("text", "json", "markdown"),
         default="text",
         help="Output format",
+    )
+    parser.add_argument(
+        "--output",
+        help="Write the validation report to this file instead of stdout",
     )
     return parser
 
@@ -263,11 +268,32 @@ def main(argv: list[str] | None = None) -> int:
 
     if arguments and arguments[0] == "validate":
         args = build_validate_parser().parse_args(arguments[1:])
-        result = load_validation_result(Path(args.file))
+        input_path = Path(args.file)
+        result = load_validation_result(input_path)
         if args.format == "json":
-            print(render_validation_json(result), end="")
+            rendered = render_validation_json(result)
+        elif args.format == "markdown":
+            rendered = render_validation_markdown(result, input_path)
         else:
-            print(render_validation_text(result), end="")
+            rendered = render_validation_text(result)
+
+        if args.output:
+            output_path = Path(args.output)
+            try:
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_text(rendered, encoding="utf-8")
+            except OSError as exc:
+                print(
+                    f"moc-env: could not write {output_path}: {exc}",
+                    file=sys.stderr,
+                )
+                return 2
+            print(
+                f"moc-env: wrote {args.format} validation report to {output_path}",
+                file=sys.stderr,
+            )
+        else:
+            print(rendered, end="")
         return 0 if result.valid else 2
 
     args = build_parser().parse_args(argv)

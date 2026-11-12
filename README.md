@@ -114,6 +114,20 @@ uv run moc-env validate desired-state/infra-clusters/bu-ist-demo-infra.yaml \
   --format json
 ```
 
+Write a standalone Markdown validation report:
+
+```sh
+uv run moc-env validate desired-state/infra-clusters/bu-ist-demo-infra.yaml \
+  --format markdown \
+  --output reports/bu-ist-demo-validation.md
+```
+
+Or with the Makefile:
+
+```sh
+make validate-markdown ENV=bu-ist-demo
+```
+
 Validation is local and read-only. Invalid documents return exit code 2.
 Unknown fields produce warnings; duplicate keys, secret-like fields, invalid
 IP/CIDR values, naming mismatches, and unsupported required values are errors.
