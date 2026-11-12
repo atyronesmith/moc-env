@@ -77,7 +77,7 @@ report-markdown: ## Write a verbose Markdown report to OUTPUT
 	$(UV) run --locked moc-env $(ENV) --format markdown --output $(OUTPUT)
 
 report-gist-secret: report-markdown ## Create a secret GitHub gist from OUTPUT
-	gh gist create $(OUTPUT) --secret
+	gh gist create $(OUTPUT)
 
 report-gist-public: report-markdown ## Create a public GitHub gist from OUTPUT
 	gh gist create $(OUTPUT) --public
