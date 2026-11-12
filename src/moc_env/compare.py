@@ -7,7 +7,11 @@ import json
 from typing import Any
 
 from .model import Environment
-from .observed import AppsObservation, InfraObservation
+from .observed import (
+    AppsObservation,
+    InfraObservation,
+    IssueObservation,
+)
 
 COMPARISON_STATES = (
     "matches_main",
@@ -170,6 +174,17 @@ def _mapping(document: Any, *path: str) -> Any:
 def desired_environment(document: Any) -> Environment:
     """Derive the Environment represented by a desired-state document."""
 
+    if document.get("kind") == "Environment":
+        environment_name = _desired_source(_mapping(document, "metadata"), "name")
+        issue_url = _desired_source(_mapping(document, "spec"), "issue")
+        issue_number = None
+        if isinstance(issue_url, str) and issue_url.rsplit("/", 1)[-1].isdigit():
+            issue_number = int(issue_url.rsplit("/", 1)[-1])
+        return Environment(
+            name=environment_name if isinstance(environment_name, str) else "",
+            issue_number=issue_number,
+        )
+
     environment_name = _desired_source(_mapping(document, "metadata"), "environment")
     if not isinstance(environment_name, str):
         infra_name = _desired_source(_mapping(document, "metadata"), "name")
@@ -178,6 +193,193 @@ def desired_environment(document: Any) -> Environment:
         else:
             environment_name = ""
     return Environment(name=environment_name)
+
+
+def compare_environment(
+    document: Any,
+    environment: Environment,
+    issue: IssueObservation,
+    infra: InfraObservation,
+    apps: AppsObservation,
+) -> ComparisonReport:
+    """Compare an Environment bundle with current merged main."""
+
+    checks: list[ComparisonCheck] = []
+    metadata = _mapping(document, "metadata")
+    spec = _mapping(document, "spec")
+    network = _mapping(document, "spec", "network")
+
+    _compare(
+        checks,
+        "Metadata",
+        "metadata.name.value",
+        _desired_source(metadata, "name"),
+        environment.name,
+    )
+    _compare(
+        checks,
+        "Bundle",
+        "spec.issue.value",
+        _desired_source(spec, "issue"),
+        issue.url.value,
+    )
+    _compare(
+        checks,
+        "References",
+        "spec.hubCluster.value",
+        _desired_source(spec, "hubCluster"),
+        environment.infra_cluster,
+    )
+    _compare(
+        checks,
+        "References",
+        "spec.hubCluster.inventoryPresent",
+        True,
+        environment.infra_cluster in infra.clusters,
+    )
+    _compare(
+        checks,
+        "Network and domain",
+        "spec.network.machineNetwork.value",
+        _desired_source(network, "machineNetwork"),
+        infra.hub_variables.values.value.get("machine_network")
+        if isinstance(infra.hub_variables.values.value, dict)
+        else _MISSING,
+    )
+
+    values = infra.hub_variables.values.value
+    current_domain = (
+        f"{values['cluster_domain_name']}.{values['base_domain']}"
+        if isinstance(values, dict)
+        and isinstance(values.get("cluster_domain_name"), str)
+        and isinstance(values.get("base_domain"), str)
+        else _MISSING
+    )
+    _compare(
+        checks,
+        "Network and domain",
+        "spec.domain.value",
+        _desired_source(spec, "domain"),
+        current_domain,
+    )
+
+    workloads = spec.get("workloadClusters")
+    workloads = workloads if isinstance(workloads, list) else []
+    paths = set(apps.paths.value)
+    for index, workload in enumerate(workloads):
+        if not isinstance(workload, dict):
+            continue
+        workload_name = _desired_source(workload, "name")
+        parent_hub = _desired_source(workload, "parentHubCluster")
+        _compare(
+            checks,
+            "References",
+            f"spec.workloadClusters[{index}].name.value",
+            workload_name,
+            environment.workload_cluster,
+        )
+        _compare(
+            checks,
+            "References",
+            f"spec.workloadClusters[{index}].parentHubCluster.value",
+            parent_hub,
+            environment.infra_cluster,
+        )
+        _compare(
+            checks,
+            "References",
+            f"spec.workloadClusters[{index}].inventoryPresent",
+            True,
+            workload_name in infra.clusters,
+        )
+
+        hosted_path = (
+            f"hosted-clusters/{environment.infra_cluster}/{workload_name}/values.yaml"
+            if isinstance(workload_name, str)
+            else None
+        )
+        component_prefix = (
+            f"values/{environment.infra_cluster}/{workload_name}/"
+            if isinstance(workload_name, str)
+            else None
+        )
+        application_prefix = (
+            f"apps/{environment.infra_cluster}/{workload_name}/"
+            if isinstance(workload_name, str)
+            else None
+        )
+        for field_name, expected, current in (
+            (
+                f"spec.workloadClusters[{index}].gitOps.hostedClusterValues",
+                hosted_path,
+                hosted_path in paths if hosted_path is not None else _MISSING,
+            ),
+            (
+                f"spec.workloadClusters[{index}].gitOps.componentValues",
+                component_prefix,
+                bool(
+                    component_prefix
+                    and any(path.startswith(component_prefix) for path in paths)
+                ),
+            ),
+            (
+                f"spec.workloadClusters[{index}].gitOps.applications",
+                application_prefix,
+                bool(
+                    application_prefix
+                    and any(path.startswith(application_prefix) for path in paths)
+                ),
+            ),
+        ):
+            if current is True:
+                state = "matches_main"
+                reason = "The expected GitOps path is present in merged main."
+            else:
+                state = "missing_from_main"
+                reason = "The expected GitOps path is absent from merged main."
+            checks.append(
+                ComparisonCheck(
+                    category="GitOps",
+                    field=field_name,
+                    desired=expected,
+                    current=current,
+                    state=state,
+                    reason=reason,
+                )
+            )
+
+    _compare(
+        checks,
+        "GitOps",
+        "spec.gitOps.sourceRepository.value",
+        _desired_source(_mapping(document, "spec", "gitOps"), "sourceRepository"),
+        apps.source_repository,
+    )
+
+    open_prs = [pull for pull in apps.pull_requests if pull.state.value == "open"]
+    checks.append(
+        ComparisonCheck(
+            category="Pull requests",
+            field="relevant_pull_requests",
+            desired="No relevant open pull requests",
+            current={
+                "matching_pr_count": len(apps.pull_requests),
+                "open_pr_count": len(open_prs),
+            },
+            state="pr_open" if open_prs else "matches_main",
+            reason=(
+                f"{len(open_prs)} relevant pull request(s) are open."
+                if open_prs
+                else "No relevant pull requests are open."
+            ),
+        )
+    )
+
+    return ComparisonReport(
+        environment=environment,
+        kind="Environment",
+        checks=checks,
+    )
 
 
 def compare_infra(

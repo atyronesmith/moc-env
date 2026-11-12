@@ -7,13 +7,20 @@ from typing import Any
 import yaml
 
 from .model import Environment
-from .observed import AppsObservation, InfraObservation, SourceValue
+from .observed import (
+    AppsObservation,
+    InfraObservation,
+    IssueObservation,
+    SourceValue,
+)
 
 EXPORT_API_VERSION = "moc-env/v1alpha1"
 INFRA_EXPORT_KIND = "InfraCluster"
 INFRA_EXPORT_SCHEMA_VERSION = "1"
 WORKLOAD_EXPORT_KIND = "WorkloadCluster"
 WORKLOAD_EXPORT_SCHEMA_VERSION = "1"
+ENVIRONMENT_EXPORT_KIND = "Environment"
+ENVIRONMENT_EXPORT_SCHEMA_VERSION = "1"
 
 
 def _source(source_value: SourceValue) -> dict[str, Any]:
@@ -311,6 +318,107 @@ def build_workload_export(
             },
         },
     }
+
+
+def _observed_domain(infra_observation: InfraObservation) -> tuple[str | None, str]:
+    values = infra_observation.hub_variables.values.value
+    if not isinstance(values, dict):
+        return None, "unsupported"
+    cluster_domain = values.get("cluster_domain_name")
+    base_domain = values.get("base_domain")
+    if isinstance(cluster_domain, str) and isinstance(base_domain, str):
+        return f"{cluster_domain}.{base_domain}", "inferred"
+    return None, "unsupported"
+
+
+def build_environment_export(
+    environment: Environment,
+    issue: IssueObservation,
+    infra_observation: InfraObservation,
+    apps_observation: AppsObservation,
+) -> dict[str, Any]:
+    """Build a deterministic draft Environment bundle snapshot."""
+
+    domain, domain_confidence = _observed_domain(infra_observation)
+    return {
+        "apiVersion": EXPORT_API_VERSION,
+        "kind": ENVIRONMENT_EXPORT_KIND,
+        "schemaVersion": ENVIRONMENT_EXPORT_SCHEMA_VERSION,
+        "metadata": {
+            "name": SourceValue(
+                environment.name,
+                infra_observation.repository,
+                infra_observation.inventory_path,
+                confidence="inferred",
+            ).to_dict(),
+        },
+        "spec": {
+            "issue": issue.url.to_dict(),
+            "hubCluster": SourceValue(
+                environment.infra_cluster,
+                infra_observation.repository,
+                infra_observation.inventory_path,
+                confidence="inferred",
+            ).to_dict(),
+            "workloadClusters": [
+                {
+                    "name": SourceValue(
+                        environment.workload_cluster,
+                        infra_observation.repository,
+                        infra_observation.inventory_path,
+                        confidence="inferred",
+                    ).to_dict(),
+                    "parentHubCluster": SourceValue(
+                        environment.infra_cluster,
+                        infra_observation.repository,
+                        infra_observation.inventory_path,
+                        confidence="inferred",
+                    ).to_dict(),
+                }
+            ],
+            "domain": SourceValue(
+                domain,
+                infra_observation.repository,
+                infra_observation.variables_path,
+                confidence=domain_confidence,
+            ).to_dict(),
+            "network": {
+                "machineNetwork": _hub_variable_field(
+                    infra_observation,
+                    "machine_network",
+                ),
+            },
+            "gitOps": {
+                "sourceRepository": _apps_source(
+                    apps_observation,
+                    apps_observation.source_repository,
+                    confidence="inferred",
+                ),
+            },
+        },
+    }
+
+
+def render_environment_export(
+    environment: Environment,
+    issue: IssueObservation,
+    infra_observation: InfraObservation,
+    apps_observation: AppsObservation,
+) -> str:
+    """Render a deterministic Environment bundle YAML document."""
+
+    document = build_environment_export(
+        environment,
+        issue,
+        infra_observation,
+        apps_observation,
+    )
+    return yaml.safe_dump(
+        document,
+        sort_keys=True,
+        default_flow_style=False,
+        allow_unicode=True,
+    )
 
 
 def build_infra_export(

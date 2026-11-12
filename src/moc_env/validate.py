@@ -12,6 +12,8 @@ from typing import Any
 import yaml
 
 from .export import (
+    ENVIRONMENT_EXPORT_KIND,
+    ENVIRONMENT_EXPORT_SCHEMA_VERSION,
     EXPORT_API_VERSION,
     INFRA_EXPORT_KIND,
     INFRA_EXPORT_SCHEMA_VERSION,
@@ -872,10 +874,414 @@ def validate_workload_cluster(document: Any) -> ValidationResult:
     return ValidationResult(errors=errors, warnings=warnings)
 
 
-def load_validation_result(path: Path) -> ValidationResult:
-    """Load and validate a desired-state YAML file."""
+def validate_environment(document: Any) -> ValidationResult:
+    """Validate the structural requirements of an Environment bundle."""
 
-    return load_infra_cluster_document(path)[1]
+    errors: list[str] = []
+    warnings: list[str] = []
+    checks: list[ValidationCheck] = []
+
+    def record(
+        category: str,
+        name: str,
+        path: str,
+        expected: str,
+        actual: str,
+        passed: bool,
+        detail: str = "",
+        warning: bool = False,
+    ) -> None:
+        checks.append(
+            ValidationCheck(
+                category=category,
+                name=name,
+                path=path,
+                expected=expected,
+                actual=actual,
+                status="warning" if warning else ("pass" if passed else "fail"),
+                detail=detail,
+            )
+        )
+
+    if not isinstance(document, dict):
+        return ValidationResult(
+            errors=["document: expected a YAML mapping"],
+            checks=[
+                ValidationCheck(
+                    category="Document",
+                    name="YAML document shape",
+                    path="document",
+                    expected="Mapping",
+                    actual=type(document).__name__,
+                    status="fail",
+                    detail="The document must be a YAML mapping.",
+                )
+            ],
+        )
+
+    record("Document", "YAML document shape", "document", "Mapping", "Mapping", True)
+    record(
+        "Document",
+        "API version",
+        "apiVersion",
+        EXPORT_API_VERSION,
+        repr(document.get("apiVersion")),
+        document.get("apiVersion") == EXPORT_API_VERSION,
+    )
+    record(
+        "Document",
+        "Resource kind",
+        "kind",
+        ENVIRONMENT_EXPORT_KIND,
+        repr(document.get("kind")),
+        document.get("kind") == ENVIRONMENT_EXPORT_KIND,
+    )
+    record(
+        "Document",
+        "Schema version",
+        "schemaVersion",
+        ENVIRONMENT_EXPORT_SCHEMA_VERSION,
+        repr(document.get("schemaVersion")),
+        str(document.get("schemaVersion")) == ENVIRONMENT_EXPORT_SCHEMA_VERSION,
+    )
+    if document.get("apiVersion") != EXPORT_API_VERSION:
+        errors.append(f"apiVersion: expected {EXPORT_API_VERSION}")
+    if document.get("kind") != ENVIRONMENT_EXPORT_KIND:
+        errors.append(f"kind: expected {ENVIRONMENT_EXPORT_KIND}")
+    if str(document.get("schemaVersion")) != ENVIRONMENT_EXPORT_SCHEMA_VERSION:
+        errors.append(
+            f"schemaVersion: expected {ENVIRONMENT_EXPORT_SCHEMA_VERSION}"
+        )
+
+    metadata = document.get("metadata")
+    metadata_mapping = isinstance(metadata, dict)
+    record(
+        "Metadata",
+        "Metadata mapping",
+        "metadata",
+        "Mapping",
+        "Mapping" if metadata_mapping else type(metadata).__name__,
+        metadata_mapping,
+    )
+    metadata = metadata if metadata_mapping else {}
+    environment_name = _required_source(metadata, "name", "metadata.name", errors)
+    record(
+        "Metadata",
+        "Environment name",
+        "metadata.name",
+        "Source object with a valid environment name",
+        _source_actual(metadata, "name"),
+        not _has_error(errors, "metadata.name"),
+    )
+    if not isinstance(environment_name, str) or not _is_domain(environment_name):
+        errors.append("metadata.name.value: expected a valid environment name")
+
+    spec = document.get("spec")
+    spec_mapping = isinstance(spec, dict)
+    record(
+        "Bundle",
+        "Spec mapping",
+        "spec",
+        "Mapping",
+        "Mapping" if spec_mapping else type(spec).__name__,
+        spec_mapping,
+    )
+    spec = spec if spec_mapping else {}
+
+    issue = _required_source(spec, "issue", "spec.issue", errors)
+    issue_valid = (
+        isinstance(issue, str)
+        and issue.startswith("https://github.com/CCI-MOC/MOC-issues/issues/")
+        and issue.rsplit("/", 1)[-1].isdigit()
+    )
+    record(
+        "Bundle",
+        "MOC issue reference",
+        "spec.issue",
+        "CCI-MOC/MOC-issues issue URL",
+        repr(issue),
+        issue_valid,
+    )
+    if not issue_valid:
+        errors.append(
+            "spec.issue.value: expected a CCI-MOC/MOC-issues issue URL"
+        )
+
+    hub_cluster = _required_source(spec, "hubCluster", "spec.hubCluster", errors)
+    expected_hub = (
+        f"{environment_name}-infra"
+        if isinstance(environment_name, str)
+        else None
+    )
+    hub_valid = hub_cluster == expected_hub and isinstance(hub_cluster, str)
+    record(
+        "References",
+        "Hub-cluster name",
+        "spec.hubCluster",
+        repr(expected_hub),
+        repr(hub_cluster),
+        hub_valid,
+    )
+    if not hub_valid:
+        errors.append(
+            "spec.hubCluster.value: expected "
+            f"{expected_hub!r}, got {hub_cluster!r}"
+        )
+
+    workloads = spec.get("workloadClusters")
+    workloads_list = isinstance(workloads, list)
+    record(
+        "References",
+        "Workload-cluster list",
+        "spec.workloadClusters",
+        "Non-empty list of workload mappings",
+        "List" if workloads_list else type(workloads).__name__,
+        workloads_list and bool(workloads),
+    )
+    if not workloads_list or not workloads:
+        errors.append("spec.workloadClusters: expected a non-empty list")
+        workloads = []
+
+    workload_names: list[str] = []
+    for index, workload in enumerate(workloads):
+        path = f"spec.workloadClusters[{index}]"
+        workload_mapping = isinstance(workload, dict)
+        record(
+            "References",
+            f"Workload {index} mapping",
+            path,
+            "Mapping with name and parentHubCluster",
+            "Mapping" if workload_mapping else type(workload).__name__,
+            workload_mapping,
+        )
+        workload = workload if workload_mapping else {}
+        workload_name = _required_source(
+            workload,
+            "name",
+            f"{path}.name",
+            errors,
+        )
+        parent_hub = _required_source(
+            workload,
+            "parentHubCluster",
+            f"{path}.parentHubCluster",
+            errors,
+        )
+        record(
+            "References",
+            f"Workload {index} name",
+            f"{path}.name",
+            f"Name beginning with {environment_name}-workload"
+            if isinstance(environment_name, str)
+            else "Environment-prefixed workload name",
+            repr(workload_name),
+            isinstance(workload_name, str)
+            and isinstance(environment_name, str)
+            and workload_name.startswith(f"{environment_name}-workload"),
+        )
+        record(
+            "References",
+            f"Workload {index} parent",
+            f"{path}.parentHubCluster",
+            repr(hub_cluster),
+            repr(parent_hub),
+            parent_hub == hub_cluster and isinstance(parent_hub, str),
+        )
+        if not (
+            isinstance(workload_name, str)
+            and isinstance(environment_name, str)
+            and workload_name.startswith(f"{environment_name}-workload")
+        ):
+            errors.append(
+                f"{path}.name.value: workload name must begin with "
+                f"{environment_name}-workload"
+            )
+        if parent_hub != hub_cluster:
+            errors.append(
+                f"{path}.parentHubCluster.value: expected "
+                f"{hub_cluster!r}, got {parent_hub!r}"
+            )
+        if isinstance(workload_name, str):
+            workload_names.append(workload_name)
+
+    duplicate_workloads = sorted(
+        {name for name in workload_names if workload_names.count(name) > 1}
+    )
+    record(
+        "References",
+        "Duplicate workload names",
+        "spec.workloadClusters",
+        "No duplicate workload names",
+        ", ".join(duplicate_workloads) if duplicate_workloads else "None",
+        not duplicate_workloads,
+    )
+    if duplicate_workloads:
+        errors.append(
+            "spec.workloadClusters: duplicate workload names: "
+            + ", ".join(duplicate_workloads)
+        )
+
+    network = spec.get("network")
+    network_mapping = isinstance(network, dict)
+    record(
+        "Network and domain",
+        "Network mapping",
+        "spec.network",
+        "Mapping",
+        "Mapping" if network_mapping else type(network).__name__,
+        network_mapping,
+    )
+    network = network if network_mapping else {}
+    machine_network = _required_source(
+        network,
+        "machineNetwork",
+        "spec.network.machineNetwork",
+        errors,
+    )
+    try:
+        ipaddress.ip_network(machine_network, strict=False)
+        machine_network_valid = True
+    except (TypeError, ValueError):
+        machine_network_valid = False
+        errors.append("spec.network.machineNetwork.value: invalid CIDR")
+    record(
+        "Network and domain",
+        "Machine-network CIDR",
+        "spec.network.machineNetwork.value",
+        "Valid IPv4 or IPv6 CIDR",
+        repr(machine_network),
+        machine_network_valid,
+    )
+
+    domain = _required_source(spec, "domain", "spec.domain", errors)
+    domain_valid = _is_domain(domain)
+    record(
+        "Network and domain",
+        "Domain syntax",
+        "spec.domain.value",
+        "Valid DNS name",
+        repr(domain),
+        domain_valid,
+    )
+    if not domain_valid:
+        errors.append("spec.domain.value: invalid domain")
+
+    _find_secret_fields(document, (), errors)
+    secret_errors = [
+        error for error in errors if "secret-like fields are not allowed" in error
+    ]
+    record(
+        "Security",
+        "Secret-like field names",
+        "document",
+        "No fields named secret, token, password, or credential",
+        f"{len(secret_errors)} prohibited field(s)",
+        not secret_errors,
+        "; ".join(secret_errors),
+    )
+
+    allowed_top = {
+        "apiVersion",
+        "kind",
+        "schemaVersion",
+        "metadata",
+        "spec",
+    }
+    allowed_spec = {
+        "issue",
+        "hubCluster",
+        "workloadClusters",
+        "domain",
+        "network",
+        "gitOps",
+    }
+    allowed_workload = {"name", "parentHubCluster"}
+    unknown: list[str] = []
+    unknown.extend(
+        f"{key}: unknown field (warning)"
+        for key in document
+        if key not in allowed_top
+    )
+    if isinstance(spec, dict):
+        unknown.extend(
+            f"spec.{key}: unknown field (warning)"
+            for key in spec
+            if key not in allowed_spec
+        )
+        for index, workload in enumerate(workloads):
+            if isinstance(workload, dict):
+                unknown.extend(
+                    f"spec.workloadClusters[{index}].{key}: unknown field (warning)"
+                    for key in workload
+                    if key not in allowed_workload
+                )
+    warnings.extend(unknown)
+    record(
+        "Schema compatibility",
+        "Unknown fields",
+        "document",
+        "Only fields defined by the Environment bundle schema",
+        f"{len(unknown)} unknown field(s)",
+        not unknown,
+        "; ".join(unknown),
+        warning=bool(unknown),
+    )
+
+    return ValidationResult(errors=errors, warnings=warnings, checks=checks)
+
+
+def load_environment_document(path: Path) -> tuple[Any, ValidationResult]:
+    """Load and validate an Environment bundle document."""
+
+    document, load_result = load_yaml_document(path)
+    if not load_result.valid:
+        return document, load_result
+    result = validate_environment(document)
+    checked_result = ValidationResult(
+        errors=result.errors,
+        warnings=result.warnings,
+        checks=[
+            ValidationCheck(
+                category="Document",
+                name="YAML parsing and duplicate keys",
+                path="document",
+                expected="Parseable YAML without duplicate mapping keys",
+                actual="Valid",
+                status="pass",
+            ),
+            *result.checks,
+        ],
+    )
+    return document, checked_result
+
+
+def load_validation_result(path: Path) -> ValidationResult:
+    """Load and validate any supported desired-state YAML file."""
+
+    document, load_result = load_yaml_document(path)
+    if not load_result.valid:
+        return load_result
+    if document.get("kind") == ENVIRONMENT_EXPORT_KIND:
+        result = validate_environment(document)
+    elif document.get("kind") == WORKLOAD_EXPORT_KIND:
+        result = validate_workload_cluster(document)
+    else:
+        result = validate_infra_cluster(document)
+    return ValidationResult(
+        errors=result.errors,
+        warnings=result.warnings,
+        checks=[
+            ValidationCheck(
+                category="Document",
+                name="YAML parsing and duplicate keys",
+                path="document",
+                expected="Parseable YAML without duplicate mapping keys",
+                actual="Valid",
+                status="pass",
+            ),
+            *result.checks,
+        ],
+    )
 
 
 def render_validation_text(result: ValidationResult) -> str:

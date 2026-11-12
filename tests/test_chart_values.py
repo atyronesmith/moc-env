@@ -9,27 +9,29 @@ from unittest.mock import patch
 
 from moc_env import cli
 from moc_env.chart_values import render_chart_values_markdown
-from moc_env.model import Environment
-from moc_env.observed import read_chart_values_observation
+from moc_env.observed import read_chart_values_reference_observation
 
 from fakes import FakeGitHubClient
 
 
 class ValuesClient(FakeGitHubClient):
-    def get_tree(self, repository, ref="main"):
+    def get_tree(self, repository: str, ref: str = "main"):
         if repository == "CCI-MOC/oac-apps":
             paths = {
                 "values/bu-ist-demo-infra/hcp-config.yaml",
                 "values/bu-ist-demo-infra/local-cluster/acm.yaml",
+                "hosted-clusters/bu-ist-demo-infra/compliance.yaml",
                 "hosted-clusters/bu-ist-demo-infra/"
                 "bu-ist-demo-workload0/values.yaml",
                 "values/bu-ist-demo-infra/"
                 "bu-ist-demo-workload0/cert-manager.yaml",
+                "hosted-clusters/oac-prod-infra/"
+                "oac-prod-workload0/values.yaml",
             }
             return {path: {"path": path} for path in paths}
         return super().get_tree(repository, ref)
 
-    def get_file(self, repository, path, ref="main"):
+    def get_file(self, repository: str, path: str, ref: str = "main") -> str:
         if repository == "CCI-MOC/oac-apps":
             files = {
                 "values/bu-ist-demo-infra/hcp-config.yaml": """
@@ -39,6 +41,9 @@ sshKey:
                 "values/bu-ist-demo-infra/local-cluster/acm.yaml": """
 multiClusterHub:
   availabilityConfig: High
+""",
+                "hosted-clusters/bu-ist-demo-infra/compliance.yaml": """
+fips: true
 """,
                 "hosted-clusters/bu-ist-demo-infra/"
                 "bu-ist-demo-workload0/values.yaml": """
@@ -54,6 +59,12 @@ nodePools:
 aws:
   region: us-east-1
 """,
+                "hosted-clusters/oac-prod-infra/"
+                "oac-prod-workload0/values.yaml": """
+clusterName: oac-prod-workload0
+release:
+  channel: stable-4.19
+""",
             }
             if path in files:
                 return files[path]
@@ -62,91 +73,56 @@ aws:
 
 class ChartValuesTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.environment = Environment(name="bu-ist-demo", issue_number=666)
         self.client = ValuesClient()
-        self.observation = read_chart_values_observation(
-            self.client,
-            self.environment,
-            "bu-ist-demo-workload0",
-        )
+        self.observation = read_chart_values_reference_observation(self.client)
 
-    def test_read_chart_values_observation_classifies_scopes(self) -> None:
-        scopes = {scope.scope.value: scope for scope in self.observation.scopes}
+    def test_reference_classifies_all_deployment_scopes(self) -> None:
+        scopes = {
+            file_observation.scope.value
+            for file_observation in self.observation.files
+        }
 
         self.assertEqual(
-            set(scopes),
+            scopes,
             {
                 "hub-wide",
                 "hub-local-cluster",
+                "hosted-cluster-defaults",
                 "hosted-cluster",
                 "workload-components",
             },
         )
-        self.assertTrue(scopes["hub-wide"].present.value)
-        self.assertEqual(
-            scopes["hub-wide"].files[0].path.value,
-            "values/bu-ist-demo-infra/hcp-config.yaml",
-        )
-        self.assertEqual(
-            scopes["hub-local-cluster"].files[0].chart.value,
-            "acm",
-        )
-        self.assertEqual(
-            scopes["hosted-cluster"].files[0].chart.value,
-            "hosted-cluster",
-        )
-        self.assertEqual(
-            scopes["workload-components"].files[0].chart.value,
-            "cert-manager",
+
+    def test_reference_aggregates_keys_across_environments(self) -> None:
+        key = next(
+            key_observation
+            for key_observation in self.observation.keys
+            if key_observation.key.value == "release.channel"
         )
 
-    def test_chart_values_entries_preserve_provenance(self) -> None:
-        hosted = next(
-            scope
-            for scope in self.observation.scopes
-            if scope.scope.value == "hosted-cluster"
-        )
-        entry = next(
-            entry
-            for entry in hosted.files[0].entries
-            if entry.key.value == "release.channel"
-        )
-
-        self.assertEqual(entry.value.value, "stable-4.22")
-        self.assertEqual(entry.key.repository, "CCI-MOC/oac-apps")
+        self.assertEqual(key.file_count.value, 2)
+        self.assertEqual(key.scopes.value, ("hosted-cluster",))
+        self.assertEqual(key.charts.value, ("hosted-cluster",))
+        self.assertEqual(key.types.value, ("str",))
         self.assertEqual(
-            entry.key.path,
-            "hosted-clusters/bu-ist-demo-infra/"
-            "bu-ist-demo-workload0/values.yaml",
-        )
-        self.assertEqual(entry.key.confidence, "exact")
-
-    def test_missing_hosted_values_file_is_explicit(self) -> None:
-        class EmptyAppsClient(FakeGitHubClient):
-            def get_tree(self, repository, ref="main"):
-                if repository == "CCI-MOC/oac-apps":
-                    return {}
-                return super().get_tree(repository, ref)
-
-        observation = read_chart_values_observation(
-            EmptyAppsClient(),
-            self.environment,
-            "bu-ist-demo-workload0",
-        )
-        hosted = next(
-            scope
-            for scope in observation.scopes
-            if scope.scope.value == "hosted-cluster"
+            key.key.repository,
+            "CCI-MOC/oac-apps",
         )
 
-        self.assertFalse(hosted.present.value)
-        self.assertEqual(len(hosted.files), 1)
-        self.assertFalse(hosted.files[0].present.value)
-        self.assertIsNone(hosted.files[0].values.value)
+    def test_reference_documents_list_item_keys(self) -> None:
+        key = next(
+            key_observation
+            for key_observation in self.observation.keys
+            if key_observation.key.value == "nodePools[].replicas"
+        )
+
+        self.assertEqual(key.file_count.value, 1)
+        self.assertEqual(key.types.value, ("int",))
+        self.assertEqual(key.charts.value, ("hosted-cluster",))
 
     def test_unsupported_values_yaml_is_explicit(self) -> None:
         class UnsupportedValuesClient(ValuesClient):
-            def get_file(self, repository, path, ref="main"):
+            def get_file(self, repository: str, path: str, ref: str = "main") -> str:
                 if (
                     repository == "CCI-MOC/oac-apps"
                     and path == "values/bu-ist-demo-infra/hcp-config.yaml"
@@ -154,38 +130,38 @@ class ChartValuesTest(unittest.TestCase):
                     return "- unsupported\n"
                 return super().get_file(repository, path, ref)
 
-        observation = read_chart_values_observation(
-            UnsupportedValuesClient(),
-            self.environment,
-            "bu-ist-demo-workload0",
+        observation = read_chart_values_reference_observation(
+            UnsupportedValuesClient()
         )
-        hub = next(
-            scope
-            for scope in observation.scopes
-            if scope.scope.value == "hub-wide"
-        )
-
-        self.assertTrue(hub.files[0].present.value)
-        self.assertEqual(hub.files[0].values.confidence, "unsupported")
-        self.assertEqual(hub.files[0].entries, ())
-
-    def test_render_chart_values_markdown_is_human_readable(self) -> None:
-        rendered = render_chart_values_markdown(
-            self.environment,
-            self.observation,
+        file_observation = next(
+            file_observation
+            for file_observation in observation.files
+            if file_observation.path.value
+            == "values/bu-ist-demo-infra/hcp-config.yaml"
         )
 
-        self.assertIn("# 📘 Hub and Hosted Cluster Chart Values", rendered)
+        self.assertTrue(file_observation.present.value)
+        self.assertEqual(file_observation.values.confidence, "unsupported")
+        self.assertEqual(file_observation.entries, ())
+
+    def test_render_chart_values_markdown_is_general_and_human_readable(self) -> None:
+        rendered = render_chart_values_markdown(self.observation)
+
+        self.assertIn("# 📘 Chart Configuration Reference", rendered)
+        self.assertIn("## Deployment model", rendered)
         self.assertIn("## Scope summary", rendered)
-        self.assertIn("## How the scopes relate", rendered)
-        self.assertIn("## hub-local-cluster", rendered)
-        self.assertIn("### `acm`", rendered)
-        self.assertIn("| Key | Current value | Type | Notes |", rendered)
-        self.assertIn("`multiClusterHub.availabilityConfig`", rendered)
+        self.assertIn("## hosted-cluster", rendered)
+        self.assertIn("## workload-components", rendered)
+        self.assertIn("| Key | Charts | Type | Files | What it controls | Source |", rendered)
+        self.assertIn("`release.channel`", rendered)
+        self.assertIn("`nodePools[].replicas`", rendered)
+        self.assertIn("OpenShift release channel used to select cluster updates", rendered)
         self.assertIn("⚠️ Secret-like name", rendered)
-        self.assertIn("[Open values file](", rendered)
+        self.assertIn("[Example](", rendered)
+        self.assertNotIn("bu-ist-demo-workload0`\n", rendered)
+        self.assertNotIn("stable-4.22", rendered)
 
-    def test_cli_document_values_dispatch(self) -> None:
+    def test_cli_document_values_has_no_environment_argument(self) -> None:
         stdout = io.StringIO()
         stderr = io.StringIO()
         with (
@@ -194,12 +170,12 @@ class ChartValuesTest(unittest.TestCase):
             contextlib.redirect_stdout(stdout),
             contextlib.redirect_stderr(stderr),
         ):
-            exit_code = cli.main(["document-values", "bu-ist-demo"])
+            exit_code = cli.main(["document-values"])
 
         self.assertEqual(exit_code, 0)
-        self.assertIn("# 📘 Hub and Hosted Cluster Chart Values", stdout.getvalue())
-        self.assertIn("Step 4: Chart values", stderr.getvalue())
-        self.assertNotIn("Step 5:", stderr.getvalue())
+        self.assertIn("# 📘 Chart Configuration Reference", stdout.getvalue())
+        self.assertIn("Step 1: Chart values", stderr.getvalue())
+        self.assertNotIn("Step 2:", stderr.getvalue())
 
     def test_cli_document_values_output_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -212,23 +188,12 @@ class ChartValuesTest(unittest.TestCase):
                 contextlib.redirect_stdout(stdout),
                 contextlib.redirect_stderr(stderr),
             ):
-                exit_code = cli.main(
-                    [
-                        "document-values",
-                        "bu-ist-demo",
-                        "--workload",
-                        "workload0",
-                        "--output",
-                        str(output),
-                    ]
-                )
+                exit_code = cli.main(["document-values", "--output", str(output)])
 
-            rendered = output.read_text(encoding="utf-8")
-
-        self.assertEqual(exit_code, 0)
-        self.assertEqual(stdout.getvalue(), "")
-        self.assertIn(f"wrote chart-values guide to {output}", stderr.getvalue())
-        self.assertIn("## hosted-cluster", rendered)
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(stdout.getvalue(), "")
+            self.assertIn("wrote chart-values reference to", stderr.getvalue())
+            self.assertIn("# 📘 Chart Configuration Reference", output.read_text())
 
 
 if __name__ == "__main__":
