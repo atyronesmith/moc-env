@@ -17,9 +17,16 @@ from .credentials import (
     load_credential_environment_file,
 )
 from .github import GitHubClient, GitHubError, RateLimitError
+from .compare import (
+    compare_infra,
+    desired_environment,
+    render_comparison_json,
+    render_comparison_markdown,
+    render_comparison_text,
+)
 from .export import render_infra_export
 from .model import Environment
-from .observed import read_infra_observation
+from .observed import read_apps_observation, read_infra_observation
 from .report import (
     render_environment_list_json,
     render_environment_list_text,
@@ -28,6 +35,7 @@ from .report import (
     render_text,
 )
 from .validate import (
+    load_infra_cluster_document,
     load_validation_result,
     render_validation_markdown,
     render_validation_json,
@@ -149,6 +157,31 @@ def build_validate_parser() -> argparse.ArgumentParser:
         "--output",
         help="Write the validation report to this file instead of stdout",
     )
+    return parser
+
+
+def build_check_infra_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="moc-env check-infra",
+        description="Compare a desired-state InfraCluster document with merged main",
+    )
+    parser.add_argument("file", help="Path to a desired-state YAML file")
+    parser.add_argument(
+        "--format",
+        choices=("text", "json", "markdown"),
+        default="text",
+        help="Output format",
+    )
+    parser.add_argument(
+        "--output",
+        help="Write the comparison report to this file instead of stdout",
+    )
+    parser.add_argument(
+        "--no-prs",
+        action="store_true",
+        help="Do not inspect pull requests",
+    )
+    _add_credential_arguments(parser)
     return parser
 
 
@@ -295,6 +328,94 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(rendered, end="")
         return 0 if result.valid else 2
+
+    if arguments and arguments[0] == "check-infra":
+        args = build_check_infra_parser().parse_args(arguments[1:])
+        input_path = Path(args.file)
+        document, validation = load_infra_cluster_document(input_path)
+        if not validation.valid:
+            print(
+                f"moc-env: desired-state document is invalid: {input_path}",
+                file=sys.stderr,
+            )
+            for error in validation.errors:
+                print(f"  - {error}", file=sys.stderr)
+            return 2
+
+        environment = desired_environment(document)
+        github_token = _resolve_github_token(args)
+        client = GitHubClient(token=github_token, timeout=args.timeout)
+        stage_step = 0
+
+        def print_comparison_progress(
+            stage: str, action: str, repository: str, path: str
+        ) -> None:
+            nonlocal stage_step
+            stage_step += 1
+            print(
+                f"▶ Step {stage_step}: {stage}\n"
+                f"    Action:     {action}\n"
+                f"    Repository: {repository}\n"
+                f"    Source:     {path}",
+                file=sys.stderr,
+            )
+
+        try:
+            infra_observation = read_infra_observation(
+                client,
+                environment,
+                progress=print_comparison_progress,
+            )
+            apps_observation = None
+            if not args.no_prs:
+                apps_observation = read_apps_observation(
+                    client,
+                    environment,
+                    progress=print_comparison_progress,
+                    include_pull_requests=True,
+                )
+            comparison = compare_infra(
+                document,
+                environment,
+                infra_observation,
+                apps_observation,
+            )
+        except (GitHubError, RateLimitError) as exc:
+            print(f"moc-env: {exc}", file=sys.stderr)
+            return 2
+
+        if args.format == "json":
+            rendered = render_comparison_json(comparison)
+        elif args.format == "markdown":
+            rendered = render_comparison_markdown(comparison)
+        else:
+            rendered = render_comparison_text(comparison)
+
+        if args.output:
+            output_path = Path(args.output)
+            try:
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_text(rendered, encoding="utf-8")
+            except OSError as exc:
+                print(
+                    f"moc-env: could not write {output_path}: {exc}",
+                    file=sys.stderr,
+                )
+                return 2
+            print(
+                f"moc-env: wrote {args.format} comparison report to {output_path}",
+                file=sys.stderr,
+            )
+        else:
+            print(rendered, end="")
+        differences = {
+            "missing_from_main",
+            "value_mismatch",
+            "unexpected_in_main",
+            "unsupported_check",
+            "ambiguous",
+        }
+        return 1 if any(check.state in differences for check in comparison.checks) else 0
 
     args = build_parser().parse_args(argv)
     issue_number = args.issue

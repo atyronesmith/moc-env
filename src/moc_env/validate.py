@@ -728,18 +728,18 @@ def validate_infra_cluster(document: Any) -> ValidationResult:
     )
 
 
-def load_validation_result(path: Path) -> ValidationResult:
-    """Load and validate a desired-state YAML file."""
+def load_infra_cluster_document(path: Path) -> tuple[Any, ValidationResult]:
+    """Load a desired-state document and its validation result."""
 
     try:
         text = path.read_text(encoding="utf-8")
     except OSError as exc:
-        return ValidationResult(errors=[f"could not read {path}: {exc}"])
+        return None, ValidationResult(errors=[f"could not read {path}: {exc}"])
     try:
         document = yaml.load(text, Loader=_UniqueKeyLoader)
     except yaml.YAMLError as exc:
         error = f"invalid YAML: {exc}"
-        return ValidationResult(
+        return None, ValidationResult(
             errors=[error],
             checks=[
                 ValidationCheck(
@@ -754,7 +754,7 @@ def load_validation_result(path: Path) -> ValidationResult:
             ],
         )
     result = validate_infra_cluster(document)
-    return ValidationResult(
+    checked_result = ValidationResult(
         errors=result.errors,
         warnings=result.warnings,
         checks=[
@@ -769,6 +769,13 @@ def load_validation_result(path: Path) -> ValidationResult:
             *result.checks,
         ],
     )
+    return document, checked_result
+
+
+def load_validation_result(path: Path) -> ValidationResult:
+    """Load and validate a desired-state YAML file."""
+
+    return load_infra_cluster_document(path)[1]
 
 
 def render_validation_text(result: ValidationResult) -> str:

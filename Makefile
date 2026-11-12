@@ -9,6 +9,7 @@ ARGS ?=
 OUTPUT ?= reports/$(ENV).md
 FILE ?= desired-state/infra-clusters/$(ENV)-infra.yaml
 VALIDATION_OUTPUT ?= reports/$(ENV)-validation.md
+COMPARISON_OUTPUT ?= reports/$(ENV)-infra-comparison.md
 
 # Set NO_PRS=1 to avoid pull-request API calls.
 ifeq ($(NO_PRS),1)
@@ -20,7 +21,8 @@ endif
 RUN_ARGS := $(ENV) --format $(FORMAT) $(PRS_FLAG) $(ARGS)
 
 .PHONY: help setup sync test list export-infra export-infra-file validate \
-        validate-markdown run run-text run-json run-markdown run-no-prs report-markdown \
+        validate-markdown check-infra check-infra-markdown run run-text run-json \
+        run-markdown run-no-prs report-markdown \
         report-gist-secret report-gist-public build compile \
         diff-check pii-check check lock \
         clean clean-all
@@ -67,6 +69,13 @@ validate: ## Validate the desired-state document in FILE
 validate-markdown: ## Write a Markdown validation report to VALIDATION_OUTPUT
 	$(UV) run --locked moc-env validate $(FILE) --format markdown \
 	  --output $(VALIDATION_OUTPUT)
+
+check-infra: ## Compare FILE against merged main
+	$(UV) run --locked moc-env check-infra $(FILE) $(ARGS)
+
+check-infra-markdown: ## Write a Markdown infra comparison to COMPARISON_OUTPUT
+	$(UV) run --locked moc-env check-infra $(FILE) --format markdown \
+	  --output $(COMPARISON_OUTPUT)
 
 run: run-text ## Run the CLI (default ENV and text format)
 

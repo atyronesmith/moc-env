@@ -136,6 +136,42 @@ Validation is local and read-only. Invalid documents return exit code 2.
 Unknown fields produce warnings; duplicate keys, secret-like fields, invalid
 IP/CIDR values, naming mismatches, and unsupported required values are errors.
 
+Compare reviewed desired state with merged `main`:
+
+```sh
+uv run moc-env check-infra \
+  desired-state/infra-clusters/bu-ist-demo-infra.yaml
+```
+
+JSON comparison output:
+
+```sh
+uv run moc-env check-infra \
+  desired-state/infra-clusters/bu-ist-demo-infra.yaml \
+  --format json
+```
+
+Write a Markdown comparison report:
+
+```sh
+uv run moc-env check-infra \
+  desired-state/infra-clusters/bu-ist-demo-infra.yaml \
+  --format markdown \
+  --output reports/bu-ist-demo-infra-comparison.md
+```
+
+Or with the Makefile:
+
+```sh
+make check-infra ENV=bu-ist-demo
+make check-infra-markdown ENV=bu-ist-demo
+```
+
+Comparison reports use `matches_main`, `missing_from_main`,
+`value_mismatch`, `unexpected_in_main`, `unsupported_check`, `ambiguous`,
+and `pr_open`. Hard differences return exit code 1; an open relevant pull
+request alone returns exit code 0.
+
 `make check` runs the unit tests, byte-compilation, Git whitespace check, and
 package build.
 

@@ -132,6 +132,8 @@ standalone Markdown output are available; invalid documents return exit code 2.
 
 ## Phase 4 — `check-infra`
 
+**Status:** complete
+
 Compare reviewed desired state to current merged repository state:
 
 ```sh
@@ -151,6 +153,13 @@ Comparison states:
 
 A YAML exported from current state should report supported fields as matching.
 Changing one desired value should produce exactly one `value_mismatch`.
+
+The comparison validates the desired-state document first, reads the current
+`oac-infra` observation, and optionally reads relevant `oac-apps` pull
+requests. It compares supported metadata, inventory, hub inventory, domain,
+network, cluster, host, and boot-image fields. Text, JSON, and Markdown output
+are available. Hard differences return exit code 1; an open relevant pull
+request without a hard difference returns exit code 0.
 
 ## Phase 5 — workload export
 
