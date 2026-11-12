@@ -49,6 +49,7 @@ class ComparisonReport:
     """The complete desired-state versus merged-main comparison."""
 
     environment: Environment
+    kind: str = "Infra"
     checks: list[ComparisonCheck] = field(default_factory=list)
 
     @property
@@ -72,6 +73,7 @@ class ComparisonReport:
         for check in self.checks:
             state_counts[check.state] = state_counts.get(check.state, 0) + 1
         return {
+            "kind": self.kind,
             "environment": self.environment.to_dict(),
             "overall_state": self.overall_state,
             "summary": {
@@ -383,11 +385,352 @@ def compare_infra(
     return ComparisonReport(environment=environment, checks=checks)
 
 
+def _workload_boot_image_is_specific(url: Any, workload_cluster: str) -> bool:
+    if not isinstance(url, str):
+        return False
+    image_name = url.rsplit("/", 1)[-1]
+    aliases = [workload_cluster]
+    if workload_cluster.startswith("oac-"):
+        aliases.append(workload_cluster.removeprefix("oac-"))
+    return any(alias in image_name for alias in aliases)
+
+
+def compare_workload(
+    document: Any,
+    infra_observation: InfraObservation,
+    apps_observation: AppsObservation | None = None,
+) -> ComparisonReport:
+    """Compare a WorkloadCluster desired-state document with current main."""
+
+    environment = desired_environment(document)
+    checks: list[ComparisonCheck] = []
+    metadata = _mapping(document, "metadata")
+    spec = _mapping(document, "spec")
+    inventory = _mapping(document, "spec", "inventory")
+    parent = _mapping(document, "spec", "parent")
+    gitops = _mapping(document, "spec", "gitOps")
+
+    workload_name = _desired_source(metadata, "name")
+    parent_name = _desired_source(metadata, "parentInfraCluster")
+    environment_name = _desired_source(metadata, "environment")
+
+    _compare(
+        checks,
+        "Metadata",
+        "metadata.environment.value",
+        environment_name,
+        environment.name,
+    )
+    _compare(
+        checks,
+        "Metadata",
+        "metadata.name.value",
+        workload_name,
+        environment.workload_cluster,
+    )
+    _compare(
+        checks,
+        "Metadata",
+        "metadata.parentInfraCluster.value",
+        parent_name,
+        environment.infra_cluster,
+    )
+
+    referenced_infra_present = (
+        isinstance(parent_name, str) and parent_name in infra_observation.clusters
+    )
+    checks.append(
+        ComparisonCheck(
+            category="Parent references",
+            field="metadata.parentInfraCluster",
+            desired=parent_name,
+            current=(
+                "present"
+                if referenced_infra_present
+                else f"expected {environment.infra_cluster}"
+            ),
+            state="matches_main" if referenced_infra_present else "missing_from_main",
+            reason=(
+                "The referenced parent infra cluster exists in merged main."
+                if referenced_infra_present
+                else "The referenced parent infra cluster is absent from merged main."
+            ),
+        )
+    )
+
+    current_values = infra_observation.hub_variables.values.value
+    current_domain = (
+        f"{current_values['cluster_domain_name']}.{current_values['base_domain']}"
+        if isinstance(current_values, dict)
+        and isinstance(current_values.get("cluster_domain_name"), str)
+        and isinstance(current_values.get("base_domain"), str)
+        else _MISSING
+    )
+    _compare(
+        checks,
+        "Parent references",
+        "spec.parent.domain.value",
+        _desired_source(parent, "domain"),
+        current_domain,
+    )
+    _compare(
+        checks,
+        "Parent references",
+        "spec.parent.network.machineNetwork.value",
+        _desired_source(_mapping(parent, "network"), "machineNetwork"),
+        (
+            current_values.get("machine_network")
+            if isinstance(current_values, dict)
+            else _MISSING
+        ),
+    )
+
+    workload_exists = (
+        isinstance(workload_name, str) and workload_name in infra_observation.clusters
+    )
+    checks.append(
+        ComparisonCheck(
+            category="Inventory",
+            field="metadata.name",
+            desired=workload_name,
+            current="present" if workload_exists else "missing",
+            state="matches_main" if workload_exists else "missing_from_main",
+            reason=(
+                "The workload cluster exists in the current inventory."
+                if workload_exists
+                else "The workload cluster is absent from the current inventory."
+            ),
+        )
+    )
+    if workload_exists:
+        current_cluster = infra_observation.clusters[workload_name]
+        _compare(
+            checks,
+            "Inventory",
+            "spec.inventory.groupPresent.value",
+            _desired_source(inventory, "groupPresent"),
+            _current_source(current_cluster.group_found),
+        )
+        _compare(
+            checks,
+            "Inventory",
+            "spec.inventory.hostCount.value",
+            _desired_source(inventory, "hostCount"),
+            len(current_cluster.hosts.value),
+        )
+        _compare(
+            checks,
+            "Inventory",
+            "spec.inventory.hosts.value",
+            _desired_source(inventory, "hosts"),
+            _current_source(current_cluster.hosts),
+        )
+
+        desired_boot = _desired_source(_mapping(inventory, "bootImage"), "selected")
+        boot_urls = current_cluster.boot_image_urls
+        if len(boot_urls) > 1:
+            checks.append(
+                ComparisonCheck(
+                    category="Inventory",
+                    field="spec.inventory.bootImage.selected.value",
+                    desired=None if desired_boot is _MISSING else desired_boot,
+                    current=None,
+                    state="ambiguous",
+                    reason="Merged main declares multiple boot image URLs.",
+                )
+            )
+        else:
+            current_boot = boot_urls[0] if len(boot_urls) == 1 else None
+            _compare(
+                checks,
+                "Inventory",
+                "spec.inventory.bootImage.selected.value",
+                desired_boot,
+                current_boot,
+            )
+        boot_is_specific = _workload_boot_image_is_specific(
+            desired_boot,
+            workload_name,
+        )
+        checks.append(
+            ComparisonCheck(
+                category="Inventory",
+                field="spec.inventory.bootImage.selected.clusterSpecific",
+                desired=True,
+                current=boot_is_specific,
+                state="matches_main" if boot_is_specific else "value_mismatch",
+                reason=(
+                    "The selected boot image identifies the workload cluster."
+                    if boot_is_specific
+                    else "The selected boot image does not identify the workload cluster."
+                ),
+            )
+        )
+
+    if apps_observation is not None:
+        paths = set(apps_observation.paths.value)
+        hosted = _mapping(gitops, "hostedClusterValues")
+        components = _mapping(gitops, "componentValues")
+        applications = _mapping(gitops, "applications")
+        expected_hosted_path = (
+            f"hosted-clusters/{environment.infra_cluster}/"
+            f"{environment.workload_cluster}/values.yaml"
+        )
+        expected_component_prefix = (
+            f"values/{environment.infra_cluster}/{environment.workload_cluster}/"
+        )
+        expected_application_prefix = (
+            f"apps/{environment.infra_cluster}/{environment.workload_cluster}/"
+        )
+
+        desired_hosted_path = _desired_source(hosted, "path")
+        hosted_path_correct = desired_hosted_path == expected_hosted_path
+        checks.append(
+            ComparisonCheck(
+                category="GitOps references",
+                field="spec.gitOps.hostedClusterValues.path.value",
+                desired=desired_hosted_path,
+                current=expected_hosted_path,
+                state="matches_main" if hosted_path_correct else "value_mismatch",
+                reason=(
+                    "The hosted-cluster path references the correct infra and workload clusters."
+                    if hosted_path_correct
+                    else "The hosted-cluster path does not reference the correct clusters."
+                ),
+            )
+        )
+        hosted_present = expected_hosted_path in paths
+        checks.append(
+            ComparisonCheck(
+                category="GitOps presence",
+                field="spec.gitOps.hostedClusterValues.present",
+                desired=True,
+                current=hosted_present,
+                state="matches_main" if hosted_present else "missing_from_main",
+                reason=(
+                    "The hosted-cluster values file exists in merged main."
+                    if hosted_present
+                    else "The hosted-cluster values file is absent from merged main."
+                ),
+            )
+        )
+
+        desired_component_prefix = _desired_source(components, "prefix")
+        component_prefix_correct = (
+            desired_component_prefix == expected_component_prefix
+        )
+        checks.append(
+            ComparisonCheck(
+                category="GitOps references",
+                field="spec.gitOps.componentValues.prefix.value",
+                desired=desired_component_prefix,
+                current=expected_component_prefix,
+                state="matches_main" if component_prefix_correct else "value_mismatch",
+                reason=(
+                    "The component-value prefix references the correct clusters."
+                    if component_prefix_correct
+                    else "The component-value prefix does not reference the correct clusters."
+                ),
+            )
+        )
+        current_component_paths = sorted(
+            path for path in paths if path.startswith(expected_component_prefix)
+        )
+        _compare(
+            checks,
+            "GitOps presence",
+            "spec.gitOps.componentValues.paths.value",
+            _desired_source(components, "paths"),
+            current_component_paths,
+        )
+        checks.append(
+            ComparisonCheck(
+                category="GitOps presence",
+                field="spec.gitOps.componentValues.present",
+                desired=True,
+                current=bool(current_component_paths),
+                state=(
+                    "matches_main" if current_component_paths else "missing_from_main"
+                ),
+                reason=(
+                    "Workload component values exist in merged main."
+                    if current_component_paths
+                    else "No workload component values exist in merged main."
+                ),
+            )
+        )
+
+        desired_application_prefix = _desired_source(applications, "prefix")
+        application_prefix_correct = (
+            desired_application_prefix == expected_application_prefix
+        )
+        checks.append(
+            ComparisonCheck(
+                category="GitOps references",
+                field="spec.gitOps.applications.prefix.value",
+                desired=desired_application_prefix,
+                current=expected_application_prefix,
+                state=(
+                    "matches_main" if application_prefix_correct else "value_mismatch"
+                ),
+                reason=(
+                    "The application prefix references the correct clusters."
+                    if application_prefix_correct
+                    else "The application prefix does not reference the correct clusters."
+                ),
+            )
+        )
+        current_application_paths = sorted(
+            path for path in paths if path.startswith(expected_application_prefix)
+        )
+        _compare(
+            checks,
+            "GitOps presence",
+            "spec.gitOps.applications.paths.value",
+            _desired_source(applications, "paths"),
+            current_application_paths,
+        )
+        _compare(
+            checks,
+            "GitOps presence",
+            "spec.gitOps.applications.present",
+            _desired_source(applications, "present"),
+            bool(current_application_paths),
+        )
+
+        open_prs = [
+            pull for pull in apps_observation.pull_requests if pull.state.value == "open"
+        ]
+        checks.append(
+            ComparisonCheck(
+                category="Pull requests",
+                field="relevant_pull_requests",
+                desired="No relevant open pull requests",
+                current={
+                    "matching_pr_count": len(apps_observation.pull_requests),
+                    "open_pr_count": len(open_prs),
+                },
+                state="pr_open" if open_prs else "matches_main",
+                reason=(
+                    f"{len(open_prs)} relevant pull request(s) are open."
+                    if open_prs
+                    else "No relevant pull requests are open."
+                ),
+            )
+        )
+
+    return ComparisonReport(
+        environment=environment,
+        kind="Workload",
+        checks=checks,
+    )
+
+
 def render_comparison_text(report: ComparisonReport) -> str:
     data = report.to_dict()
     lines = [
         "=" * 78,
-        f"MOC infra comparison: {data['environment']['name']}",
+        f"MOC {report.kind.lower()} comparison: {data['environment']['name']}",
         "=" * 78,
         f"Infra cluster: {data['environment']['infra_cluster']}",
         f"Overall:       {data['overall_state']}",
@@ -436,7 +779,7 @@ def render_comparison_markdown(report: ComparisonReport) -> str:
         "pr_open": "🚧",
     }
     lines = [
-        "# 🔍 Infra Desired-State Comparison",
+        f"# 🔍 {report.kind} Desired-State Comparison",
         "",
         f"## `{data['environment']['name']}` — {data['overall_state']}",
         "",

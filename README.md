@@ -195,6 +195,36 @@ Comparison reports use `matches_main`, `missing_from_main`,
 and `pr_open`. Hard differences return exit code 1; an open relevant pull
 request alone returns exit code 0.
 
+Compare a reviewed workload-cluster document with merged `main`:
+
+```sh
+uv run moc-env check-workload \
+  desired-state/workload-clusters/bu-ist-demo-workload0.yaml
+```
+
+Write a Markdown workload comparison:
+
+```sh
+uv run moc-env check-workload \
+  desired-state/workload-clusters/bu-ist-demo-workload0.yaml \
+  --format markdown \
+  --output reports/bu-ist-demo-workload0-comparison.md
+```
+
+Or with the Makefile:
+
+```sh
+make check-workload ENV=bu-ist-demo WORKLOAD=workload0
+make check-workload-markdown ENV=bu-ist-demo WORKLOAD=workload0
+```
+
+The workload check validates the document, confirms the parent infra cluster,
+checks naming and parent domain/network references, verifies host inventory
+and a cluster-specific boot image, confirms that hosted-cluster and component
+values exist, and verifies that application paths reference the correct
+clusters. Application absence is valid when the reviewed desired state also
+records it as absent.
+
 `make check` runs the unit tests, byte-compilation, Git whitespace check, and
 package build.
 

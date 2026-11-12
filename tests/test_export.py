@@ -176,6 +176,14 @@ class WorkloadExportTest(unittest.TestCase):
             document["metadata"]["parentInfraCluster"]["value"],
             "bu-ist-demo-infra",
         )
+        self.assertEqual(
+            document["spec"]["parent"]["domain"]["value"],
+            "bu-ist-demo.int.massopen.cloud",
+        )
+        self.assertEqual(
+            document["spec"]["parent"]["network"]["machineNetwork"]["value"],
+            "10.20.26.0/23",
+        )
         self.assertTrue(document["spec"]["inventory"]["groupPresent"]["value"])
         self.assertEqual(document["spec"]["inventory"]["hostCount"]["value"], 1)
         self.assertEqual(
