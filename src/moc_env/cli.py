@@ -17,7 +17,9 @@ from .credentials import (
     load_credential_environment_file,
 )
 from .github import GitHubClient, GitHubError, RateLimitError
+from .export import render_infra_export
 from .model import Environment
+from .observed import read_infra_observation
 from .report import (
     render_environment_list_json,
     render_environment_list_text,
@@ -108,6 +110,23 @@ def build_list_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def build_export_infra_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="moc-env export-infra",
+        description="Export a deterministic draft InfraCluster snapshot from merged main",
+    )
+    parser.add_argument("environment", help="Environment name, such as bu-ist-demo")
+    parser.add_argument(
+        "--output",
+        help=(
+            "Write the YAML snapshot to this file instead of stdout; "
+            "the command never creates or updates GitHub content"
+        ),
+    )
+    _add_credential_arguments(parser)
+    return parser
+
+
 def _resolve_github_token(args: argparse.Namespace) -> str | None:
     try:
         credential_environment = load_credential_environment_file(args.env_file)
@@ -173,6 +192,53 @@ def main(argv: list[str] | None = None) -> int:
             print(render_environment_list_json(environments), end="")
         else:
             print(render_environment_list_text(environments), end="")
+        return 0
+
+    if arguments and arguments[0] == "export-infra":
+        args = build_export_infra_parser().parse_args(arguments[1:])
+        environment = Environment(name=args.environment)
+        github_token = _resolve_github_token(args)
+        client = GitHubClient(token=github_token, timeout=args.timeout)
+        stage_step = 0
+
+        def print_export_progress(
+            stage: str, action: str, repository: str, path: str
+        ) -> None:
+            nonlocal stage_step
+            stage_step += 1
+            print(
+                f"▶ Step {stage_step}: {stage}\n"
+                f"    Action:     {action}\n"
+                f"    Repository: {repository}\n"
+                f"    Source:     {path}",
+                file=sys.stderr,
+            )
+
+        try:
+            observation = read_infra_observation(
+                client,
+                environment,
+                progress=print_export_progress,
+            )
+            rendered = render_infra_export(environment, observation)
+        except (GitHubError, RateLimitError) as exc:
+            print(f"moc-env: {exc}", file=sys.stderr)
+            return 2
+
+        if args.output:
+            output_path = Path(args.output)
+            try:
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_text(rendered, encoding="utf-8")
+            except OSError as exc:
+                print(
+                    f"moc-env: could not write {output_path}: {exc}",
+                    file=sys.stderr,
+                )
+                return 2
+            print(f"moc-env: wrote InfraCluster YAML to {output_path}", file=sys.stderr)
+        else:
+            print(rendered, end="")
         return 0
 
     args = build_parser().parse_args(argv)

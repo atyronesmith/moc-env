@@ -8,6 +8,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import yaml
+
 from moc_env import cli
 
 from fakes import FakeGitHubClient
@@ -76,3 +78,25 @@ class CliDispatchTest(unittest.TestCase):
             self.assertIn(f"wrote markdown report to {output}", stderr)
             report = output.read_text(encoding="utf-8")
             self.assertIn("# 🛰️ MOC Environment Configuration Status", report)
+
+    def test_export_infra_dispatch(self) -> None:
+        exit_code, stdout, stderr = self.run_cli(["export-infra", "bu-ist-demo"])
+        self.assertEqual(exit_code, 0)
+        document = yaml.safe_load(stdout)
+        self.assertEqual(document["kind"], "InfraCluster")
+        self.assertEqual(document["metadata"]["name"]["value"], "bu-ist-demo-infra")
+        self.assertIn("Step 1:", stderr)
+        self.assertIn("Step 3:", stderr)
+        self.assertNotIn("Step 4:", stderr)
+
+    def test_export_infra_dispatch_and_output_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            output = Path(temporary_directory) / "desired-state" / "infra-cluster.yaml"
+            exit_code, stdout, stderr = self.run_cli(
+                ["export-infra", "bu-ist-demo", "--output", str(output)]
+            )
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(stdout, "")
+            self.assertIn(f"wrote InfraCluster YAML to {output}", stderr)
+            document = yaml.safe_load(output.read_text(encoding="utf-8"))
+            self.assertEqual(document["apiVersion"], "moc-env/v1alpha1")

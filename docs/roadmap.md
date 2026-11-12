@@ -76,6 +76,8 @@ and marked `unsupported`.
 
 ## Phase 2 — `export-infra`
 
+**Status:** complete
+
 Add a deterministic read-only exporter:
 
 ```sh
@@ -92,6 +94,14 @@ state, not a claim that a cluster is deployed. It must:
 - mark inferred values;
 - represent unsupported or ambiguous fields explicitly;
 - omit timestamps unless explicitly requested.
+
+The exporter emits a versioned `moc-env/v1alpha1` `InfraCluster` document.
+Every repository-derived field retains its repository/path/ref provenance and
+extraction confidence. Derived environment, cluster, path, and domain values
+are marked `inferred`; ambiguous boot-image selections and values from
+unsupported YAML shapes are represented with null values and `unsupported`
+confidence. Output is sorted deterministically and contains no generation
+timestamp.
 
 ## Phase 3 — desired-state validation
 
