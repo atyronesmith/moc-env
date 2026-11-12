@@ -163,6 +163,8 @@ request without a hard difference returns exit code 0.
 
 ## Phase 5 — workload export
 
+**Status:** complete
+
 Add:
 
 ```sh
@@ -180,6 +182,14 @@ Extract:
 - references to the parent infra cluster.
 
 Missing values must remain explicit; they must not disappear from the YAML.
+
+The exporter emits a versioned `moc-env/v1alpha1` `WorkloadCluster` document.
+It records the parent infra cluster, host group and count, machine inventory,
+boot image, hosted-cluster values, component values, application paths, and
+repository/path/ref provenance. Missing GitOps scopes remain explicit with
+`present: false`; ambiguous boot-image selections are represented with an
+unsupported selected value. Output is deterministic and contains no generation
+timestamp.
 
 ## Phase 6 — `check-workload`
 

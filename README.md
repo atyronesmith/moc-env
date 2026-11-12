@@ -101,6 +101,29 @@ confidence for observed values; derived names and paths are marked `inferred`,
 and unsupported or ambiguous values are represented explicitly. It does not
 claim that a cluster is deployed.
 
+Export a deterministic draft workload-cluster snapshot:
+
+```sh
+uv run moc-env export-workload bu-ist-demo workload0
+```
+
+Write the workload YAML to a file:
+
+```sh
+uv run moc-env export-workload bu-ist-demo workload0 \
+  --output desired-state/workload-clusters/bu-ist-demo-workload0.yaml
+```
+
+Or with the Makefile:
+
+```sh
+make export-workload ENV=bu-ist-demo WORKLOAD=workload0
+```
+
+The workload export records the parent infra cluster, host inventory, boot
+image, hosted-cluster values, component values, and application paths. Missing
+paths remain explicit with `present: false` and empty path lists.
+
 Validate a desired-state document:
 
 ```sh

@@ -100,3 +100,40 @@ class CliDispatchTest(unittest.TestCase):
             self.assertIn(f"wrote InfraCluster YAML to {output}", stderr)
             document = yaml.safe_load(output.read_text(encoding="utf-8"))
             self.assertEqual(document["apiVersion"], "moc-env/v1alpha1")
+
+    def test_export_workload_dispatch(self) -> None:
+        exit_code, stdout, stderr = self.run_cli(
+            ["export-workload", "bu-ist-demo", "workload0"]
+        )
+        self.assertEqual(exit_code, 0)
+        document = yaml.safe_load(stdout)
+        self.assertEqual(document["kind"], "WorkloadCluster")
+        self.assertEqual(
+            document["metadata"]["name"]["value"],
+            "bu-ist-demo-workload0",
+        )
+        self.assertIn("Step 1:", stderr)
+        self.assertIn("Step 4:", stderr)
+        self.assertNotIn("Step 5:", stderr)
+
+    def test_export_workload_dispatch_and_output_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            output = (
+                Path(temporary_directory)
+                / "desired-state"
+                / "bu-ist-demo-workload0.yaml"
+            )
+            exit_code, stdout, stderr = self.run_cli(
+                [
+                    "export-workload",
+                    "bu-ist-demo",
+                    "workload0",
+                    "--output",
+                    str(output),
+                ]
+            )
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(stdout, "")
+            self.assertIn(f"wrote WorkloadCluster YAML to {output}", stderr)
+            document = yaml.safe_load(output.read_text(encoding="utf-8"))
+            self.assertEqual(document["kind"], "WorkloadCluster")
