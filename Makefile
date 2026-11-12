@@ -18,7 +18,8 @@ endif
 RUN_ARGS := $(ENV) --format $(FORMAT) $(PRS_FLAG) $(ARGS)
 
 .PHONY: help setup sync test list export-infra export-infra-file run run-text \
-        run-json run-markdown run-no-prs report-markdown build compile \
+        run-json run-markdown run-no-prs report-markdown report-gist-secret \
+        report-gist-public build compile \
         diff-check pii-check check lock \
         clean clean-all
 
@@ -74,6 +75,12 @@ run-no-prs: ## Run the CLI without pull-request discovery
 
 report-markdown: ## Write a verbose Markdown report to OUTPUT
 	$(UV) run --locked moc-env $(ENV) --format markdown --output $(OUTPUT)
+
+report-gist-secret: report-markdown ## Create a secret GitHub gist from OUTPUT
+	gh gist create $(OUTPUT) --secret
+
+report-gist-public: report-markdown ## Create a public GitHub gist from OUTPUT
+	gh gist create $(OUTPUT) --public
 
 build: ## Build source distribution and wheel
 	$(UV) build
