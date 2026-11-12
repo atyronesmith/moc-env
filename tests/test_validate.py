@@ -61,7 +61,7 @@ class ValidateTest(unittest.TestCase):
         result = validate_infra_cluster(document)
         self.assertFalse(result.valid)
         self.assertIn(
-            "metadata: infra-cluster name must be ENVIRONMENT-infra; "
+            "metadata: hub-cluster name must be ENVIRONMENT-infra; "
             "expected bu-ist-demo-infra, got wrong-infra",
             result.errors,
         )

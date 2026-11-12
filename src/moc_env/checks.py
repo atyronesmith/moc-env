@@ -526,7 +526,7 @@ class StatusChecker:
                 infra_defaults,
                 None,
                 [infra_defaults],
-                "the default values for hosted clusters on this infra cluster",
+                "the default values for hosted clusters on this hub cluster",
             ),
             (
                 "Hub-wide component values",
@@ -540,14 +540,14 @@ class StatusChecker:
                 None,
                 local_prefix,
                 [local_prefix + name for name in LOCAL_CLUSTER_COMPONENTS],
-                "the infra cluster's local operator and shared-service values",
+                "the hub cluster's local operator and shared-service values",
             ),
             (
                 "Infra ArgoCD applications",
                 None,
                 apps_prefix,
                 [apps_prefix + "keycloak-oauth.yaml"],
-                "direct ArgoCD applications applied on the infra cluster",
+                "direct ArgoCD applications applied on the hub cluster",
             ),
             (
                 "Workload hosted-cluster values",

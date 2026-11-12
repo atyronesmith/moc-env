@@ -18,6 +18,10 @@ motivating environment is `bu-ist-demo`, tracked by
 See [docs/roadmap.md](docs/roadmap.md) for the desired-state, validation, and
 future coordinated-PR design.
 
+See [docs/hub-cluster-terminology.md](docs/hub-cluster-terminology.md) for the
+hub-cluster, hosted-control-plane, and workload-cluster terminology used by
+this project.
+
 ## Current scope
 
 Milestone 1 inspects:
@@ -30,11 +34,11 @@ Milestone 1 inspects:
 It reports:
 
 - MOC issue state;
-- infrastructure and workload host inventory;
+- hub and hosted-workload host inventory;
 - hub-image variables and hardware identifiers;
 - boot-image specificity;
 - Keycloak OIDC client registration;
-- `oac-apps` infra, local-cluster, and workload GitOps paths;
+- `oac-apps` hub, local-cluster, and hosted-workload GitOps paths;
 - open and merged pull requests that reference the environment.
 
 Later milestones can add networking, DNS, AWS, storage, monitoring, billing,
@@ -83,7 +87,8 @@ JSON output:
 uv run moc-env list --format json
 ```
 
-Export a deterministic draft infra-cluster snapshot from merged `main`:
+Export a deterministic draft hub-cluster snapshot from merged `main`. The
+command name remains `export-infra` for compatibility:
 
 ```sh
 uv run moc-env export-infra bu-ist-demo
@@ -120,9 +125,26 @@ Or with the Makefile:
 make export-workload ENV=bu-ist-demo WORKLOAD=workload0
 ```
 
-The workload export records the parent infra cluster, host inventory, boot
+The workload export records the parent hub cluster, host inventory, boot
 image, hosted-cluster values, component values, and application paths. Missing
 paths remain explicit with `present: false` and empty path lists.
+
+Generate a Markdown guide to the environment's chart values:
+
+```sh
+uv run moc-env document-values bu-ist-demo
+```
+
+Write the guide to a file:
+
+```sh
+uv run moc-env document-values bu-ist-demo \
+  --output reports/bu-ist-demo-values.md
+```
+
+The guide groups values into hub-wide, hub local-cluster, hosted-cluster, and
+workload-component scopes. It records current values with repository/path/ref
+provenance and explicitly reports missing files or unsupported YAML shapes.
 
 Validate a desired-state document:
 
@@ -218,7 +240,7 @@ make check-workload ENV=bu-ist-demo WORKLOAD=workload0
 make check-workload-markdown ENV=bu-ist-demo WORKLOAD=workload0
 ```
 
-The workload check validates the document, confirms the parent infra cluster,
+The workload check validates the document, confirms the parent hub cluster,
 checks naming and parent domain/network references, verifies host inventory
 and a cluster-specific boot image, confirms that hosted-cluster and component
 values exist, and verifies that application paths reference the correct

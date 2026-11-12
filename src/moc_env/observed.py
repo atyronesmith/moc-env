@@ -172,7 +172,7 @@ class IssueObservation:
 
 @dataclass(frozen=True)
 class KeycloakClientObservation:
-    """Normalized Keycloak OIDC declaration for one infra cluster."""
+    """Normalized Keycloak OIDC declaration for one hub cluster."""
 
     block_name: SourceValue
     cluster_name: SourceValue
@@ -215,6 +215,45 @@ class AppsObservation:
 
 
 @dataclass(frozen=True)
+class ChartValueObservation:
+    """One leaf value from an oac-apps values file."""
+
+    key: SourceValue
+    value: SourceValue
+
+
+@dataclass(frozen=True)
+class ChartValuesFileObservation:
+    """One parsed oac-apps values file."""
+
+    path: SourceValue
+    present: SourceValue
+    scope: SourceValue
+    chart: SourceValue
+    values: SourceValue
+    entries: tuple[ChartValueObservation, ...]
+
+
+@dataclass(frozen=True)
+class ChartValuesScopeObservation:
+    """All values files in one hub or workload scope."""
+
+    scope: SourceValue
+    prefix: SourceValue
+    present: SourceValue
+    files: tuple[ChartValuesFileObservation, ...]
+
+
+@dataclass(frozen=True)
+class ChartValuesObservation:
+    """Normalized oac-apps chart-values documentation inputs."""
+
+    scopes: tuple[ChartValuesScopeObservation, ...]
+    source_repository: str
+    source_ref: str = "main"
+
+
+@dataclass(frozen=True)
 class ObservedWorkloadCluster:
     """Observed inputs for one workload cluster."""
 
@@ -246,7 +285,7 @@ class ObservedEnvironment:
 
 @dataclass(frozen=True)
 class InfraObservation:
-    """Repository-declared inputs for one infra cluster and its workload."""
+    """Repository-declared inputs for one hub cluster and its workload."""
 
     repository: str
     inventory_path: str
@@ -316,7 +355,7 @@ def read_infra_observation(
 
     emit(
         "Cluster build",
-        "read the hub-image inventory to confirm the infra cluster can generate a hub image",
+        "read the hub-image inventory to confirm the hub cluster can generate a hub image",
         HUB_INVENTORY_PATH,
     )
     hub_text = (
@@ -430,13 +469,13 @@ def read_keycloak_observation(
     environment: Environment,
     progress: ProgressCallback | None = None,
 ) -> KeycloakObservation:
-    """Read and normalize the infra cluster's Keycloak OIDC client."""
+    """Read and normalize the hub cluster's Keycloak OIDC client."""
 
     repository = MOC_KEYCLOAK_REPOSITORY
     if progress is not None:
         progress(
             "Identity",
-            "read Terraform configuration to verify the infra cluster's Keycloak OIDC client",
+            "read Terraform configuration to verify the hub cluster's Keycloak OIDC client",
             repository,
             KEYCLOAK_PATH,
         )
@@ -560,6 +599,183 @@ def read_apps_observation(
             "git/trees/main?recursive=1",
         ),
         pull_requests=tuple(pull_requests),
+        source_repository=repository,
+    )
+
+
+def _flatten_chart_values(
+    repository: str,
+    path: str,
+    values: dict[str, Any],
+) -> tuple[ChartValueObservation, ...]:
+    entries: list[ChartValueObservation] = []
+
+    def visit(prefix: str, mapping: dict[str, Any]) -> None:
+        for key, value in mapping.items():
+            key_path = f"{prefix}.{key}" if prefix else str(key)
+            if isinstance(value, dict):
+                visit(key_path, value)
+                continue
+            entries.append(
+                ChartValueObservation(
+                    key=SourceValue(key_path, repository, path),
+                    value=SourceValue(value, repository, path),
+                )
+            )
+
+    visit("", values)
+    return tuple(entries)
+
+
+def read_chart_values_observation(
+    client: GitHubClient,
+    environment: Environment,
+    workload_cluster: str | None = None,
+    progress: ProgressCallback | None = None,
+) -> ChartValuesObservation:
+    """Read and normalize oac-apps values files for documentation."""
+
+    repository = OAC_APPS_REPOSITORY
+    workload = workload_cluster or environment.workload_cluster
+    tree = client.get_tree(repository)
+    all_paths = set(tree)
+    hub_prefix = f"values/{environment.infra_cluster}/"
+    local_prefix = f"{hub_prefix}local-cluster/"
+    workload_prefix = f"{hub_prefix}{workload}/"
+    hosted_path = (
+        f"hosted-clusters/{environment.infra_cluster}/{workload}/values.yaml"
+    )
+
+    scope_definitions = (
+        (
+            "hub-wide",
+            hub_prefix,
+            tuple(
+                sorted(
+                    path
+                    for path in all_paths
+                    if path.startswith(hub_prefix)
+                    and not path.startswith(local_prefix)
+                    and not path.startswith(workload_prefix)
+                )
+            ),
+        ),
+        ("hub-local-cluster", local_prefix, None),
+        ("hosted-cluster", hosted_path, None),
+        ("workload-components", workload_prefix, None),
+    )
+    scopes: list[ChartValuesScopeObservation] = []
+    for scope_name, prefix, explicit_paths in scope_definitions:
+        if progress is not None:
+            progress(
+                "Chart values",
+                f"read {scope_name} values files to document chart inputs",
+                repository,
+                prefix,
+            )
+        if explicit_paths is None:
+            if scope_name == "hosted-cluster":
+                paths = (hosted_path,) if hosted_path in all_paths else ()
+            else:
+                paths = tuple(
+                    sorted(path for path in all_paths if path.startswith(prefix))
+                )
+        else:
+            paths = explicit_paths
+
+        files: list[ChartValuesFileObservation] = []
+        if scope_name == "hosted-cluster" and hosted_path not in paths:
+            files.append(
+                ChartValuesFileObservation(
+                    path=SourceValue(
+                        hosted_path,
+                        repository,
+                        "git/trees/main?recursive=1",
+                        confidence="inferred",
+                    ),
+                    present=SourceValue(False, repository, hosted_path),
+                    scope=SourceValue(
+                        scope_name,
+                        repository,
+                        hosted_path,
+                        confidence="inferred",
+                    ),
+                    chart=SourceValue(
+                        "hosted-cluster",
+                        repository,
+                        hosted_path,
+                        confidence="inferred",
+                    ),
+                    values=SourceValue(None, repository, hosted_path),
+                    entries=(),
+                )
+            )
+
+        for path in paths:
+            text = client.get_file(repository, path)
+            parsed = yaml.safe_load(text) if text else None
+            supported = parsed is None or isinstance(parsed, dict)
+            values = parsed if isinstance(parsed, dict) else {}
+            if scope_name == "hosted-cluster":
+                chart_name = "hosted-cluster"
+            else:
+                chart_name = path.rsplit("/", 1)[-1].removesuffix(".yaml")
+            files.append(
+                ChartValuesFileObservation(
+                    path=SourceValue(
+                        path,
+                        repository,
+                        "git/trees/main?recursive=1",
+                        confidence="inferred",
+                    ),
+                    present=SourceValue(True, repository, path),
+                    scope=SourceValue(
+                        scope_name,
+                        repository,
+                        path,
+                        confidence="inferred",
+                    ),
+                    chart=SourceValue(
+                        chart_name,
+                        repository,
+                        path,
+                        confidence="inferred",
+                    ),
+                    values=SourceValue(
+                        values,
+                        repository,
+                        path,
+                        confidence="exact" if supported else "unsupported",
+                    ),
+                    entries=(
+                        _flatten_chart_values(repository, path, values)
+                        if supported
+                        else ()
+                    ),
+                )
+            )
+
+        scopes.append(
+            ChartValuesScopeObservation(
+                scope=SourceValue(
+                    scope_name,
+                    repository,
+                    prefix,
+                    confidence="inferred",
+                ),
+                prefix=SourceValue(
+                    prefix,
+                    repository,
+                    "git/trees/main?recursive=1",
+                    confidence="inferred",
+                ),
+                present=SourceValue(bool(paths), repository, prefix),
+                files=tuple(files),
+            )
+        )
+
+    return ChartValuesObservation(
+        scopes=tuple(scopes),
         source_repository=repository,
     )
 

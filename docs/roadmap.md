@@ -2,7 +2,7 @@
 
 ## Direction
 
-`moc-env` remains one CLI with separate infra-cluster and workload-cluster
+`moc-env` remains one CLI with separate hub-cluster and hosted-workload-cluster
 check suites. The implementation moves through three connected capabilities:
 
 1. **Observe** current repository configuration.
@@ -118,7 +118,7 @@ Validate:
 - required metadata;
 - required network and domain fields;
 - IP and CIDR syntax;
-- environment and infra-cluster naming consistency;
+- environment and hub-cluster naming consistency;
 - duplicate keys;
 - unknown fields, warning rather than silently accepting them;
 - secret-like fields, rejecting them.
@@ -179,12 +179,12 @@ Extract:
 - hosted-cluster values;
 - workload component values;
 - workload applications;
-- references to the parent infra cluster.
+- references to the parent hub cluster.
 
 Missing values must remain explicit; they must not disappear from the YAML.
 
 The exporter emits a versioned `moc-env/v1alpha1` `WorkloadCluster` document.
-It records the parent infra cluster, host group and count, machine inventory,
+It records the parent hub cluster, host group and count, machine inventory,
 boot image, hosted-cluster values, component values, application paths, and
 repository/path/ref provenance. Missing GitOps scopes remain explicit with
 `present: false`; ambiguous boot-image selections are represented with an
@@ -204,7 +204,7 @@ uv run moc-env check-workload \
 
 Cross-check:
 
-- referenced infra cluster exists;
+- referenced hub cluster exists;
 - names are consistent;
 - networks are compatible;
 - boot image is cluster-specific;
@@ -220,19 +220,41 @@ and component values, application path references, and relevant pull requests.
 Application absence is valid when desired state records it as absent. Text,
 JSON, and Markdown output are available; hard differences return exit code 1.
 
+## Chart-values documentation
+
+**Status:** complete
+
+Add a read-only command that explains how values are organized in `oac-apps`:
+
+```sh
+uv run moc-env document-values bu-ist-demo
+```
+
+The command reads merged-`main` values files and generates a Markdown guide
+for four scopes:
+
+- hub-wide values;
+- hub local-cluster values;
+- hosted-cluster values;
+- workload-component values.
+
+Each value retains repository, path, and ref provenance. Missing files and
+unsupported YAML shapes remain explicit. The guide is observational and does
+not replace upstream Helm chart documentation.
+
 ## Phase 7 — environment bundles
 
-Add one environment YAML that references one infra cluster and one or more
+Add one environment YAML that references one hub cluster and one or more
 workload clusters:
 
 ```yaml
-apiVersion: moc.org/v1alpha1
+apiVersion: moc-env/v1alpha1
 kind: Environment
 metadata:
   name: bu-ist-demo
 spec:
   issue: https://github.com/CCI-MOC/MOC-issues/issues/666
-  infraCluster: bu-ist-demo-infra
+  hubCluster: bu-ist-demo-infra
   workloadClusters:
     - bu-ist-demo-workload0
 ```

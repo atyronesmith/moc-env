@@ -9,6 +9,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from .checks import KNOWN_ISSUES, StatusChecker, list_environments
+from .chart_values import render_chart_values_markdown
 from .credentials import (
     CredentialError,
     CredentialNotFoundError,
@@ -31,7 +32,11 @@ from .export import (
     workload_cluster_name,
 )
 from .model import Environment
-from .observed import read_apps_observation, read_infra_observation
+from .observed import (
+    read_apps_observation,
+    read_chart_values_observation,
+    read_infra_observation,
+)
 from .report import (
     render_environment_list_json,
     render_environment_list_text,
@@ -131,10 +136,31 @@ def build_list_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def build_document_values_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="moc-env document-values",
+        description="Generate a Markdown guide to hub and workload chart values",
+    )
+    parser.add_argument("environment", help="Environment name, such as bu-ist-demo")
+    parser.add_argument(
+        "--workload",
+        default="workload0",
+        help="Workload name, such as workload0 or bu-ist-demo-workload0",
+    )
+    parser.add_argument(
+        "--output",
+        help="Write the Markdown guide to this file instead of stdout",
+    )
+    _add_credential_arguments(parser)
+    return parser
+
+
 def build_export_infra_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="moc-env export-infra",
-        description="Export a deterministic draft InfraCluster snapshot from merged main",
+        description=(
+            "Export a deterministic draft hub-cluster snapshot from merged main"
+        ),
     )
     parser.add_argument("environment", help="Environment name, such as bu-ist-demo")
     parser.add_argument(
@@ -193,7 +219,9 @@ def build_validate_parser() -> argparse.ArgumentParser:
 def build_check_infra_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="moc-env check-infra",
-        description="Compare a desired-state InfraCluster document with merged main",
+        description=(
+            "Compare a desired-state hub-cluster document with merged main"
+        ),
     )
     parser.add_argument("file", help="Path to a desired-state YAML file")
     parser.add_argument(
@@ -305,6 +333,59 @@ def main(argv: list[str] | None = None) -> int:
             print(render_environment_list_json(environments), end="")
         else:
             print(render_environment_list_text(environments), end="")
+        return 0
+
+    if arguments and arguments[0] == "document-values":
+        args = build_document_values_parser().parse_args(arguments[1:])
+        environment = Environment(name=args.environment)
+        try:
+            workload_cluster = workload_cluster_name(environment, args.workload)
+        except ValueError as exc:
+            print(f"moc-env: {exc}", file=sys.stderr)
+            return 2
+        github_token = _resolve_github_token(args)
+        client = GitHubClient(token=github_token, timeout=args.timeout)
+        stage_step = 0
+
+        def print_values_progress(
+            stage: str, action: str, repository: str, path: str
+        ) -> None:
+            nonlocal stage_step
+            stage_step += 1
+            print(
+                f"▶ Step {stage_step}: {stage}\n"
+                f"    Action:     {action}\n"
+                f"    Repository: {repository}\n"
+                f"    Source:     {path}",
+                file=sys.stderr,
+            )
+
+        try:
+            observation = read_chart_values_observation(
+                client,
+                environment,
+                workload_cluster,
+                progress=print_values_progress,
+            )
+            rendered = render_chart_values_markdown(environment, observation)
+        except (GitHubError, RateLimitError) as exc:
+            print(f"moc-env: {exc}", file=sys.stderr)
+            return 2
+
+        if args.output:
+            output_path = Path(args.output)
+            try:
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_text(rendered, encoding="utf-8")
+            except OSError as exc:
+                print(
+                    f"moc-env: could not write {output_path}: {exc}",
+                    file=sys.stderr,
+                )
+                return 2
+            print(f"moc-env: wrote chart-values guide to {output_path}", file=sys.stderr)
+        else:
+            print(rendered, end="")
         return 0
 
     if arguments and arguments[0] == "export-infra":
