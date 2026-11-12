@@ -57,16 +57,18 @@ spec:
 
 ## Chart-values documentation
 
-`moc-env document-values` explains the current values by scope and source:
+`moc-env document-values` explains values by scope, chart, type, and source:
 
 ```sh
-uv run moc-env document-values bu-ist-demo
+uv run moc-env document-values
 ```
 
-The generated Markdown distinguishes hub-wide values, hub local-cluster
-values, hosted-cluster values, and workload-component values. It records each
-current value with its repository, path, and ref, while explicitly showing
-missing files or unsupported YAML shapes.
+The generated Markdown is environment-independent. It distinguishes hub-wide
+values, hub local-cluster values, hosted-cluster-default values, hosted-cluster
+values, and workload-component values. It aggregates each key across all
+values files, explains its role in the deployment, and links to a representative
+source file. It deliberately does not print a particular environment's current
+values.
 
 This documentation is observational. It does not replace upstream Helm chart
 documentation or the review process for changing values.

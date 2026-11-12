@@ -227,22 +227,30 @@ JSON, and Markdown output are available; hard differences return exit code 1.
 Add a read-only command that explains how values are organized in `oac-apps`:
 
 ```sh
-uv run moc-env document-values bu-ist-demo
+uv run moc-env document-values
 ```
 
-The command reads merged-`main` values files and generates a Markdown guide
-for four scopes:
+The command reads all merged-`main` values files and generates an
+environment-independent Markdown reference for five scopes:
 
 - hub-wide values;
 - hub local-cluster values;
+- hosted-cluster-default values;
 - hosted-cluster values;
 - workload-component values.
 
-Each value retains repository, path, and ref provenance. Missing files and
-unsupported YAML shapes remain explicit. The guide is observational and does
-not replace upstream Helm chart documentation.
+Keys are aggregated across environments. Each entry records the scopes and
+charts that use it, its observed types, the number of files containing it, a
+representative repository link, and a human-readable description of its role.
+List-valued settings are expanded with `[]` keys, so fields inside repeated
+objects such as node pools and DNS records are documented individually.
+The guide does not print an environment's current values. Unsupported YAML
+shapes remain explicit, and the guide does not replace upstream Helm chart
+documentation.
 
 ## Phase 7 — environment bundles
+
+**Status:** complete
 
 Add one environment YAML that references one hub cluster and one or more
 workload clusters:
@@ -256,10 +264,28 @@ spec:
   issue: https://github.com/CCI-MOC/MOC-issues/issues/666
   hubCluster: bu-ist-demo-infra
   workloadClusters:
-    - bu-ist-demo-workload0
+    - name: bu-ist-demo-workload0
+      parentHubCluster: bu-ist-demo-infra
+  domain: bu-ist-demo.int.massopen.cloud
+  network:
+    machineNetwork: 10.20.26.0/23
 ```
 
-Then validate and check the complete environment.
+Export the draft bundle, validate it, and compare it with merged `main`:
+
+```sh
+uv run moc-env export-environment bu-ist-demo
+uv run moc-env validate desired-state/environments/bu-ist-demo.yaml
+uv run moc-env check-environment \
+  desired-state/environments/bu-ist-demo.yaml
+```
+
+Validation checks the document schema, source provenance, issue URL, hub and
+workload naming, parent-child references, duplicate workloads, domain syntax,
+machine-network CIDR, unknown fields, and secret-like field names. Comparison
+cross-checks those references against current issue, inventory, domain,
+network, and GitOps observations. Text, JSON, and Markdown reports are
+available.
 
 ## Phase 8 — change planning
 

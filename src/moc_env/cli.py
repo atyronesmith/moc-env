@@ -20,6 +20,7 @@ from .credentials import (
 from .github import GitHubClient, GitHubError, RateLimitError
 from .compare import (
     compare_infra,
+    compare_environment,
     compare_workload,
     desired_environment,
     render_comparison_json,
@@ -27,6 +28,7 @@ from .compare import (
     render_comparison_text,
 )
 from .export import (
+    render_environment_export,
     render_infra_export,
     render_workload_export,
     workload_cluster_name,
@@ -34,8 +36,9 @@ from .export import (
 from .model import Environment
 from .observed import (
     read_apps_observation,
-    read_chart_values_observation,
+    read_chart_values_reference_observation,
     read_infra_observation,
+    read_issue_observation,
 )
 from .report import (
     render_environment_list_json,
@@ -45,6 +48,7 @@ from .report import (
     render_text,
 )
 from .validate import (
+    load_environment_document,
     load_yaml_document,
     load_infra_cluster_document,
     load_validation_result,
@@ -139,13 +143,10 @@ def build_list_parser() -> argparse.ArgumentParser:
 def build_document_values_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="moc-env document-values",
-        description="Generate a Markdown guide to hub and workload chart values",
-    )
-    parser.add_argument("environment", help="Environment name, such as bu-ist-demo")
-    parser.add_argument(
-        "--workload",
-        default="workload0",
-        help="Workload name, such as workload0 or bu-ist-demo-workload0",
+        description=(
+            "Generate an environment-independent Markdown guide to "
+            "hub and workload chart values"
+        ),
     )
     parser.add_argument(
         "--output",
@@ -190,6 +191,30 @@ def build_export_workload_parser() -> argparse.ArgumentParser:
         "--output",
         help=(
             "Write the YAML snapshot to this file instead of stdout; "
+            "the command never creates or updates GitHub content"
+        ),
+    )
+    _add_credential_arguments(parser)
+    return parser
+
+
+def build_export_environment_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="moc-env export-environment",
+        description=(
+            "Export a deterministic draft Environment bundle from merged main"
+        ),
+    )
+    parser.add_argument("environment", help="Environment name, such as bu-ist-demo")
+    parser.add_argument(
+        "--issue",
+        type=int,
+        help="MOC-issues number; defaults to the known issue for the environment",
+    )
+    parser.add_argument(
+        "--output",
+        help=(
+            "Write the YAML bundle to this file instead of stdout; "
             "the command never creates or updates GitHub content"
         ),
     )
@@ -249,6 +274,31 @@ def build_check_workload_parser() -> argparse.ArgumentParser:
         description="Compare a desired-state WorkloadCluster document with merged main",
     )
     parser.add_argument("file", help="Path to a desired-state YAML file")
+    parser.add_argument(
+        "--format",
+        choices=("text", "json", "markdown"),
+        default="text",
+        help="Output format",
+    )
+    parser.add_argument(
+        "--output",
+        help="Write the comparison report to this file instead of stdout",
+    )
+    parser.add_argument(
+        "--no-prs",
+        action="store_true",
+        help="Do not inspect pull requests",
+    )
+    _add_credential_arguments(parser)
+    return parser
+
+
+def build_check_environment_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="moc-env check-environment",
+        description="Compare a desired-state Environment bundle with merged main",
+    )
+    parser.add_argument("file", help="Path to an Environment bundle YAML file")
     parser.add_argument(
         "--format",
         choices=("text", "json", "markdown"),
@@ -337,12 +387,6 @@ def main(argv: list[str] | None = None) -> int:
 
     if arguments and arguments[0] == "document-values":
         args = build_document_values_parser().parse_args(arguments[1:])
-        environment = Environment(name=args.environment)
-        try:
-            workload_cluster = workload_cluster_name(environment, args.workload)
-        except ValueError as exc:
-            print(f"moc-env: {exc}", file=sys.stderr)
-            return 2
         github_token = _resolve_github_token(args)
         client = GitHubClient(token=github_token, timeout=args.timeout)
         stage_step = 0
@@ -361,13 +405,11 @@ def main(argv: list[str] | None = None) -> int:
             )
 
         try:
-            observation = read_chart_values_observation(
+            observation = read_chart_values_reference_observation(
                 client,
-                environment,
-                workload_cluster,
                 progress=print_values_progress,
             )
-            rendered = render_chart_values_markdown(environment, observation)
+            rendered = render_chart_values_markdown(observation)
         except (GitHubError, RateLimitError) as exc:
             print(f"moc-env: {exc}", file=sys.stderr)
             return 2
@@ -383,7 +425,10 @@ def main(argv: list[str] | None = None) -> int:
                     file=sys.stderr,
                 )
                 return 2
-            print(f"moc-env: wrote chart-values guide to {output_path}", file=sys.stderr)
+            print(
+                f"moc-env: wrote chart-values reference to {output_path}",
+                file=sys.stderr,
+            )
         else:
             print(rendered, end="")
         return 0
@@ -497,6 +542,84 @@ def main(argv: list[str] | None = None) -> int:
                 f"moc-env: wrote WorkloadCluster YAML to {output_path}",
                 file=sys.stderr,
             )
+        else:
+            print(rendered, end="")
+        return 0
+
+    if arguments and arguments[0] == "export-environment":
+        args = build_export_environment_parser().parse_args(arguments[1:])
+        issue_number = args.issue
+        if issue_number is None:
+            issue_number = KNOWN_ISSUES.get(args.environment)
+        if issue_number is None:
+            print(
+                "moc-env: environment has no known MOC issue; pass --issue",
+                file=sys.stderr,
+            )
+            return 2
+        environment = Environment(
+            name=args.environment,
+            issue_number=issue_number,
+        )
+        github_token = _resolve_github_token(args)
+        client = GitHubClient(token=github_token, timeout=args.timeout)
+        stage_step = 0
+
+        def print_environment_export_progress(
+            stage: str,
+            action: str,
+            repository: str,
+            path: str,
+        ) -> None:
+            nonlocal stage_step
+            stage_step += 1
+            print(
+                f"▶ Step {stage_step}: {stage}\n"
+                f"    Action:     {action}\n"
+                f"    Repository: {repository}\n"
+                f"    Source:     {path}",
+                file=sys.stderr,
+            )
+
+        try:
+            issue = read_issue_observation(
+                client,
+                environment,
+                progress=print_environment_export_progress,
+            )
+            infra_observation = read_infra_observation(
+                client,
+                environment,
+                progress=print_environment_export_progress,
+            )
+            apps_observation = read_apps_observation(
+                client,
+                environment,
+                progress=print_environment_export_progress,
+                include_pull_requests=False,
+            )
+            rendered = render_environment_export(
+                environment,
+                issue,
+                infra_observation,
+                apps_observation,
+            )
+        except (GitHubError, RateLimitError) as exc:
+            print(f"moc-env: {exc}", file=sys.stderr)
+            return 2
+
+        if args.output:
+            output_path = Path(args.output)
+            try:
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_text(rendered, encoding="utf-8")
+            except OSError as exc:
+                print(
+                    f"moc-env: could not write {output_path}: {exc}",
+                    file=sys.stderr,
+                )
+                return 2
+            print(f"moc-env: wrote Environment YAML to {output_path}", file=sys.stderr)
         else:
             print(rendered, end="")
         return 0
@@ -673,6 +796,101 @@ def main(argv: list[str] | None = None) -> int:
             )
             comparison = compare_workload(
                 document,
+                infra_observation,
+                apps_observation,
+            )
+        except (GitHubError, RateLimitError) as exc:
+            print(f"moc-env: {exc}", file=sys.stderr)
+            return 2
+
+        if args.format == "json":
+            rendered = render_comparison_json(comparison)
+        elif args.format == "markdown":
+            rendered = render_comparison_markdown(comparison)
+        else:
+            rendered = render_comparison_text(comparison)
+
+        if args.output:
+            output_path = Path(args.output)
+            try:
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_text(rendered, encoding="utf-8")
+            except OSError as exc:
+                print(
+                    f"moc-env: could not write {output_path}: {exc}",
+                    file=sys.stderr,
+                )
+                return 2
+            print(
+                f"moc-env: wrote {args.format} comparison report to {output_path}",
+                file=sys.stderr,
+            )
+        else:
+            print(rendered, end="")
+        differences = {
+            "missing_from_main",
+            "value_mismatch",
+            "unexpected_in_main",
+            "unsupported_check",
+            "ambiguous",
+        }
+        return 1 if any(check.state in differences for check in comparison.checks) else 0
+
+    if arguments and arguments[0] == "check-environment":
+        args = build_check_environment_parser().parse_args(arguments[1:])
+        input_path = Path(args.file)
+        document, validation = load_environment_document(input_path)
+        if not validation.valid:
+            print(
+                f"moc-env: desired-state document is invalid: {input_path}",
+                file=sys.stderr,
+            )
+            for error in validation.errors:
+                print(f"  - {error}", file=sys.stderr)
+            return 2
+
+        environment = desired_environment(document)
+        github_token = _resolve_github_token(args)
+        client = GitHubClient(token=github_token, timeout=args.timeout)
+        stage_step = 0
+
+        def print_environment_comparison_progress(
+            stage: str,
+            action: str,
+            repository: str,
+            path: str,
+        ) -> None:
+            nonlocal stage_step
+            stage_step += 1
+            print(
+                f"▶ Step {stage_step}: {stage}\n"
+                f"    Action:     {action}\n"
+                f"    Repository: {repository}\n"
+                f"    Source:     {path}",
+                file=sys.stderr,
+            )
+
+        try:
+            issue = read_issue_observation(
+                client,
+                environment,
+                progress=print_environment_comparison_progress,
+            )
+            infra_observation = read_infra_observation(
+                client,
+                environment,
+                progress=print_environment_comparison_progress,
+            )
+            apps_observation = read_apps_observation(
+                client,
+                environment,
+                progress=print_environment_comparison_progress,
+                include_pull_requests=not args.no_prs,
+            )
+            comparison = compare_environment(
+                document,
+                environment,
+                issue,
                 infra_observation,
                 apps_observation,
             )

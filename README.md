@@ -129,22 +129,64 @@ The workload export records the parent hub cluster, host inventory, boot
 image, hosted-cluster values, component values, and application paths. Missing
 paths remain explicit with `present: false` and empty path lists.
 
-Generate a Markdown guide to the environment's chart values:
+Generate an environment-independent Markdown reference for chart values:
 
 ```sh
-uv run moc-env document-values bu-ist-demo
+uv run moc-env document-values
 ```
 
 Write the guide to a file:
 
 ```sh
-uv run moc-env document-values bu-ist-demo \
-  --output reports/bu-ist-demo-values.md
+uv run moc-env document-values --output reports/chart-values.md
 ```
 
-The guide groups values into hub-wide, hub local-cluster, hosted-cluster, and
-workload-component scopes. It records current values with repository/path/ref
-provenance and explicitly reports missing files or unsupported YAML shapes.
+The guide groups configuration into hub-wide, hub local-cluster,
+hosted-cluster-default, hosted-cluster, and workload-component scopes. For each
+key it shows the charts and scopes that use it, its observed type, how many
+values files contain it, what it controls, and a representative source link.
+List-valued settings are expanded with `[]` keys so fields inside objects such
+as node pools are documented individually.
+It does not print an environment's current values; it is a general educational
+reference for where each value fits in the deployment.
+
+Export a deterministic draft Environment bundle:
+
+```sh
+uv run moc-env export-environment bu-ist-demo
+```
+
+Write the bundle to a file:
+
+```sh
+uv run moc-env export-environment bu-ist-demo \
+  --output desired-state/environments/bu-ist-demo.yaml
+```
+
+The bundle records the MOC issue, hub cluster, workload clusters and their
+parent references, domain, machine network, and GitOps source repository. It
+uses the team's preferred `hubCluster` terminology while the older
+`InfraCluster` and `export-infra` names remain compatible.
+
+Compare a reviewed Environment bundle with merged `main`:
+
+```sh
+uv run moc-env check-environment \
+  desired-state/environments/bu-ist-demo.yaml
+```
+
+Write a Markdown comparison report:
+
+```sh
+uv run moc-env check-environment \
+  desired-state/environments/bu-ist-demo.yaml \
+  --format markdown \
+  --output reports/bu-ist-demo-environment-comparison.md
+```
+
+The check cross-references the issue, hub and workload inventory groups,
+parent-child references, domain, machine network, and the expected hosted
+cluster, component, and application GitOps paths.
 
 Validate a desired-state document:
 
