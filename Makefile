@@ -17,8 +17,9 @@ endif
 
 RUN_ARGS := $(ENV) --format $(FORMAT) $(PRS_FLAG) $(ARGS)
 
-.PHONY: help setup sync test list run run-text run-json run-markdown \
-        run-no-prs report-markdown build compile diff-check pii-check check lock \
+.PHONY: help setup sync test list export-infra export-infra-file run run-text \
+        run-json run-markdown run-no-prs report-markdown build compile \
+        diff-check pii-check check lock \
         clean clean-all
 
 help: ## Show available targets and common variables
@@ -34,7 +35,7 @@ help: ## Show available targets and common variables
 	@printf '  %-18s %s\n' 'ARGS' 'Additional CLI arguments, quoted if needed'
 	@printf '  %-18s %s\n' 'UV' 'uv executable (default: uv)'
 	@printf '  %-18s %s\n' 'ENV_FILE' 'Not needed; the CLI reads .env by default'
-	@printf '  %-18s %s\n' 'OUTPUT' 'Markdown report destination (default: reports/ENV.md)'
+	@printf '  %-18s %s\n' 'OUTPUT' 'Report or YAML export destination (default: reports/ENV.md)'
 	@printf '\nCredential variables are read directly by the CLI:\n'
 	@printf '  GITHUB_TOKEN, GITHUB_BWS_SECRET_ID, GITHUB_BWS_SECRET_ID_KEYCHAIN_SERVICE,\n'
 	@printf '  GITHUB_BWS_SECRET_ID_KEYCHAIN_ACCOUNT, BWS_ACCESS_TOKEN,\n'
@@ -50,6 +51,12 @@ test: ## Run the unit-test suite
 
 list: ## List environment names that can be passed to the CLI
 	$(UV) run --locked moc-env list
+
+export-infra: ## Print a deterministic draft InfraCluster YAML snapshot
+	$(UV) run --locked moc-env export-infra $(ENV) $(ARGS)
+
+export-infra-file: ## Write a draft InfraCluster YAML snapshot to OUTPUT
+	$(UV) run --locked moc-env export-infra $(ENV) --output $(OUTPUT) $(ARGS)
 
 run: run-text ## Run the CLI (default ENV and text format)
 

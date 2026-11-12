@@ -83,6 +83,24 @@ JSON output:
 uv run moc-env list --format json
 ```
 
+Export a deterministic draft infra-cluster snapshot from merged `main`:
+
+```sh
+uv run moc-env export-infra bu-ist-demo
+```
+
+Write the YAML snapshot to a file:
+
+```sh
+uv run moc-env export-infra bu-ist-demo \
+  --output desired-state/infra-clusters/bu-ist-demo-infra.yaml
+```
+
+The export is read-only. It records repository, path, ref, and extraction
+confidence for observed values; derived names and paths are marked `inferred`,
+and unsupported or ambiguous values are represented explicitly. It does not
+claim that a cluster is deployed.
+
 `make check` runs the unit tests, byte-compilation, Git whitespace check, and
 package build.
 
