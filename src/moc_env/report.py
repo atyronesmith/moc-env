@@ -48,6 +48,8 @@ def _markdown_inline(value: Any) -> str:
             return "—"
         return "<br>".join(_markdown_inline(item) for item in value)
     if isinstance(value, str):
+        if value.startswith(("http://", "https://")):
+            return f"[{value}]({value})"
         return f"`{_markdown_escape_cell(value)}`" if value else "—"
     return f"`{value}`"
 
@@ -183,6 +185,7 @@ def _pull_request_table(evidence: dict[str, Any]) -> list[str]:
             pull.get("state"),
             pull.get("merged"),
             pull.get("head_ref"),
+            pull.get("html_url"),
             pull.get("changed_files"),
         ]
         for pull in pull_requests
@@ -191,7 +194,7 @@ def _pull_request_table(evidence: dict[str, Any]) -> list[str]:
         "**Relevant pull requests**",
         "",
         *_markdown_table(
-            ["PR", "Title", "State", "Merged", "Head branch", "Changed files"],
+            ["PR", "Title", "State", "Merged", "Head branch", "Link", "Changed files"],
             rows,
         ),
     ]

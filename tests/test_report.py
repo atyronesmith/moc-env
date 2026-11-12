@@ -81,6 +81,10 @@ class ReportRenderingTest(unittest.TestCase):
         self.assertIn("| Host | Node name | BMC address | Boot image URL |", rendered)
         self.assertIn("`control-0`", rendered)
         self.assertIn("`MOC-R4PAC10U31-S1A`", rendered)
+        self.assertIn(
+            "[http://example.invalid/image.iso](http://example.invalid/image.iso)",
+            rendered,
+        )
 
     def test_markdown_renders_expected_path_table(self) -> None:
         check = {
@@ -128,6 +132,7 @@ class ReportRenderingTest(unittest.TestCase):
                         "state": {"value": "open"},
                         "merged": {"value": False},
                         "head_ref": {"value": "fixture-buildout"},
+                        "html_url": {"value": "https://example.invalid/pull/237"},
                         "changed_files": ["values/fixture/hcp-config.yaml"],
                     }
                 ]
@@ -136,10 +141,14 @@ class ReportRenderingTest(unittest.TestCase):
         rendered = render_markdown({**self.report, "checks": [check]})
         self.assertIn("**Relevant pull requests**", rendered)
         self.assertIn(
-            "| PR | Title | State | Merged | Head branch | Changed files |",
+            "| PR | Title | State | Merged | Head branch | Link | Changed files |",
             rendered,
         )
         self.assertIn("`237` | `Fixture buildout` | `open` | No", rendered)
+        self.assertIn(
+            "[https://example.invalid/pull/237](https://example.invalid/pull/237)",
+            rendered,
+        )
 
     def test_text_path_checks_use_aligned_checklist(self) -> None:
         check = self.report["checks"][0]
