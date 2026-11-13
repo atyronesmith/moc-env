@@ -553,6 +553,10 @@ def render_chart_values_markdown(
     lines = [
         "# 📘 Chart Configuration Reference",
         "",
+        "> **Generated documentation.** This file is produced by "
+        "`moc-env document-values`. Edit `docs/variables/*.yaml` and "
+        "`docs/sources.yaml`; do not edit the generated Markdown directly.",
+        "",
         "This guide explains how `CCI-MOC/oac-apps` organizes Helm chart "
         "values across the deployment. It is intentionally independent of a "
         "particular environment: it documents the purpose and placement of "
@@ -638,40 +642,32 @@ def render_chart_values_markdown(
                         "",
                         variable.definition,
                         "",
+                        "| Field | Value |",
+                        "|---|---|",
                     ]
                 )
                 key_observation = observed_by_key.get(variable.key)
                 if key_observation is None:
-                    lines.extend(
-                        [
-                            "**Discovered:** Not currently observed in merged "
-                            "`main`; this entry documents supported chart input.",
-                            "",
-                        ]
+                    discovery = (
+                        "Not currently observed in merged `main`; this entry "
+                        "documents supported chart input."
                     )
                 else:
-                    lines.extend(
-                        [
-                            "**Discovered:** "
-                            f"charts `{_inline(key_observation.charts.value)}`; "
-                            f"types `{_inline(key_observation.types.value)}`; "
-                            f"{key_observation.file_count.value} values file(s); "
-                            f"scopes `{_inline(key_observation.scopes.value)}`.",
-                            "",
-                        ]
+                    discovery = (
+                        f"Charts: `{_inline(key_observation.charts.value)}`. "
+                        f"Types: `{_inline(key_observation.types.value)}`. "
+                        f"Values files: {key_observation.file_count.value}. "
+                        f"Scopes: `{_inline(key_observation.scopes.value)}`."
                     )
+                lines.append(f"| Chart discovery | {discovery} |")
                 if variable.related:
-                    lines.extend(
-                        [
-                            "**Related:** "
-                            + ", ".join(f"`{item}`" for item in variable.related),
-                            "",
-                        ]
-                    )
+                    related = ", ".join(f"`{item}`" for item in variable.related)
+                    lines.append(f"| Related keys | {related} |")
                 if variable.evidence:
-                    lines.extend(
-                        [f"**Source(s):** {_source_links(manual, variable)}", ""]
+                    lines.append(
+                        f"| Source(s) | {_source_links(manual, variable)} |"
                     )
+                lines.append("")
 
     lines.extend(
         [
