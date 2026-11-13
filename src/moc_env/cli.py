@@ -29,7 +29,11 @@ from .credentials import (
     load_credential_environment_file,
 )
 from .github import GitHubClient, GitHubError, RateLimitError
-from .completion import bash_completion_script, zsh_completion_script
+from .completion import (
+    bash_completion_script,
+    command_help_epilog,
+    zsh_completion_script,
+)
 from .compare import (
     compare_infra,
     compare_environment,
@@ -149,7 +153,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="moc-env",
         description="Report CCI-MOC environment configuration state from public GitHub repositories",
-        epilog="Run 'moc-env list' to discover environment names that can be checked.",
+        epilog=command_help_epilog(),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     _add_status_arguments(parser)
     return parser
