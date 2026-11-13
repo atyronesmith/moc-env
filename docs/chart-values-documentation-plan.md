@@ -213,6 +213,8 @@ be the primary organizing principle.
 
 ## Initial implementation slice
 
+**Status:** Step 1 is complete.
+
 1. Add `docs/sources.yaml` with the hosted-cluster address and DNS design
    document as `dns-design`.
 2. Move DNS-related definitions into `docs/variables/dns.yaml`.

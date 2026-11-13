@@ -1,0 +1,17 @@
+schemaVersion: "1"
+sources:
+  dns-design:
+    repository: CCI-MOC/oac-apps
+    path: docs/superpowers/specs/2026-08-28-hosted-cluster-address-dns-design.md
+    ref: ba0c0e8c47855e65edb85b80f9d904ee6b1e17b3
+    title: Hosted Cluster Address and DNS Design
+    kind: design
+    topics:
+      - dns
+      - hosted-cluster
+      - networking
+    summary: >-
+      Explains internal and external hosted-control-plane DNS domains, record
+      layout, wildcard behavior, and the relationship between
+      hcpInternalDomain and hcpExternalDomain.
+    url: https://github.com/CCI-MOC/oac-apps/blob/ba0c0e8c47855e65edb85b80f9d904ee6b1e17b3/docs/superpowers/specs/2026-08-28-hosted-cluster-address-dns-design.md
