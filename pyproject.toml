@@ -18,6 +18,10 @@ moc-env = "moc_env.cli:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/moc_env"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"docs/sources.yaml" = "moc_env/docs/sources.yaml"
+"docs/variables" = "moc_env/docs/variables"
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"

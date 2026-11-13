@@ -244,14 +244,16 @@ environment-independent Markdown reference for five scopes:
 - hosted-cluster values;
 - workload-component values.
 
-Keys are aggregated across environments. Each entry records the scopes and
-charts that use it, its observed types, the number of files containing it, a
-representative repository link, and a human-readable description of its role.
-List-valued settings are expanded with `[]` keys, so fields inside repeated
-objects such as node pools and DNS records are documented individually.
-The guide does not print an environment's current values. Unsupported YAML
-shapes remain explicit, and the guide does not replace upstream Helm chart
-documentation.
+Keys are aggregated across environments. Manual definitions provide the
+reviewed narrative, defaults, relationships, and evidence; discovery adds the
+scopes, charts, types, and file counts where each key currently appears.
+Evidence uses compact source IDs and a single source appendix rather than
+per-variable URLs. Variables without manual definitions remain in an
+uncurated section. List-valued settings are expanded with `[]` keys, so fields
+inside repeated objects such as node pools and DNS records are documented
+individually. The guide does not print an environment's current values.
+Unsupported YAML shapes remain explicit, and the guide does not replace
+upstream Helm chart documentation.
 
 ## Phase 7 — environment bundles
 

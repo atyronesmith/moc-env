@@ -141,14 +141,15 @@ Write the guide to a file:
 uv run moc-env document-values --output reports/chart-values.md
 ```
 
-The guide groups configuration into hub-wide, hub local-cluster,
-hosted-cluster-default, hosted-cluster, and workload-component scopes. For each
-key it shows the charts and scopes that use it, its observed type, how many
-values files contain it, what it controls, and a representative source link.
-List-valued settings are expanded with `[]` keys so fields inside objects such
-as node pools are documented individually.
-It does not print an environment's current values; it is a general educational
-reference for where each value fits in the deployment.
+The guide is topic-first. Manual definitions in `docs/variables/*.yaml` provide
+the reviewed explanation, defaults, relationships, and evidence for each
+variable. Repository discovery adds the charts, scopes, types, and file counts
+where that key currently appears. Evidence is shown with compact IDs such as
+`DNS-1`; the source appendix lists each cited document once instead of
+repeating a URL for every variable row. Variables without a manual definition
+remain visible in an uncurated section. List-valued settings are expanded with
+`[]` keys so fields inside objects such as node pools are documented
+individually. The guide does not print an environment's current values.
 
 Export a deterministic draft Environment bundle:
 

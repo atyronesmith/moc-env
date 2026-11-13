@@ -21,6 +21,7 @@ class ValuesClient(FakeGitHubClient):
                 "values/bu-ist-demo-infra/hcp-config.yaml",
                 "values/bu-ist-demo-infra/local-cluster/acm.yaml",
                 "hosted-clusters/bu-ist-demo-infra/compliance.yaml",
+                "hosted-clusters/bu-ist-demo-infra/values.yaml",
                 "hosted-clusters/bu-ist-demo-infra/"
                 "bu-ist-demo-workload0/values.yaml",
                 "values/bu-ist-demo-infra/"
@@ -44,6 +45,14 @@ multiClusterHub:
 """,
                 "hosted-clusters/bu-ist-demo-infra/compliance.yaml": """
 fips: true
+""",
+                "hosted-clusters/bu-ist-demo-infra/values.yaml": """
+baseDomain: hcp.bu-ist-demo.int.massopen.cloud
+hcpInternalDomain: hcp-int.bu-ist-demo.int.massopen.cloud
+hcpExternalDomain: hcp.bu-ist-demo.int.massopen.cloud
+dns:
+  enabled: true
+  autoGenerate: true
 """,
                 "hosted-clusters/bu-ist-demo-infra/"
                 "bu-ist-demo-workload0/values.yaml": """
@@ -150,14 +159,21 @@ class ChartValuesTest(unittest.TestCase):
         self.assertIn("# 📘 Chart Configuration Reference", rendered)
         self.assertIn("## Deployment model", rendered)
         self.assertIn("## Scope summary", rendered)
-        self.assertIn("## hosted-cluster", rendered)
-        self.assertIn("## workload-components", rendered)
-        self.assertIn("| Key | Charts | Type | Files | What it controls | Source |", rendered)
+        self.assertIn("## Hosted Cluster DNS and Addressing", rendered)
+        self.assertIn("### Hub-level domains", rendered)
+        self.assertIn("#### `hcpExternalDomain`", rendered)
+        self.assertIn("**Evidence:** DNS-1, HCP-1", rendered)
+        self.assertIn("## Uncurated variables", rendered)
+        self.assertIn("### hosted-cluster", rendered)
+        self.assertIn("### workload-components", rendered)
+        self.assertIn("| Key | Charts | Type | Files | What it controls |", rendered)
         self.assertIn("`release.channel`", rendered)
         self.assertIn("`nodePools[].replicas`", rendered)
         self.assertIn("OpenShift release channel used to select cluster updates", rendered)
         self.assertIn("⚠️ Secret-like name", rendered)
-        self.assertIn("[Example](", rendered)
+        self.assertIn("## Sources", rendered)
+        self.assertIn("`DNS-1`", rendered)
+        self.assertNotIn("[Example](", rendered)
         self.assertNotIn("bu-ist-demo-workload0`\n", rendered)
         self.assertNotIn("stable-4.22", rendered)
 
