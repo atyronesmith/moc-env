@@ -22,7 +22,7 @@ evidence references and locally cached background documentation.
 - **The final guide is assembled from both layers.** Discovery supplies where a
   value appears and what repository state shows; manual entries supply what the
   value means and how it is used.
-- **Evidence is compact.** Variable tables use short source IDs such as `DNS-1`;
+- **Source references are compact.** Variable tables use short source IDs such as `DNS-1`;
   the guide lists each unique source once in an appendix.
 - **Documentation remains local and read-only.** Catalog refresh and document
   generation do not push, create pull requests, comment, or otherwise mutate

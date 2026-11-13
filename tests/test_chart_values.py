@@ -162,7 +162,10 @@ class ChartValuesTest(unittest.TestCase):
         self.assertIn("## Hosted Cluster DNS and Addressing", rendered)
         self.assertIn("### Hub-level domains", rendered)
         self.assertIn("#### `hcpExternalDomain`", rendered)
-        self.assertIn("**Evidence:** DNS-1, HCP-1", rendered)
+        self.assertIn(
+            "**Source(s):** [DNS-1](#sources), [HCP-1](#sources)",
+            rendered,
+        )
         self.assertIn("## Uncurated variables", rendered)
         self.assertIn("### hosted-cluster", rendered)
         self.assertIn("### workload-components", rendered)
@@ -173,6 +176,7 @@ class ChartValuesTest(unittest.TestCase):
         self.assertIn("⚠️ Secret-like name", rendered)
         self.assertIn("## Sources", rendered)
         self.assertIn("`DNS-1`", rendered)
+        self.assertIn("[DNS-1](#sources)", rendered)
         self.assertNotIn("[Example](", rendered)
         self.assertNotIn("bu-ist-demo-workload0`\n", rendered)
         self.assertNotIn("stable-4.22", rendered)

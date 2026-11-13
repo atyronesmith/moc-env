@@ -247,8 +247,8 @@ environment-independent Markdown reference for five scopes:
 Keys are aggregated across environments. Manual definitions provide the
 reviewed narrative, defaults, relationships, and evidence; discovery adds the
 scopes, charts, types, and file counts where each key currently appears.
-Evidence uses compact source IDs and a single source appendix rather than
-per-variable URLs. Variables without manual definitions remain in an
+Source references use compact in-document links and a single source appendix
+rather than per-variable URLs. Variables without manual definitions remain in an
 uncurated section. List-valued settings are expanded with `[]` keys, so fields
 inside repeated objects such as node pools and DNS records are documented
 individually. The guide does not print an environment's current values.
