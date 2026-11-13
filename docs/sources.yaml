@@ -1,5 +1,32 @@
 schemaVersion: "1"
 sources:
+  hosted-cluster-chart:
+    repository: CCI-MOC/oac-apps
+    path: charts/hosted-cluster/values.yaml
+    ref: ba0c0e8c47855e65edb85b80f9d904ee6b1e17b3
+    title: Hosted Cluster Chart Defaults
+    kind: chart
+    topics:
+      - hosted-cluster
+      - dns
+      - networking
+    summary: >-
+      Default values and inline comments for the hosted-cluster chart,
+      including DNS generation, ingress, and service addressing.
+    url: https://github.com/CCI-MOC/oac-apps/blob/ba0c0e8c47855e65edb85b80f9d904ee6b1e17b3/charts/hosted-cluster/values.yaml
+  external-dns-operator-chart:
+    repository: CCI-MOC/oac-apps
+    path: charts/external-dns-operator/values.yaml
+    ref: ba0c0e8c47855e65edb85b80f9d904ee6b1e17b3
+    title: External DNS Operator Chart Defaults
+    kind: chart
+    topics:
+      - dns
+      - external-dns
+    summary: >-
+      Default values and inline comments for the ExternalDNS operator chart,
+      including provider credentials, domain filters, label filters, and zones.
+    url: https://github.com/CCI-MOC/oac-apps/blob/ba0c0e8c47855e65edb85b80f9d904ee6b1e17b3/charts/external-dns-operator/values.yaml
   dns-design:
     repository: CCI-MOC/oac-apps
     path: docs/superpowers/specs/2026-08-28-hosted-cluster-address-dns-design.md

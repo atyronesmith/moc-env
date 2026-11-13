@@ -1,0 +1,405 @@
+schemaVersion: "1"
+topic: dns
+title: Hosted Cluster DNS and Addressing
+overview: >-
+  Hosted clusters use two DNS facings. The internal facing carries
+  control-plane and router names that must be reachable from the hub and
+  in-cluster callers. The external facing carries names that must be reachable
+  from outside the hub, usually through a firewall or NAT boundary. The chart
+  creates two hub-wide wildcard records and, when automatic DNS generation is
+  enabled, explicit records for the API server and guest-cluster ingress.
+  ExternalDNS is configured separately to publish those records into the
+  supported DNS provider.
+
+variables:
+  - key: hcpInternalDomain
+    title: Internal hosted-control-plane DNS domain
+    group: Hub-level domains
+    required: true
+    definition: >-
+      Required per-hub domain used for internal-facing hosted-control-plane
+      names, including the internal API server name and the Konnectivity and
+      Ignition route hostnames.
+    related:
+      - hcpExternalDomain
+      - baseDomain
+    evidence:
+      - source: dns-design
+        note: Defines the internal facing and required hub-level value.
+      - source: hosted-cluster-chart
+        note: Chart default comments describe it as fail-closed and per-hub.
+
+  - key: hcpExternalDomain
+    title: External hosted-control-plane DNS domain
+    group: Hub-level domains
+    required: false
+    fallback: hcpInternalDomain
+    definition: >-
+      Optional per-hub domain used for externally reachable
+      hosted-control-plane names, including the external API server name and
+      browser-facing OAuth hostname. When unset, it inherits
+      hcpInternalDomain. Set it only when internal and external names must
+      resolve to different addresses.
+    related:
+      - hcpInternalDomain
+      - baseDomain
+    evidence:
+      - source: dns-design
+        note: Defines the external facing and the fallback rule.
+      - source: hosted-cluster-chart
+        note: Chart comments describe the optional inheritance behavior.
+
+  - key: baseDomain
+    title: Guest-cluster application DNS domain
+    group: Hub-level domains
+    required: true
+    definition: >-
+      Parent DNS domain used for the guest cluster’s application ingress
+      wildcard. The chart derives the wildcard as
+      *.apps.<clusterName>.<baseDomain> unless an explicit ingress hostname is
+      supplied.
+    related:
+      - hcpInternalDomain
+      - hcpExternalDomain
+    evidence:
+      - source: dns-design
+        note: Describes the guest-cluster ingress wildcard and baseDomain use.
+      - source: hosted-cluster-chart
+        note: Chart default comments identify it as a required per-hub value.
+
+  - key: dns.enabled
+    title: DNS record generation switch
+    group: Hosted-cluster DNS generation
+    required: false
+    default: false
+    definition: >-
+      Enables DNS record generation for the hosted cluster. When false, the
+      chart does not create automatic records or process manual dns.records.
+    related:
+      - dns.autoGenerate
+      - dns.records
+    evidence:
+      - source: hosted-cluster-chart
+        note: Chart default value and template gating.
+
+  - key: dns.autoGenerate
+    title: Automatic hosted-cluster DNS generation
+    group: Hosted-cluster DNS generation
+    required: false
+    default: false
+    definition: >-
+      Enables automatic shadow-Service DNS records for the API server and
+      guest-cluster ingress. This creates explicit records for the internal and
+      external API names and the application ingress wildcard, overriding the
+      corresponding hub-wide wildcards.
+    related:
+      - dns.enabled
+      - services.APIServer.ipAddress
+      - services.APIServer.externalIpAddress
+      - ingress.ipAddress
+      - ingress.externalIpAddress
+    evidence:
+      - source: dns-design
+        note: Describes the automatic API and ingress record behavior.
+      - source: hosted-cluster-chart
+        note: Chart template emits the automatic records when enabled.
+
+  - key: dns.records[].name
+    title: Manual DNS record identifier
+    group: Manual DNS records
+    required: true
+    definition: >-
+      Unique identifier for a manual DNS record entry. The chart uses it to
+      build the generated shadow Service name.
+    related:
+      - dns.records[].hostname
+      - dns.records[].target
+    evidence:
+      - source: hosted-cluster-chart
+        note: Chart template uses the name for the generated Service.
+
+  - key: dns.records[].hostname
+    title: Manual DNS record hostname
+    group: Manual DNS records
+    required: true
+    definition: >-
+      DNS hostname published by the manual record. ExternalDNS reads this from
+      the external-dns.alpha.kubernetes.io/hostname annotation.
+    related:
+      - dns.records[].name
+      - dns.records[].target
+    evidence:
+      - source: hosted-cluster-chart
+        note: Chart template writes the hostname annotation.
+
+  - key: dns.records[].target
+    title: Manual DNS record target
+    group: Manual DNS records
+    required: true
+    definition: >-
+      Single IP address or hostname target for a manual DNS record. Specify
+      either target or targets, not both.
+    related:
+      - dns.records[].targets
+      - dns.records[].hostname
+    evidence:
+      - source: hosted-cluster-chart
+        note: Chart template writes the target annotation.
+
+  - key: dns.records[].targets
+    title: Manual DNS record target list
+    group: Manual DNS records
+    required: false
+    definition: >-
+      List of target values for a manual DNS record. The chart joins them into
+      a comma-separated annotation. Specify either target or targets, not both.
+    related:
+      - dns.records[].target
+    evidence:
+      - source: hosted-cluster-chart
+        note: Chart template supports a list of targets.
+
+  - key: externaldns[].name
+    title: ExternalDNS resource name
+    group: ExternalDNS operator
+    required: true
+    definition: >-
+      Name assigned to the generated ExternalDNS resource.
+    related:
+      - externaldns[].domains
+      - externaldns[].zones
+    evidence:
+      - source: external-dns-operator-chart
+        note: Chart template names the ExternalDNS resource from this value.
+
+  - key: externaldns[].credentials
+    title: ExternalDNS credential Secret name
+    group: ExternalDNS operator
+    required: true
+    definition: >-
+      Name of the Secret containing provider credentials used by ExternalDNS.
+      When externalSecret is configured, the chart creates that Secret from the
+      external secret store.
+    related:
+      - externaldns[].externalSecret.remoteKey
+      - externaldns[].externalSecret.secretStore
+    evidence:
+      - source: external-dns-operator-chart
+        note: Chart template references the credential Secret.
+
+  - key: externaldns[].externalSecret.remoteKey
+    title: ExternalDNS remote secret key
+    group: ExternalDNS operator
+    required: false
+    definition: >-
+      Remote key in the external secret store that contains the ExternalDNS
+      provider credentials.
+    related:
+      - externaldns[].credentials
+      - externaldns[].externalSecret.secretStore
+    evidence:
+      - source: external-dns-operator-chart
+        note: Chart template reads the remote key when creating the Secret.
+
+  - key: externaldns[].externalSecret.secretStore
+    title: ExternalDNS secret store name
+    group: ExternalDNS operator
+    required: false
+    definition: >-
+      Name of the ExternalSecret store used to retrieve the ExternalDNS
+      provider credentials.
+    related:
+      - externaldns[].externalSecret.remoteKey
+      - externaldns[].externalSecret.secretStoreType
+    evidence:
+      - source: external-dns-operator-chart
+        note: Chart template references the secret store by name.
+
+  - key: externaldns[].externalSecret.secretStoreType
+    title: ExternalDNS secret store kind
+    group: ExternalDNS operator
+    required: false
+    default: ClusterSecretStore
+    definition: >-
+      Kind of ExternalSecret store used for the ExternalDNS provider
+      credentials. Defaults to ClusterSecretStore.
+    related:
+      - externaldns[].externalSecret.secretStore
+    evidence:
+      - source: external-dns-operator-chart
+        note: Chart template defaults the store kind.
+
+  - key: externaldns[].domains[].filterType
+    title: ExternalDNS domain filter type
+    group: ExternalDNS operator
+    required: false
+    definition: >-
+      Whether the domain entry includes or excludes matching DNS names.
+    related:
+      - externaldns[].domains[].matchType
+      - externaldns[].domains[].name
+    evidence:
+      - source: external-dns-operator-chart
+        note: Chart passes domain filters to the ExternalDNS resource.
+
+  - key: externaldns[].domains[].matchType
+    title: ExternalDNS domain match type
+    group: ExternalDNS operator
+    required: false
+    definition: >-
+      Match strategy applied to the domain filter, such as exact matching.
+    related:
+      - externaldns[].domains[].filterType
+      - externaldns[].domains[].name
+    evidence:
+      - source: external-dns-operator-chart
+        note: Chart passes the match type to the ExternalDNS resource.
+
+  - key: externaldns[].domains[].name
+    title: ExternalDNS domain filter value
+    group: ExternalDNS operator
+    required: false
+    definition: >-
+      DNS domain included or excluded by the ExternalDNS domain filter.
+    related:
+      - externaldns[].domains[].filterType
+      - externaldns[].domains[].matchType
+    evidence:
+      - source: external-dns-operator-chart
+        note: Chart passes the domain name to the ExternalDNS resource.
+
+  - key: externaldns[].hostnameAnnotation
+    title: ExternalDNS hostname annotation policy
+    group: ExternalDNS operator
+    required: false
+    default: Allow
+    definition: >-
+      Controls whether ExternalDNS uses the
+      external-dns.alpha.kubernetes.io/hostname annotation on source Services.
+      The hosted-cluster chart relies on this annotation to publish DNS names.
+    related:
+      - dns.records[].hostname
+    evidence:
+      - source: external-dns-operator-chart
+        note: Chart template sets the hostname annotation policy.
+
+  - key: externaldns[].labelFilter.matchLabels
+    title: ExternalDNS label filter
+    group: ExternalDNS operator
+    required: false
+    definition: >-
+      Labels used to select which source Services ExternalDNS considers. The
+      hosted-cluster chart labels generated DNS shadow Services with
+      massopen.cloud/external-dns.
+    related:
+      - externaldns[].domains
+    evidence:
+      - source: external-dns-operator-chart
+        note: Chart template applies the label filter to the ExternalDNS source.
+
+  - key: externaldns[].zones
+    title: ExternalDNS provider zones
+    group: ExternalDNS operator
+    required: false
+    definition: >-
+      Provider-specific DNS zone identifiers, such as Route 53 hosted-zone
+      IDs, that ExternalDNS may manage.
+    related:
+      - externaldns[].domains
+    evidence:
+      - source: external-dns-operator-chart
+        note: Chart template passes zones to the ExternalDNS resource.
+
+  - key: services.APIServer.ipAddress
+    title: Internal API server address
+    group: Hosted-cluster service addressing
+    required: false
+    definition: >-
+      Internal LoadBalancer IP for the hosted-cluster API server. When DNS
+      auto-generation is enabled, it becomes the target of the internal
+      api-internal-<cluster> record and the MetalLB pool address.
+    related:
+      - services.APIServer.externalIpAddress
+      - hcpInternalDomain
+      - dns.autoGenerate
+    evidence:
+      - source: dns-design
+        note: Describes the internal API LoadBalancer and DNS record.
+      - source: hosted-cluster-chart
+        note: Chart template uses the internal API address.
+
+  - key: services.APIServer.externalIpAddress
+    title: External API server address
+    group: Hosted-cluster service addressing
+    required: false
+    definition: >-
+      External firewall IP for the hosted-cluster API server. When DNS
+      auto-generation is enabled, it becomes the target of the external
+      api-external-<cluster> record and the kubeAPIServerDNSName.
+    related:
+      - services.APIServer.ipAddress
+      - hcpExternalDomain
+      - dns.autoGenerate
+    evidence:
+      - source: dns-design
+        note: Describes the external API firewall IP and DNS record.
+      - source: hosted-cluster-chart
+        note: Chart template uses the external API address.
+
+  - key: ingress.ipAddress
+    title: Internal guest-cluster ingress address
+    group: Hosted-cluster service addressing
+    required: false
+    definition: >-
+      Internal fallback target for the guest-cluster application ingress
+      wildcard. Use it when the guest router is not externally reachable.
+    related:
+      - ingress.externalIpAddress
+      - baseDomain
+    evidence:
+      - source: dns-design
+        note: Describes the guest ingress wildcard and internal fallback.
+      - source: hosted-cluster-chart
+        note: Chart comments describe the internal fallback target.
+
+  - key: ingress.externalIpAddress
+    title: External guest-cluster ingress address
+    group: Hosted-cluster service addressing
+    required: false
+    definition: >-
+      Externally reachable IP for the guest-cluster application ingress
+      wildcard. When set, it takes precedence over ingress.ipAddress.
+    related:
+      - ingress.ipAddress
+      - baseDomain
+    evidence:
+      - source: dns-design
+        note: Describes the external guest ingress target.
+      - source: hosted-cluster-chart
+        note: Chart comments describe the external target and precedence.
+
+  - key: apiVIP
+    title: Spoke-cluster API virtual IP
+    group: Spoke-cluster addressing
+    required: false
+    definition: >-
+      Reserved virtual IP for a spoke cluster’s API endpoint. This is used by
+      the spoke-cluster chart rather than the hosted-cluster chart.
+    related:
+      - ingressVIP
+    evidence:
+      - source: hosted-cluster-chart
+        note: Not applicable; spoke-cluster chart owns this value.
+
+  - key: ingressVIP
+    title: Spoke-cluster ingress virtual IP
+    group: Spoke-cluster addressing
+    required: false
+    definition: >-
+      Reserved virtual IP for a spoke cluster’s ingress router. This is used by
+      the spoke-cluster chart rather than the hosted-cluster chart.
+    related:
+      - apiVIP
+    evidence:
+      - source: hosted-cluster-chart
+        note: Not applicable; spoke-cluster chart owns this value.
