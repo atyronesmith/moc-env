@@ -400,6 +400,8 @@ source, changed files, validation results, and related PRs in dependency order.
 
 ## Phase 12 — operational hardening
 
+**Status:** partial
+
 Add:
 
 - repository response caching and `--refresh`;
@@ -411,3 +413,7 @@ Add:
 - hosted CI;
 - user documentation for credentials, schemas, status, export, checking, and
   PR generation.
+
+The current [user guide](user-guide.md) documents credentials and every
+implemented command through Phase 8. Hosted CI exists but currently fails on
+Linux because four credential tests assume the macOS Keychain executable.
