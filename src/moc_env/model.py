@@ -112,3 +112,70 @@ class StatusReport:
             },
             "checks": [check.to_dict() for check in self.checks],
         }
+
+
+@dataclass(frozen=True)
+class PlannedChange:
+    """One read-only repository change proposed by a Phase 8 plan."""
+
+    repository: str
+    base_ref: str
+    branch: str
+    path: str
+    field: str
+    operation: str
+    desired: Any
+    current: Any
+    reason: str
+    depends_on: tuple[str, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "repository": self.repository,
+            "base_ref": self.base_ref,
+            "branch": self.branch,
+            "path": self.path,
+            "field": self.field,
+            "operation": self.operation,
+            "desired": self.desired,
+            "current": self.current,
+            "reason": self.reason,
+            "depends_on": list(self.depends_on),
+        }
+
+
+@dataclass(frozen=True)
+class ChangePlan:
+    """A deterministic, read-only plan derived from a comparison report."""
+
+    environment: Environment
+    kind: str
+    changes: list[PlannedChange] = field(default_factory=list)
+
+    @property
+    def overall_state(self) -> str:
+        if self.changes:
+            return "CHANGES PLANNED"
+        return "NO CHANGES REQUIRED"
+
+    def to_dict(self) -> dict[str, Any]:
+        operation_counts: dict[str, int] = {}
+        repository_counts: dict[str, int] = {}
+        for change in self.changes:
+            operation_counts[change.operation] = (
+                operation_counts.get(change.operation, 0) + 1
+            )
+            repository_counts[change.repository] = (
+                repository_counts.get(change.repository, 0) + 1
+            )
+        return {
+            "kind": self.kind,
+            "environment": self.environment.to_dict(),
+            "overall_state": self.overall_state,
+            "summary": {
+                "change_count": len(self.changes),
+                "operation_counts": dict(sorted(operation_counts.items())),
+                "repository_counts": dict(sorted(repository_counts.items())),
+            },
+            "changes": [change.to_dict() for change in self.changes],
+        }
