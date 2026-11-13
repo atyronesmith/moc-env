@@ -75,6 +75,8 @@ class CompletionTest(unittest.TestCase):
                 self.assertEqual(exit_code, 0)
                 self.assertIn("__complete-environment", stdout)
                 self.assertIn("export-workload", stdout)
+                self.assertIn("hub-status", stdout)
+                self.assertIn("work-status", stdout)
                 if shell == "bash":
                     self.assertIn("complete -o default", stdout)
                 else:

@@ -388,9 +388,10 @@ def _structured_summary(check: dict[str, Any]) -> list[str] | None:
 
 def render_text(report: dict[str, Any]) -> str:
     environment = report["environment"]
+    scope = report.get("scope", "environment")
     lines = [
         "=" * 78,
-        f"MOC environment status: {environment['name']}",
+        f"MOC {scope} status: {environment['name']}",
         "=" * 78,
         f"Hub cluster:      {environment['infra_cluster']}",
         f"Workload cluster: {environment['workload_cluster']}",
@@ -492,8 +493,9 @@ def _check_markdown(check: dict[str, Any], number: int) -> list[str]:
 def render_markdown(report: dict[str, Any]) -> str:
     environment = report["environment"]
     state_counts = report["summary"]["state_counts"]
+    scope = report.get("scope", "environment")
     lines = [
-        "# 🛰️ MOC Environment Configuration Status",
+        f"# 🛰️ MOC {scope.title()} Configuration Status",
         "",
         f"## `{environment['name']}` — {report['overall_state']}",
         "",
@@ -503,6 +505,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         "",
         "| Field | Value |",
         "|---|---|",
+        f"| Scope | `{scope}` |",
         f"| Environment | `{environment['name']}` |",
         f"| MOC issue | `{environment['issue_number']}` |",
         f"| Hub cluster | `{environment['infra_cluster']}` |",
@@ -617,7 +620,7 @@ def render_environment_list_text(environments: list[dict[str, Any]]) -> str:
     lines.extend(
         [
             "",
-            "The environment-level status report includes its hub and workload clusters.",
+            "Use the listed command for a hub- or workload-scoped status report.",
             "",
             "Sources:",
             "  Hub clusters: CCI-MOC/oac-infra/hub-images/inventory.yml",

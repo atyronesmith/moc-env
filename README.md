@@ -84,7 +84,7 @@ make run-no-prs ENV=bu-ist-demo
 ```
 
 List hub and workload clusters, including each cluster type and the
-environment-level status command:
+matching scoped status command:
 
 ```sh
 uv run moc-env list
@@ -103,6 +103,21 @@ Bash or Zsh completion with:
 eval "$(uv run moc-env completion bash)"
 eval "$(uv run moc-env completion zsh)"
 ```
+
+Run a hub-scoped repository-status report:
+
+```sh
+uv run moc-env hub-status bu-ist-demo
+```
+
+Run a workload-scoped repository-status report:
+
+```sh
+uv run moc-env work-status bu-ist-demo
+```
+
+The original `moc-env bu-ist-demo` command remains an environment-level report
+that includes both hub and workload checks.
 
 Export a deterministic draft hub-cluster snapshot from merged `main`. The
 command name remains `export-infra` for compatibility:
