@@ -164,8 +164,8 @@ uv run moc-env document-values --output reports/chart-values.md
 The guide is topic-first. Manual definitions in `docs/variables/*.yaml` provide
 the reviewed explanation, defaults, relationships, and evidence for each
 variable. Repository discovery adds the charts, scopes, types, and file counts
-where that key currently appears. Evidence is shown with compact IDs such as
-`DNS-1`; the source appendix lists each cited document once instead of
+where that key currently appears. Source references are shown as compact links
+such as `DNS-1`; the source appendix lists each cited document once instead of
 repeating a URL for every variable row. Variables without a manual definition
 remain visible in an uncurated section. List-valued settings are expanded with
 `[]` keys so fields inside objects such as node pools are documented

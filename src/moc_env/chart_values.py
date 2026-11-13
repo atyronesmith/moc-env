@@ -509,6 +509,18 @@ def _description(key: str, charts: Iterable[str]) -> str:
     return description
 
 
+def _source_links(
+    manual: ManualDocumentation,
+    variable: ManualVariable,
+) -> str:
+    """Render compact source IDs with links to the source appendix."""
+
+    return ", ".join(
+        f"[{manual.sources[evidence.source].short_id}](#sources)"
+        for evidence in variable.evidence
+    )
+
+
 def render_chart_values_markdown(
     observation: ChartValuesReferenceObservation,
 ) -> str:
@@ -579,8 +591,8 @@ def render_chart_values_markdown(
             "",
             "Manual topics carry the reviewed explanation for each variable. "
             "Discovery adds the charts, types, file counts, and scopes where "
-            "that key currently appears. Evidence uses compact source IDs; the "
-            "appendix lists each referenced document once.",
+            "that key currently appears. Source references use compact links; "
+            "the appendix lists each referenced document once.",
             "",
         ]
     )
@@ -604,21 +616,18 @@ def render_chart_values_markdown(
                 [
                     f"### {group_name}",
                     "",
-                    "| Key | Required | Default or fallback | Evidence |",
+                    "| Key | Required | Default or fallback | Source(s) |",
                     "|---|---|---|---|",
             ]
         )
             for variable in variables:
                 default_or_fallback = variable.default or variable.fallback or "—"
-                evidence_ids = ", ".join(
-                    manual.sources[evidence.source].short_id
-                    for evidence in variable.evidence
-                )
+                source_reference = _source_links(manual, variable)
                 lines.append(
                     f"| `{_inline(variable.key)}` | "
                     f"{'Required' if variable.required else 'Optional'} | "
                     f"`{_inline(default_or_fallback)}` | "
-                    f"{evidence_ids or '—'} |"
+                    f"{source_reference or '—'} |"
                 )
             lines.append("")
 
@@ -660,11 +669,9 @@ def render_chart_values_markdown(
                         ]
                     )
                 if variable.evidence:
-                    evidence_ids = ", ".join(
-                        manual.sources[evidence.source].short_id
-                        for evidence in variable.evidence
+                    lines.extend(
+                        [f"**Source(s):** {_source_links(manual, variable)}", ""]
                     )
-                    lines.extend([f"**Evidence:** {evidence_ids}", ""])
 
     lines.extend(
         [
