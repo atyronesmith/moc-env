@@ -224,6 +224,11 @@ JSON, and Markdown output are available; hard differences return exit code 1.
 
 **Status:** complete
 
+The next documentation milestone is captured in
+[chart-values-documentation-plan.md](chart-values-documentation-plan.md). It
+separates human-authored variable explanations from refreshable repository
+discovery and assembles the final guide from both layers.
+
 Add a read-only command that explains how values are organized in `oac-apps`:
 
 ```sh
