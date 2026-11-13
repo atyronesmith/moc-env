@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
-from .github import github_url
-from .observed import (
-    ChartValuesReferenceObservation,
-    OAC_APPS_REPOSITORY,
-)
+import yaml
+
+from .observed import ChartValuesReferenceObservation
 
 _SCOPE_ORDER = (
     "hub-wide",
@@ -282,6 +282,184 @@ _LEAF_DESCRIPTIONS = {
 }
 
 
+@dataclass(frozen=True)
+class ManualEvidence:
+    """One evidence reference in a manual variable definition."""
+
+    source: str
+    note: str | None = None
+
+
+@dataclass(frozen=True)
+class ManualVariable:
+    """One human-authored variable definition."""
+
+    key: str
+    title: str
+    group: str
+    required: bool
+    definition: str
+    related: tuple[str, ...] = ()
+    evidence: tuple[ManualEvidence, ...] = ()
+    default: Any = None
+    fallback: str | None = None
+
+
+@dataclass(frozen=True)
+class ManualTopic:
+    """One human-authored documentation topic."""
+
+    topic: str
+    title: str
+    overview: str
+    variables: tuple[ManualVariable, ...]
+
+
+@dataclass(frozen=True)
+class ManualSource:
+    """One registered documentation source."""
+
+    source_id: str
+    short_id: str
+    title: str
+    repository: str
+    path: str
+    ref: str
+    kind: str
+    topics: tuple[str, ...]
+    summary: str
+    url: str | None = None
+
+
+@dataclass(frozen=True)
+class ManualDocumentation:
+    """The complete manual documentation layer."""
+
+    sources: dict[str, ManualSource]
+    topics: tuple[ManualTopic, ...]
+
+
+def _documentation_directory() -> Path:
+    """Return the documentation directory bundled with or surrounding the package."""
+
+    candidates = (
+        Path(__file__).parent / "docs",
+        Path.cwd() / "docs",
+        Path(__file__).parents[2] / "docs",
+    )
+    for candidate in candidates:
+        if (candidate / "sources.yaml").is_file():
+            return candidate
+    raise FileNotFoundError("chart-values documentation sources could not be found")
+
+
+def _manual_evidence(data: Any) -> tuple[ManualEvidence, ...]:
+    if not isinstance(data, list):
+        return ()
+    evidence: list[ManualEvidence] = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        evidence.append(
+            ManualEvidence(
+                source=str(item.get("source", "")),
+                note=item.get("note"),
+            )
+        )
+    return tuple(evidence)
+
+
+def _manual_variable(data: Any) -> ManualVariable:
+    if not isinstance(data, dict):
+        raise ValueError("manual variable entry must be a mapping")
+    key = data.get("key")
+    title = data.get("title")
+    group = data.get("group")
+    definition = data.get("definition")
+    if not isinstance(key, str) or not isinstance(title, str):
+        raise ValueError("manual variable entry requires key and title")
+    if not isinstance(group, str) or not isinstance(definition, str):
+        raise ValueError(f"manual variable {key!r} requires group and definition")
+    related = data.get("related", [])
+    if not isinstance(related, list):
+        raise ValueError(f"manual variable {key!r} related must be a list")
+    default = data.get("default")
+    fallback = data.get("fallback")
+    if default is not None and not isinstance(default, (str, bool, int, float)):
+        raise ValueError(f"manual variable {key!r} default must be scalar")
+    if fallback is not None and not isinstance(fallback, str):
+        raise ValueError(f"manual variable {key!r} fallback must be a string")
+    return ManualVariable(
+        key=key,
+        title=title,
+        group=group,
+        required=bool(data.get("required", False)),
+        definition=definition,
+        related=tuple(str(item) for item in related),
+        evidence=_manual_evidence(data.get("evidence", [])),
+        default=default,
+        fallback=fallback,
+    )
+
+
+def load_chart_values_manual() -> ManualDocumentation:
+    """Load manual sources and variable definitions from tracked YAML."""
+
+    documentation = _documentation_directory()
+    source_document = yaml.safe_load(
+        (documentation / "sources.yaml").read_text(encoding="utf-8")
+    )
+    if not isinstance(source_document, dict):
+        raise ValueError("docs/sources.yaml must be a mapping")
+    sources: dict[str, ManualSource] = {}
+    for source_id, source_data in source_document.get("sources", {}).items():
+        if not isinstance(source_data, dict):
+            raise ValueError(f"source {source_id!r} must be a mapping")
+        topics = source_data.get("topics", [])
+        if not isinstance(topics, list):
+            raise ValueError(f"source {source_id!r} topics must be a list")
+        sources[source_id] = ManualSource(
+            source_id=source_id,
+            short_id=str(source_data.get("shortId", source_id)),
+            title=str(source_data.get("title", source_id)),
+            repository=str(source_data.get("repository", "")),
+            path=str(source_data.get("path", "")),
+            ref=str(source_data.get("ref", "")),
+            kind=str(source_data.get("kind", "")),
+            topics=tuple(str(topic) for topic in topics),
+            summary=str(source_data.get("summary", "")),
+            url=source_data.get("url"),
+        )
+
+    topics: list[ManualTopic] = []
+    variables_directory = documentation / "variables"
+    for path in sorted(variables_directory.glob("*.yaml")):
+        topic_document = yaml.safe_load(path.read_text(encoding="utf-8"))
+        if not isinstance(topic_document, dict):
+            raise ValueError(f"{path} must be a mapping")
+        variables = topic_document.get("variables", [])
+        if not isinstance(variables, list):
+            raise ValueError(f"{path} variables must be a list")
+        topics.append(
+            ManualTopic(
+                topic=str(topic_document.get("topic", path.stem)),
+                title=str(topic_document.get("title", path.stem)),
+                overview=str(topic_document.get("overview", "")),
+                variables=tuple(_manual_variable(item) for item in variables),
+            )
+        )
+
+    for topic in topics:
+        for variable in topic.variables:
+            for evidence in variable.evidence:
+                if evidence.source not in sources:
+                    raise ValueError(
+                        f"manual variable {variable.key!r} references unknown "
+                        f"source {evidence.source!r}"
+                    )
+    return ManualDocumentation(sources=sources, topics=tuple(topics))
+
+
 def _inline(value: Any) -> str:
     if isinstance(value, Iterable) and not isinstance(value, str):
         rendered = ", ".join(str(item) for item in value)
@@ -334,8 +512,18 @@ def _description(key: str, charts: Iterable[str]) -> str:
 def render_chart_values_markdown(
     observation: ChartValuesReferenceObservation,
 ) -> str:
-    """Render a human-readable, environment-independent values reference."""
+    """Render a topic-first, environment-independent values reference."""
 
+    manual = load_chart_values_manual()
+    observed_by_key = {
+        key_observation.key.value: key_observation
+        for key_observation in observation.keys
+    }
+    manual_keys = {
+        variable.key
+        for topic in manual.topics
+        for variable in topic.variables
+    }
     scope_files = {
         scope: [file_observation for file_observation in observation.files
                 if file_observation.scope.value == scope]
@@ -387,61 +575,143 @@ def render_chart_values_markdown(
     lines.extend(
         [
             "",
-            "## Configuration keys by scope",
+            "## Manual topics",
             "",
-            "The tables below describe keys found in merged `main`. File counts "
-            "show how many values files use a key; they do not imply that every "
-            "environment uses it. Links point to one representative source file.",
+            "Manual topics carry the reviewed explanation for each variable. "
+            "Discovery adds the charts, types, file counts, and scopes where "
+            "that key currently appears. Evidence uses compact source IDs; the "
+            "appendix lists each referenced document once.",
             "",
         ]
     )
 
-    for scope in _SCOPE_ORDER:
-        metadata = _SCOPE_METADATA[scope]
-        files = scope_files[scope]
+    for topic in manual.topics:
         lines.extend(
             [
-                f"## {scope}",
+                f"## {topic.title}",
+                "",
+                topic.overview,
+                "",
+            ]
+        )
+
+        groups: dict[str, list[ManualVariable]] = {}
+        for variable in topic.variables:
+            groups.setdefault(variable.group, []).append(variable)
+
+        for group_name, variables in groups.items():
+            lines.extend(
+                [
+                    f"### {group_name}",
+                    "",
+                    "| Key | Required | Default or fallback | Evidence |",
+                    "|---|---|---|---|",
+            ]
+        )
+            for variable in variables:
+                default_or_fallback = variable.default or variable.fallback or "—"
+                evidence_ids = ", ".join(
+                    manual.sources[evidence.source].short_id
+                    for evidence in variable.evidence
+                )
+                lines.append(
+                    f"| `{_inline(variable.key)}` | "
+                    f"{'Required' if variable.required else 'Optional'} | "
+                    f"`{_inline(default_or_fallback)}` | "
+                    f"{evidence_ids or '—'} |"
+                )
+            lines.append("")
+
+            for variable in variables:
+                lines.extend(
+                    [
+                        f"#### `{variable.key}`",
+                        "",
+                        variable.definition,
+                        "",
+                    ]
+                )
+                key_observation = observed_by_key.get(variable.key)
+                if key_observation is None:
+                    lines.extend(
+                        [
+                            "**Discovered:** Not currently observed in merged "
+                            "`main`; this entry documents supported chart input.",
+                            "",
+                        ]
+                    )
+                else:
+                    lines.extend(
+                        [
+                            "**Discovered:** "
+                            f"charts `{_inline(key_observation.charts.value)}`; "
+                            f"types `{_inline(key_observation.types.value)}`; "
+                            f"{key_observation.file_count.value} values file(s); "
+                            f"scopes `{_inline(key_observation.scopes.value)}`.",
+                            "",
+                        ]
+                    )
+                if variable.related:
+                    lines.extend(
+                        [
+                            "**Related:** "
+                            + ", ".join(f"`{item}`" for item in variable.related),
+                            "",
+                        ]
+                    )
+                if variable.evidence:
+                    evidence_ids = ", ".join(
+                        manual.sources[evidence.source].short_id
+                        for evidence in variable.evidence
+                    )
+                    lines.extend([f"**Evidence:** {evidence_ids}", ""])
+
+    lines.extend(
+        [
+            "## Uncurated variables",
+            "",
+            "These variables do not yet have a manual definition. They are "
+            "shown with repository-derived facts and a provisional chart-based "
+            "description until a reviewed manual entry is added.",
+            "",
+        ]
+    )
+
+    uncurated_found = False
+    for scope in _SCOPE_ORDER:
+        uncurated = [
+            key_observation
+            for key_observation in scope_keys[scope]
+            if key_observation.key.value not in manual_keys
+        ]
+        if not uncurated:
+            continue
+        uncurated_found = True
+        metadata = _SCOPE_METADATA[scope]
+        lines.extend(
+            [
+                f"### {scope}",
                 "",
                 metadata["description"],
                 "",
                 f"**Path pattern:** `{metadata['pattern']}`",
                 "",
+                "| Key | Charts | Type | Files | What it controls |",
+                "|---|---|---|---:|---|",
             ]
         )
-        unsupported = [
-            file_observation
-            for file_observation in files
-            if file_observation.values.confidence == "unsupported"
-        ]
-        if unsupported:
-            lines.append(
-                "⚠️ Some files in this scope use a YAML shape that cannot be "
-                "safely flattened into key documentation."
-            )
-            lines.append("")
-        if not scope_keys[scope]:
-            lines.append("No supported scalar keys were found in this scope.")
-            lines.append("")
-            continue
-
-        lines.extend(
-            [
-                "| Key | Charts | Type | Files | What it controls | Source |",
-                "|---|---|---|---:|---|---|",
-            ]
-        )
-        for key_observation in scope_keys[scope]:
+        for key_observation in uncurated:
             key = key_observation.key.value
-            path = key_observation.paths.value[0]
             lines.append(
                 f"| `{_inline(key)}` | `{_inline(key_observation.charts.value)}` | "
                 f"`{_inline(key_observation.types.value)}` | "
                 f"{key_observation.file_count.value} | "
-                f"{_description(key, key_observation.charts.value)} | "
-                f"[Example]({github_url(OAC_APPS_REPOSITORY, path)}) |"
+                f"{_description(key, key_observation.charts.value)} |"
             )
         lines.append("")
+
+    if not uncurated_found:
+        lines.extend(["All discovered variables have manual definitions.", ""])
 
     lines.extend(
         [
@@ -449,13 +719,25 @@ def render_chart_values_markdown(
             "",
             "- Choose the scope that matches the deployment layer you are changing.",
             "- Use the path pattern to locate the relevant values file.",
-            "- Read the linked example file and the upstream chart documentation together.",
+            "- Read the cited source and the upstream chart documentation together.",
             "- Keep secret material in an external-secret store; only reference its key here.",
             "- Do not copy an environment's values blindly. Values are examples of usage, not portable defaults.",
             "",
             "This reference is generated read-only from merged `main`. It does "
             "not prove that a chart is installed, healthy, or current in any cluster.",
             "",
+            "## Sources",
+            "",
+            "| ID | Source | Repository | Path | Ref |",
+            "|---|---|---|---|---|",
         ]
     )
+    for source in sorted(manual.sources.values(), key=lambda item: item.short_id):
+        title = f"[{source.title}]({source.url})" if source.url else source.title
+        lines.append(
+            f"| `{source.short_id}` | {title} | `{source.repository}` | "
+            f"`{source.path}` | `{source.ref}` |"
+        )
+    lines.append("")
+
     return "\n".join(lines).rstrip() + "\n"
