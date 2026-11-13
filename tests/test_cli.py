@@ -43,7 +43,8 @@ class CliDispatchTest(unittest.TestCase):
         exit_code, stdout, stderr = self.run_cli(["list"])
         self.assertEqual(exit_code, 0)
         self.assertIn("bu-ist-demo", stdout)
-        self.assertIn("moc-env bu-ist-demo", stdout)
+        self.assertIn("moc-env hub-status bu-ist-demo", stdout)
+        self.assertIn("moc-env work-status bu-ist-demo", stdout)
         self.assertEqual(stderr, "")
 
     def test_list_json_dispatch(self) -> None:
@@ -75,6 +76,27 @@ class CliDispatchTest(unittest.TestCase):
         self.assertIn("Step 1:", stderr)
         self.assertIn("Step 6:", stderr)
         self.assertNotIn("Step 7:", stderr)
+
+    def test_hub_status_json_dispatch(self) -> None:
+        exit_code, stdout, _ = self.run_cli(
+            ["hub-status", "bu-ist-demo", "--format", "json", "--no-prs"]
+        )
+        self.assertEqual(exit_code, 0)
+        report = json.loads(stdout)
+        self.assertEqual(report["scope"], "hub")
+        checks = {check["check"] for check in report["checks"]}
+        self.assertIn("Hub image variables", checks)
+        self.assertNotIn("Workload hosted-cluster values", checks)
+
+    def test_work_status_text_dispatch(self) -> None:
+        exit_code, stdout, stderr = self.run_cli(
+            ["work-status", "bu-ist-demo", "--format", "text", "--no-prs"]
+        )
+        self.assertEqual(exit_code, 0)
+        self.assertIn("MOC workload status: bu-ist-demo", stdout)
+        self.assertIn("bu-ist-demo-workload0 host inventory", stdout)
+        self.assertNotIn("Hub image variables", stdout)
+        self.assertIn("Step 1:", stderr)
 
     def test_status_markdown_dispatch_and_output_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

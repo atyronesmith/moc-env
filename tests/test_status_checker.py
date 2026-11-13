@@ -31,6 +31,40 @@ class StatusCheckerTest(unittest.TestCase):
         for check in report["checks"]:
             self.assertNotIn("expected_paths", check.get("present") or {})
 
+    def test_hub_status_includes_hub_checks_and_excludes_workload_checks(self) -> None:
+        report = StatusChecker(FakeGitHubClient()).run_hub(
+            Environment(name="bu-ist-demo", issue_number=666)
+        ).to_dict()
+        checks = {check["check"] for check in report["checks"]}
+
+        self.assertEqual(report["scope"], "hub")
+        self.assertIn("MOC issue", checks)
+        self.assertIn("bu-ist-demo-infra host inventory", checks)
+        self.assertIn("bu-ist-demo-infra boot image", checks)
+        self.assertIn("Hub image variables", checks)
+        self.assertIn("Infra OIDC client", checks)
+        self.assertIn("Infra local-cluster values", checks)
+        self.assertIn("Relevant pull requests", checks)
+        self.assertNotIn("bu-ist-demo-workload0 host inventory", checks)
+        self.assertNotIn("Workload hosted-cluster values", checks)
+
+    def test_work_status_includes_workload_checks_and_excludes_hub_checks(self) -> None:
+        report = StatusChecker(FakeGitHubClient()).run_workload(
+            Environment(name="bu-ist-demo", issue_number=666)
+        ).to_dict()
+        checks = {check["check"] for check in report["checks"]}
+
+        self.assertEqual(report["scope"], "workload")
+        self.assertIn("MOC issue", checks)
+        self.assertIn("bu-ist-demo-workload0 host inventory", checks)
+        self.assertIn("bu-ist-demo-workload0 boot image", checks)
+        self.assertIn("Workload hosted-cluster values", checks)
+        self.assertIn("Workload component values", checks)
+        self.assertIn("Relevant pull requests", checks)
+        self.assertNotIn("bu-ist-demo-infra host inventory", checks)
+        self.assertNotIn("Hub image variables", checks)
+        self.assertNotIn("Infra OIDC client", checks)
+
     def test_environment_name_that_already_ends_in_infra_is_not_suffixed_again(self) -> None:
         environment = Environment(name="oac-prod-infra")
         self.assertEqual(environment.infra_cluster, "oac-prod-infra")
@@ -62,7 +96,7 @@ class StatusCheckerTest(unittest.TestCase):
                 "environment": "bu-ist-demo",
                 "cluster": "bu-ist-demo-infra",
                 "type": "hub",
-                "status_command": "moc-env bu-ist-demo",
+                "status_command": "moc-env hub-status bu-ist-demo",
                 "source_repository": "CCI-MOC/oac-infra",
                 "source_path": "hub-images/inventory.yml",
             },
@@ -73,7 +107,7 @@ class StatusCheckerTest(unittest.TestCase):
                 "environment": "bu-ist-demo",
                 "cluster": "bu-ist-demo-workload0",
                 "type": "workload",
-                "status_command": "moc-env bu-ist-demo",
+                "status_command": "moc-env work-status bu-ist-demo",
                 "source_repository": "CCI-MOC/oac-infra",
                 "source_path": "infra/inventory/00hosts.yaml",
             },

@@ -7,6 +7,7 @@ import os
 import sys
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 from .checks import KNOWN_ISSUES, StatusChecker, list_environments
 from .chart_values import (
@@ -116,12 +117,7 @@ def _add_credential_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="moc-env",
-        description="Report CCI-MOC environment configuration state from public GitHub repositories",
-        epilog="Run 'moc-env list' to discover environment names that can be checked.",
-    )
+def _add_status_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("environment", help="Environment name, such as bu-ist-demo")
     parser.add_argument(
         "--issue",
@@ -147,7 +143,62 @@ def build_parser() -> argparse.ArgumentParser:
             "useful with --format markdown"
         ),
     )
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="moc-env",
+        description="Report CCI-MOC environment configuration state from public GitHub repositories",
+        epilog="Run 'moc-env list' to discover environment names that can be checked.",
+    )
+    _add_status_arguments(parser)
     return parser
+
+
+def build_hub_status_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="moc-env hub-status",
+        description="Report hub-cluster repository configuration state",
+    )
+    _add_status_arguments(parser)
+    return parser
+
+
+def build_work_status_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="moc-env work-status",
+        description="Report workload-cluster repository configuration state",
+    )
+    _add_status_arguments(parser)
+    return parser
+
+
+def _render_status_report(args: argparse.Namespace, report: dict[str, Any]) -> int:
+    if args.format == "json":
+        rendered = render_json(report)
+    elif args.format == "markdown":
+        rendered = render_markdown(report)
+    else:
+        rendered = render_text(report)
+
+    if args.output:
+        output_path = Path(args.output)
+        try:
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(rendered, encoding="utf-8")
+        except OSError as exc:
+            print(
+                f"moc-env: could not write {output_path}: {exc}",
+                file=sys.stderr,
+            )
+            return 2
+        print(
+            f"moc-env: wrote {args.format} report to {output_path}",
+            file=sys.stderr,
+        )
+    else:
+        print(rendered, end="")
+    return 0
 
 
 def build_list_parser() -> argparse.ArgumentParser:
@@ -1263,6 +1314,54 @@ def main(argv: list[str] | None = None) -> int:
         }
         return 1 if any(check.state in differences for check in comparison.checks) else 0
 
+    if arguments and arguments[0] in {"hub-status", "work-status"}:
+        parser = (
+            build_hub_status_parser()
+            if arguments[0] == "hub-status"
+            else build_work_status_parser()
+        )
+        args = parser.parse_args(arguments[1:])
+        issue_number = args.issue
+        if issue_number is None:
+            issue_number = KNOWN_ISSUES.get(args.environment)
+
+        environment = Environment(name=args.environment, issue_number=issue_number)
+        github_token = _resolve_github_token(args)
+        client = GitHubClient(token=github_token, timeout=args.timeout)
+        stage_step = 0
+
+        def print_scoped_progress(
+            stage: str,
+            action: str,
+            repository: str,
+            path: str,
+        ) -> None:
+            nonlocal stage_step
+            stage_step += 1
+            print(
+                f"▶ Step {stage_step}: {stage}\n"
+                f"    Action:     {action}\n"
+                f"    Repository: {repository}\n"
+                f"    Source:     {path}",
+                file=sys.stderr,
+            )
+
+        checker = StatusChecker(
+            client=client,
+            include_prs=not args.no_prs,
+            progress=print_scoped_progress,
+        )
+        try:
+            report = (
+                checker.run_hub(environment)
+                if arguments[0] == "hub-status"
+                else checker.run_workload(environment)
+            ).to_dict()
+        except (CredentialError, GitHubError, RateLimitError) as exc:
+            print(f"moc-env: {exc}", file=sys.stderr)
+            return 2
+        return _render_status_report(args, report)
+
     args = build_parser().parse_args(argv)
     issue_number = args.issue
     if issue_number is None:
@@ -1299,31 +1398,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"moc-env: {exc}", file=sys.stderr)
         return 2
 
-    if args.format == "json":
-        rendered = render_json(report)
-    elif args.format == "markdown":
-        rendered = render_markdown(report)
-    else:
-        rendered = render_text(report)
-
-    if args.output:
-        output_path = Path(args.output)
-        try:
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            output_path.write_text(rendered, encoding="utf-8")
-        except OSError as exc:
-            print(
-                f"moc-env: could not write {output_path}: {exc}",
-                file=sys.stderr,
-            )
-            return 2
-        print(
-            f"moc-env: wrote {args.format} report to {output_path}",
-            file=sys.stderr,
-        )
-    else:
-        print(rendered, end="")
-    return 0
+    return _render_status_report(args, report)
 
 
 if __name__ == "__main__":

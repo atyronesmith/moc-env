@@ -19,6 +19,8 @@ compliant. It reports repository configuration evidence.
 | `moc-env completion bash` | Print a Bash completion script | No | No | No |
 | `moc-env completion zsh` | Print a Zsh completion script | No | No | No |
 | `moc-env ENV` | Inspect one environment's current configuration state | Yes | With `--output` | No |
+| `moc-env hub-status ENV` | Inspect one environment's hub-cluster state | Yes | With `--output` | No |
+| `moc-env work-status ENV` | Inspect one environment's workload-cluster state | Yes | With `--output` | No |
 | `moc-env export-infra ENV` | Create a draft hub-cluster desired-state snapshot | Yes | With `--output` | No |
 | `moc-env export-workload ENV WORKLOAD` | Create a draft workload-cluster snapshot | Yes | With `--output` | No |
 | `moc-env export-environment ENV` | Create a draft Environment bundle | Yes | With `--output` | No |
@@ -193,9 +195,10 @@ the environment base name, full cluster name, `hub` or `workload` type, source
 path, and environment-level status command.
 
 Use the environment base name from the `environment` field, such as
-`bu-ist-demo`. The current `moc-env bu-ist-demo` status report covers the hub
-and its workload cluster together. `check-workload` is a separate desired-state
-comparison command, not a workload-only repository-status command.
+`bu-ist-demo`. Each row's `status_command` selects the matching scoped command:
+`moc-env hub-status ENV` for a hub row and `moc-env work-status ENV` for a
+workload row. The original `moc-env ENV` command remains an environment-level
+report that includes both scopes.
 
 ### 2. Inspect current repository state
 
@@ -211,6 +214,18 @@ uv run moc-env bu-ist-demo --format markdown \
   --output reports/bu-ist-demo.md
 uv run moc-env bu-ist-demo --issue 666
 uv run moc-env bu-ist-demo --no-prs
+```
+
+Run a hub-scoped report:
+
+```sh
+uv run moc-env hub-status bu-ist-demo
+```
+
+Run a workload-scoped report:
+
+```sh
+uv run moc-env work-status bu-ist-demo
 ```
 
 `--no-prs` avoids pull-request API calls. Progress steps are printed to stderr;
@@ -249,8 +264,9 @@ generated completion script:
 export MOC_ENV_COMPLETION_COMMAND="uv run moc-env"
 ```
 
-Completion supplies environment names for the main status command and
-`export-infra`, `export-workload`, and `export-environment`. For
+Completion supplies environment names for the main, hub-status, and
+work-status commands and `export-infra`, `export-workload`, and
+`export-environment`. For
 `export-workload`, it also supplies full workload-cluster names.
 
 ### 4. Export draft desired-state documents

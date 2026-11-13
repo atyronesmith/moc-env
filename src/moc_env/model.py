@@ -79,6 +79,7 @@ class StatusReport:
     environment: Environment
     checks: list[CheckResult]
     overall_state: str
+    scope: str = "environment"
 
     def to_dict(self) -> dict[str, Any]:
         state_counts: dict[str, int] = {}
@@ -96,6 +97,7 @@ class StatusReport:
             )
 
         return {
+            "scope": self.scope,
             "environment": self.environment.to_dict(),
             "overall_state": self.overall_state,
             "summary": {

@@ -12,10 +12,12 @@ COMMANDS = (
     "export-environment",
     "export-infra",
     "export-workload",
+    "hub-status",
     "list",
     "plan-infra",
     "refresh-doc-catalog",
     "validate",
+    "work-status",
 )
 
 
@@ -45,7 +47,7 @@ _moc_env_complete() {{
   fi
 
   case "$subcommand" in
-    export-infra|export-environment)
+    export-infra|export-environment|hub-status|work-status)
       [[ $COMP_CWORD -eq 2 ]] && mode=environment
       ;;
     export-workload)
@@ -89,7 +91,7 @@ _moc-env() {{
   fi
 
   case "$subcommand" in
-    export-infra|export-environment)
+    export-infra|export-environment|hub-status|work-status)
       if (( CURRENT == 3 )); then
         values=(${{(f)"$("$executable" __complete-environment "${{words[CURRENT]}}" environment)"}})
         _describe -t environments 'environment' values

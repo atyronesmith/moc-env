@@ -40,6 +40,8 @@ LOCAL_CLUSTER_COMPONENTS = [
     "user-workload-monitoring.yaml",
 ]
 
+_SHARED_STATUS_CHECKS = {"MOC issue", "Relevant pull requests"}
+
 
 def list_environments(client: GitHubClient) -> list[dict[str, Any]]:
     """List hub and workload clusters supported by the status checker."""
@@ -83,13 +85,14 @@ def list_environments(client: GitHubClient) -> list[dict[str, Any]]:
             for cluster in all_clusters
             if cluster.startswith(f"{base_name}-") and cluster != infra_cluster
         )
-        status_command = f"moc-env {base_name}"
+        hub_status_command = f"moc-env hub-status {base_name}"
+        workload_status_command = f"moc-env work-status {base_name}"
         clusters.append(
             {
                 "environment": base_name,
                 "cluster": infra_cluster,
                 "type": "hub",
-                "status_command": status_command,
+                "status_command": hub_status_command,
                 "source_repository": repository,
                 "source_path": hub_inventory_path,
             }
@@ -100,7 +103,7 @@ def list_environments(client: GitHubClient) -> list[dict[str, Any]]:
                     "environment": base_name,
                     "cluster": workload_cluster,
                     "type": "workload",
-                    "status_command": status_command,
+                    "status_command": workload_status_command,
                     "source_repository": repository,
                     "source_path": inventory_path,
                 }
@@ -160,6 +163,44 @@ class StatusChecker:
             environment=environment,
             checks=checks,
             overall_state=self._overall_state(checks),
+        )
+
+    def run_hub(self, environment: Environment) -> StatusReport:
+        """Return the repository-status report scoped to the hub cluster."""
+
+        report = self.run(environment)
+        checks = [
+            check
+            for check in report.checks
+            if check.check in _SHARED_STATUS_CHECKS
+            or check.check.startswith(f"{environment.infra_cluster} ")
+            or check.check.startswith("Hub ")
+            or check.check.startswith("Hub-wide ")
+            or check.check.startswith("Infra ")
+        ]
+        return replace(
+            report,
+            checks=checks,
+            overall_state=self._overall_state(checks),
+            scope="hub",
+        )
+
+    def run_workload(self, environment: Environment) -> StatusReport:
+        """Return the repository-status report scoped to the workload cluster."""
+
+        report = self.run(environment)
+        checks = [
+            check
+            for check in report.checks
+            if check.check in _SHARED_STATUS_CHECKS
+            or check.check.startswith(f"{environment.workload_cluster} ")
+            or check.check.startswith("Workload ")
+        ]
+        return replace(
+            report,
+            checks=checks,
+            overall_state=self._overall_state(checks),
+            scope="workload",
         )
 
     def _issue_checks(self, observation: IssueObservation) -> list[CheckResult]:
