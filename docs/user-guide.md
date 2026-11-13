@@ -264,6 +264,12 @@ generated completion script:
 export MOC_ENV_COMPLETION_COMMAND="uv run moc-env"
 ```
 
+Without that override, generated completion scripts use `moc-env` when it is on
+`PATH` and fall back to `uv run moc-env`. If completion returns nothing, run
+`moc-env list` once to populate the cache. In Zsh, completion also requires the
+standard `compinit` setup; the generated script initializes it when `compdef`
+is not already available.
+
 Completion supplies environment names for the main, hub-status, and
 work-status commands and `export-infra`, `export-workload`, and
 `export-environment`. For

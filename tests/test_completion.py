@@ -77,6 +77,8 @@ class CompletionTest(unittest.TestCase):
                 self.assertIn("export-workload", stdout)
                 self.assertIn("hub-status", stdout)
                 self.assertIn("work-status", stdout)
+                self.assertIn("uv run moc-env", stdout)
+                self.assertIn("MOC_ENV_COMPLETION_COMMAND", stdout)
                 if shell == "bash":
                     self.assertIn("complete -o default", stdout)
                 else:

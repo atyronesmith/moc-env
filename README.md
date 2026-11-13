@@ -104,6 +104,9 @@ eval "$(uv run moc-env completion bash)"
 eval "$(uv run moc-env completion zsh)"
 ```
 
+If completion returns nothing, run `uv run moc-env list` once to populate the
+cache. Run `uv run moc-env --help` for a complete command catalog.
+
 Run a hub-scoped repository-status report:
 
 ```sh

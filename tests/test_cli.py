@@ -47,6 +47,31 @@ class CliDispatchTest(unittest.TestCase):
         self.assertIn("moc-env work-status bu-ist-demo", stdout)
         self.assertEqual(stderr, "")
 
+    def test_top_level_help_lists_every_command(self) -> None:
+        rendered = cli.build_parser().format_help()
+
+        self.assertIn("Commands:", rendered)
+        for command in (
+            "ENV",
+            "hub-status",
+            "work-status",
+            "list",
+            "export-infra",
+            "export-workload",
+            "export-environment",
+            "validate",
+            "check-infra",
+            "check-workload",
+            "check-environment",
+            "plan-infra",
+            "document-values",
+            "refresh-doc-catalog",
+            "discover-values",
+            "completion",
+        ):
+            with self.subTest(command=command):
+                self.assertIn(command, rendered)
+
     def test_list_json_dispatch(self) -> None:
         exit_code, stdout, _ = self.run_cli(["list", "--format", "json"])
         self.assertEqual(exit_code, 0)
