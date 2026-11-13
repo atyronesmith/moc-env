@@ -9,7 +9,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from .checks import KNOWN_ISSUES, StatusChecker, list_environments
-from .chart_values import render_chart_values_markdown
+from .chart_values import documentation_directory, render_chart_values_markdown
 from .credentials import (
     CredentialError,
     CredentialNotFoundError,
@@ -26,6 +26,13 @@ from .compare import (
     render_comparison_json,
     render_comparison_markdown,
     render_comparison_text,
+)
+from .doc_catalog import (
+    DocumentCatalogError,
+    load_catalog_sources,
+    refresh_document_catalog,
+    render_catalog_refresh_json,
+    render_catalog_refresh_text,
 )
 from .export import (
     render_environment_export,
@@ -153,6 +160,34 @@ def build_document_values_parser() -> argparse.ArgumentParser:
         help="Write the Markdown guide to this file instead of stdout",
     )
     _add_credential_arguments(parser)
+    return parser
+
+
+def build_refresh_doc_catalog_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="moc-env refresh-doc-catalog",
+        description="Refresh the local documentation catalog from local Git clones",
+    )
+    parser.add_argument(
+        "--repository-root",
+        default="../MOC",
+        help="Directory containing local MOC repository clones (default: ../MOC)",
+    )
+    parser.add_argument(
+        "--cache-root",
+        default=".cache/doc-catalog",
+        help="Local documentation cache directory (default: .cache/doc-catalog)",
+    )
+    parser.add_argument(
+        "--format",
+        choices=("text", "json"),
+        default="text",
+        help="Output format",
+    )
+    parser.add_argument(
+        "--output",
+        help="Write the refresh report to this file instead of stdout",
+    )
     return parser
 
 
@@ -383,6 +418,46 @@ def main(argv: list[str] | None = None) -> int:
             print(render_environment_list_json(environments), end="")
         else:
             print(render_environment_list_text(environments), end="")
+        return 0
+
+    if arguments and arguments[0] == "refresh-doc-catalog":
+        args = build_refresh_doc_catalog_parser().parse_args(arguments[1:])
+        try:
+            sources = load_catalog_sources(
+                documentation_directory() / "sources.yaml"
+            )
+            report = refresh_document_catalog(
+                sources,
+                Path(args.repository_root),
+                Path(args.cache_root),
+            )
+        except DocumentCatalogError as exc:
+            print(f"moc-env: {exc}", file=sys.stderr)
+            return 2
+
+        rendered = (
+            render_catalog_refresh_json(report)
+            if args.format == "json"
+            else render_catalog_refresh_text(report)
+        )
+        if args.output:
+            output_path = Path(args.output)
+            try:
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_text(rendered, encoding="utf-8")
+            except OSError as exc:
+                print(
+                    f"moc-env: could not write {output_path}: {exc}",
+                    file=sys.stderr,
+                )
+                return 2
+            print(
+                f"moc-env: wrote {args.format} catalog refresh report to "
+                f"{output_path}",
+                file=sys.stderr,
+            )
+        else:
+            print(rendered, end="")
         return 0
 
     if arguments and arguments[0] == "document-values":
