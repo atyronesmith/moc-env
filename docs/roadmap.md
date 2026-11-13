@@ -265,6 +265,16 @@ uv run moc-env refresh-doc-catalog
 The refresh records each source’s repository HEAD SHA, content hash, and cached
 document text under `.cache/doc-catalog/`. Manual definitions are not modified.
 
+Manual definitions can also be reconciled with the local `oac-apps` clone:
+
+```sh
+uv run moc-env discover-values
+```
+
+The discovery report identifies variables without manual definitions, manual
+entries without current occurrences, changed or missing evidence, default
+conflicts, and unsupported YAML files. Manual definitions are never overwritten.
+
 ## Phase 7 — environment bundles
 
 **Status:** complete

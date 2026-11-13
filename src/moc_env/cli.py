@@ -9,7 +9,17 @@ from dataclasses import replace
 from pathlib import Path
 
 from .checks import KNOWN_ISSUES, StatusChecker, list_environments
-from .chart_values import documentation_directory, render_chart_values_markdown
+from .chart_values import (
+    documentation_directory,
+    load_chart_values_manual,
+    render_chart_values_markdown,
+)
+from .chart_value_discovery import (
+    build_discovery_report,
+    render_discovery_json,
+    render_discovery_markdown,
+    render_discovery_text,
+)
 from .credentials import (
     CredentialError,
     CredentialNotFoundError,
@@ -187,6 +197,36 @@ def build_refresh_doc_catalog_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--output",
         help="Write the refresh report to this file instead of stdout",
+    )
+    return parser
+
+
+def build_discover_values_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="moc-env discover-values",
+        description=(
+            "Compare local oac-apps chart values with manual documentation"
+        ),
+    )
+    parser.add_argument(
+        "--repository-root",
+        default="../MOC",
+        help="Directory containing local MOC repository clones (default: ../MOC)",
+    )
+    parser.add_argument(
+        "--cache-root",
+        default=".cache/doc-catalog",
+        help="Local documentation cache directory (default: .cache/doc-catalog)",
+    )
+    parser.add_argument(
+        "--format",
+        choices=("markdown", "text", "json"),
+        default="markdown",
+        help="Output format",
+    )
+    parser.add_argument(
+        "--output",
+        help="Write the discovery report to this file instead of stdout",
     )
     return parser
 
@@ -454,6 +494,45 @@ def main(argv: list[str] | None = None) -> int:
             print(
                 f"moc-env: wrote {args.format} catalog refresh report to "
                 f"{output_path}",
+                file=sys.stderr,
+            )
+        else:
+            print(rendered, end="")
+        return 0
+
+    if arguments and arguments[0] == "discover-values":
+        args = build_discover_values_parser().parse_args(arguments[1:])
+        repository = Path(args.repository_root) / "oac-apps"
+        try:
+            manual = load_chart_values_manual()
+            report = build_discovery_report(
+                manual,
+                repository,
+                Path(args.cache_root),
+            )
+        except (OSError, ValueError) as exc:
+            print(f"moc-env: {exc}", file=sys.stderr)
+            return 2
+
+        if args.format == "json":
+            rendered = render_discovery_json(report)
+        elif args.format == "text":
+            rendered = render_discovery_text(report)
+        else:
+            rendered = render_discovery_markdown(report)
+        if args.output:
+            output_path = Path(args.output)
+            try:
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_text(rendered, encoding="utf-8")
+            except OSError as exc:
+                print(
+                    f"moc-env: could not write {output_path}: {exc}",
+                    file=sys.stderr,
+                )
+                return 2
+            print(
+                f"moc-env: wrote {args.format} discovery report to {output_path}",
                 file=sys.stderr,
             )
         else:
