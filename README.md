@@ -280,6 +280,45 @@ Comparison reports use `matches_main`, `missing_from_main`,
 and `pr_open`. Hard differences return exit code 1; an open relevant pull
 request alone returns exit code 0.
 
+Plan read-only repository changes from a reviewed InfraCluster document:
+
+```sh
+uv run moc-env plan-infra \
+  desired-state/infra-clusters/bu-ist-demo-infra.yaml
+```
+
+Write a JSON plan:
+
+```sh
+uv run moc-env plan-infra \
+  desired-state/infra-clusters/bu-ist-demo-infra.yaml \
+  --format json
+```
+
+Write a Markdown plan:
+
+```sh
+uv run moc-env plan-infra \
+  desired-state/infra-clusters/bu-ist-demo-infra.yaml \
+  --format markdown \
+  --output reports/bu-ist-demo-infra-plan.md
+```
+
+Or with the Makefile:
+
+```sh
+make plan-infra ENV=bu-ist-demo
+make plan-infra-markdown ENV=bu-ist-demo
+```
+
+The plan maps comparison differences to `create`, `update`, `delete`, or
+`manual_review` operations and records the repository, base ref, deterministic
+branch, path, field, desired/current values, reason, and dependencies. It uses
+one branch per repository by default. Matches and open pull requests do not
+become repository-change operations; open PRs still require separate review.
+Planning is read-only and returns exit code 0 when a plan is produced
+successfully.
+
 Compare a reviewed workload-cluster document with merged `main`:
 
 ```sh

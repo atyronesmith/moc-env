@@ -12,6 +12,7 @@ FILE ?= desired-state/infra-clusters/$(ENV)-infra.yaml
 WORKLOAD_FILE ?= desired-state/workload-clusters/$(ENV)-$(WORKLOAD).yaml
 VALIDATION_OUTPUT ?= reports/$(ENV)-validation.md
 COMPARISON_OUTPUT ?= reports/$(ENV)-infra-comparison.md
+PLAN_OUTPUT ?= reports/$(ENV)-infra-plan.md
 WORKLOAD_COMPARISON_OUTPUT ?= reports/$(ENV)-$(WORKLOAD)-comparison.md
 
 # Set NO_PRS=1 to avoid pull-request API calls.
@@ -25,7 +26,8 @@ RUN_ARGS := $(ENV) --format $(FORMAT) $(PRS_FLAG) $(ARGS)
 
 .PHONY: help setup sync test list export-infra export-infra-file \
         export-workload export-workload-file validate validate-markdown \
-        check-infra check-infra-markdown check-workload \
+        check-infra check-infra-markdown plan-infra \
+        plan-infra-markdown check-workload \
         check-workload-markdown run run-text run-json run-markdown \
         run-no-prs report-markdown \
         report-gist-secret report-gist-public build compile \
@@ -88,6 +90,13 @@ check-infra: ## Compare FILE against merged main
 check-infra-markdown: ## Write a Markdown infra comparison to COMPARISON_OUTPUT
 	$(UV) run --locked moc-env check-infra $(FILE) --format markdown \
 	  --output $(COMPARISON_OUTPUT)
+
+plan-infra: ## Print a read-only infra change plan for FILE
+	$(UV) run --locked moc-env plan-infra $(FILE) $(ARGS)
+
+plan-infra-markdown: ## Write a Markdown infra change plan to PLAN_OUTPUT
+	$(UV) run --locked moc-env plan-infra $(FILE) --format markdown \
+	  --output $(PLAN_OUTPUT)
 
 check-workload: ## Compare WORKLOAD_FILE against merged main
 	$(UV) run --locked moc-env check-workload $(WORKLOAD_FILE) $(ARGS)

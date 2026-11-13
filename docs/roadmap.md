@@ -316,6 +316,8 @@ available.
 
 ## Phase 8 — change planning
 
+**Status:** complete
+
 Planning remains read-only:
 
 ```sh
@@ -324,8 +326,14 @@ uv run moc-env plan-infra \
 ```
 
 The plan identifies each repository, branch, changed path, operation, reason,
-and dependency. For same-repository review sequencing, support optional stacked
-branches:
+and dependency. It maps comparison differences to `create`, `update`, `delete`,
+and `manual_review` operations, derives repository and path targets from
+desired-state provenance, and uses one deterministic branch per repository by
+default. Text, JSON, and Markdown output are available. Matches and open pull
+requests do not become repository-change operations.
+
+For same-repository review sequencing, a later enhancement can support optional
+stacked branches:
 
 ```text
 main
