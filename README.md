@@ -11,9 +11,15 @@ first release distinguishes:
 - what is declared in merged repository `main` branches;
 - what exists only in an open pull request.
 
-The current milestone is a read-only configuration-state reporter. The
-motivating environment is `bu-ist-demo`, tracked by
+The implemented milestones provide a read-only configuration-state reporter,
+deterministic desired-state exports, local validation, comparisons with merged
+`main`, and read-only change planning. The motivating environment is
+`bu-ist-demo`, tracked by
 [MOC issue 666](https://github.com/CCI-MOC/MOC-issues/issues/666).
+
+See [docs/user-guide.md](docs/user-guide.md) for prerequisites, credential
+setup, the recommended end-to-end workflow, command examples, output
+interpretation, exit codes, and troubleshooting.
 
 See [docs/roadmap.md](docs/roadmap.md) for the desired-state, validation, and
 future coordinated-PR design.
@@ -24,7 +30,7 @@ this project.
 
 ## Current scope
 
-Milestone 1 inspects:
+Current repository-state inspection covers:
 
 - `CCI-MOC/MOC-issues`
 - `CCI-MOC/oac-infra`
@@ -41,8 +47,10 @@ It reports:
 - `oac-apps` hub, local-cluster, and hosted-workload GitOps paths;
 - open and merged pull requests that reference the environment.
 
-Later milestones can add networking, DNS, AWS, storage, monitoring, billing,
-access, GPU, and optional live OpenShift/Argo CD checks.
+Later milestones can add broader repository coverage and optional live
+OpenShift/Argo CD checks. Current desired-state tooling covers hub clusters,
+workload clusters, Environment bundles, validation, comparison, and read-only
+change planning.
 
 ## Install and run
 
@@ -583,8 +591,10 @@ deployed desired state.
 
 ## Exit codes
 
-- `0`: the report was produced
-- `2`: GitHub access or parsing failed
+- `0`: a report, export, validation, comparison without hard differences, or
+  change plan was produced successfully
+- `1`: a desired-state comparison found a hard difference
+- `2`: input validation, GitHub access, parsing, or output-file writing failed
 
 Missing configuration does not cause a non-zero exit because this is a reporting
 tool, not a deployment gate.
@@ -594,11 +604,23 @@ tool, not a deployment gate.
 ```sh
 uv sync
 uv run python -m unittest discover -s tests -v
+make check
 ```
+
+Current hosted-CI caveat: the GitHub Actions `Check` workflow fails on Linux
+because four credential tests assume macOS `/usr/bin/security`. The full suite
+and `make check` pass on macOS; making those tests platform-independent is the
+next maintenance task.
+
+See [docs/user-guide.md](docs/user-guide.md) for detailed usage and
+[docs/roadmap.md](docs/roadmap.md) for milestone history and future work.
 
 ## Non-goals
 
-- No infrastructure mutation
-- No secret-value retrieval
-- No PR creation, merge, comment, or push
-- No live OpenShift/Argo CD checks in this milestone
+- No MOC infrastructure or cluster mutation
+- No retrieval of MOC workload or infrastructure secrets
+- No branch, commit, PR, approval, merge, comment, or push generation
+- No live OpenShift/Argo CD checks in the current milestones
+
+The explicit `make report-gist-*` targets are the only external publishing
+actions; they require the `gh` CLI and deliberate invocation.
