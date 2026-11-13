@@ -53,16 +53,31 @@ class StatusCheckerTest(unittest.TestCase):
             "declared_in_main",
         )
 
-    def test_list_environments_returns_base_names_and_workloads(self) -> None:
+    def test_list_environments_returns_hub_and_workload_clusters(self) -> None:
         environments = list_environments(FakeGitHubClient())
-        self.assertEqual(len(environments), 1)
-        self.assertEqual(environments[0]["name"], "bu-ist-demo")
-        self.assertEqual(environments[0]["infra_cluster"], "bu-ist-demo-infra")
+        self.assertEqual(len(environments), 2)
         self.assertEqual(
-            environments[0]["workload_clusters"],
-            ["bu-ist-demo-workload0"],
+            environments[0],
+            {
+                "environment": "bu-ist-demo",
+                "cluster": "bu-ist-demo-infra",
+                "type": "hub",
+                "status_command": "moc-env bu-ist-demo",
+                "source_repository": "CCI-MOC/oac-infra",
+                "source_path": "hub-images/inventory.yml",
+            },
         )
-        self.assertEqual(environments[0]["status_command"], "moc-env bu-ist-demo")
+        self.assertEqual(
+            environments[1],
+            {
+                "environment": "bu-ist-demo",
+                "cluster": "bu-ist-demo-workload0",
+                "type": "workload",
+                "status_command": "moc-env bu-ist-demo",
+                "source_repository": "CCI-MOC/oac-infra",
+                "source_path": "infra/inventory/00hosts.yaml",
+            },
+        )
 
     def test_read_infra_observation_normalizes_repository_inputs(self) -> None:
         environment = Environment(name="bu-ist-demo", issue_number=666)

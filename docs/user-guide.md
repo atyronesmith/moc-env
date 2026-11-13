@@ -15,7 +15,9 @@ compliant. It reports repository configuration evidence.
 
 | Command | Use it to | Reads GitHub | Writes local files | Mutates MOC |
 |---|---|---:|---:|---:|
-| `moc-env list` | Discover known environment names | Yes | No | No |
+| `moc-env list` | Discover hub and workload clusters | Yes | User cache | No |
+| `moc-env completion bash` | Print a Bash completion script | No | No | No |
+| `moc-env completion zsh` | Print a Zsh completion script | No | No | No |
 | `moc-env ENV` | Inspect one environment's current configuration state | Yes | With `--output` | No |
 | `moc-env export-infra ENV` | Create a draft hub-cluster desired-state snapshot | Yes | With `--output` | No |
 | `moc-env export-workload ENV WORKLOAD` | Create a draft workload-cluster snapshot | Yes | With `--output` | No |
@@ -179,14 +181,21 @@ The normal workflow is: inspect current state, export a draft, review it,
 validate it, compare it with merged `main`, and optionally produce a read-only
 change plan.
 
-### 1. Discover environments
+### 1. Discover environment clusters
 
 ```sh
 uv run moc-env list
 uv run moc-env list --format json
 ```
 
-Use one of the returned environment names, such as `bu-ist-demo`.
+The output includes one row for each hub and workload cluster. Each row records
+the environment base name, full cluster name, `hub` or `workload` type, source
+path, and environment-level status command.
+
+Use the environment base name from the `environment` field, such as
+`bu-ist-demo`. The current `moc-env bu-ist-demo` status report covers the hub
+and its workload cluster together. `check-workload` is a separate desired-state
+comparison command, not a workload-only repository-status command.
 
 ### 2. Inspect current repository state
 
@@ -207,7 +216,44 @@ uv run moc-env bu-ist-demo --no-prs
 `--no-prs` avoids pull-request API calls. Progress steps are printed to stderr;
 the report is printed to stdout or written with `--output`.
 
-### 3. Export draft desired-state documents
+### 3. Enable shell completion
+
+`moc-env list` writes its cluster results to a user-local cache outside the
+repository. The default location follows XDG:
+
+```text
+${XDG_CACHE_HOME:-$HOME/.cache}/moc-env/environment-clusters.json
+```
+
+Shell completion reads that cache and does not call GitHub on every Tab press.
+Refresh it by running `moc-env list` again.
+
+Set `MOC_ENV_CACHE_DIR` to use a different cache directory.
+
+Bash:
+
+```sh
+eval "$(uv run moc-env completion bash)"
+```
+
+Zsh:
+
+```sh
+eval "$(uv run moc-env completion zsh)"
+```
+
+If `moc-env` is not on `PATH` outside `uv run`, set the executable used by the
+generated completion script:
+
+```sh
+export MOC_ENV_COMPLETION_COMMAND="uv run moc-env"
+```
+
+Completion supplies environment names for the main status command and
+`export-infra`, `export-workload`, and `export-environment`. For
+`export-workload`, it also supplies full workload-cluster names.
+
+### 4. Export draft desired-state documents
 
 Export the hub cluster:
 
@@ -236,7 +282,7 @@ confidence. They do not establish deployment or health.
 In this guide, “export” means extracting a deterministic snapshot from current
 repository evidence into a local YAML draft.
 
-### 4. Review and edit the YAML
+### 5. Review and edit the YAML
 
 Open the generated files and review:
 
@@ -251,7 +297,7 @@ Open the generated files and review:
 Keep the source metadata intact when changing a reviewed value. If an item is
 unsupported or ambiguous, leave it explicit rather than inventing a value.
 
-### 5. Validate locally
+### 6. Validate locally
 
 Validate each document:
 
@@ -280,7 +326,7 @@ uv run moc-env validate \
 
 An invalid document exits with code `2`.
 
-### 6. Compare with merged `main`
+### 7. Compare with merged `main`
 
 Compare each reviewed document:
 
@@ -317,7 +363,7 @@ uv run moc-env check-environment \
 Hard differences exit with code `1`. An open PR by itself exits with code `0`
 because it is evidence of work in progress, not a comparison failure.
 
-### 7. Produce a read-only change plan
+### 8. Produce a read-only change plan
 
 After the desired state validates, plan the repository changes:
 

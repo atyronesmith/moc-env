@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -16,6 +17,16 @@ from fakes import FakeGitHubClient
 
 
 class CliDispatchTest(unittest.TestCase):
+    def setUp(self) -> None:
+        cache_directory = tempfile.TemporaryDirectory()
+        self.addCleanup(cache_directory.cleanup)
+        environment = patch.dict(
+            os.environ,
+            {"MOC_ENV_CACHE_DIR": cache_directory.name},
+        )
+        environment.start()
+        self.addCleanup(environment.stop)
+
     def run_cli(self, arguments: list[str]) -> tuple[int, str, str]:
         stdout = io.StringIO()
         stderr = io.StringIO()
@@ -38,8 +49,13 @@ class CliDispatchTest(unittest.TestCase):
     def test_list_json_dispatch(self) -> None:
         exit_code, stdout, _ = self.run_cli(["list", "--format", "json"])
         self.assertEqual(exit_code, 0)
-        environments = json.loads(stdout)
-        self.assertEqual(environments[0]["name"], "bu-ist-demo")
+        clusters = json.loads(stdout)
+        self.assertEqual(len(clusters), 2)
+        self.assertEqual(clusters[0]["environment"], "bu-ist-demo")
+        self.assertEqual(clusters[0]["cluster"], "bu-ist-demo-infra")
+        self.assertEqual(clusters[0]["type"], "hub")
+        self.assertEqual(clusters[1]["cluster"], "bu-ist-demo-workload0")
+        self.assertEqual(clusters[1]["type"], "workload")
 
     def test_status_json_dispatch(self) -> None:
         exit_code, stdout, _ = self.run_cli(

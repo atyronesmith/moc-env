@@ -28,6 +28,7 @@ from .credentials import (
     load_credential_environment_file,
 )
 from .github import GitHubClient, GitHubError, RateLimitError
+from .completion import bash_completion_script, zsh_completion_script
 from .compare import (
     compare_infra,
     compare_environment,
@@ -50,6 +51,7 @@ from .export import (
     render_workload_export,
     workload_cluster_name,
 )
+from .environment_cache import read_environment_cache, write_environment_cache
 from .model import Environment
 from .observed import (
     read_apps_observation,
@@ -160,6 +162,19 @@ def build_list_parser() -> argparse.ArgumentParser:
         help="Output format",
     )
     _add_credential_arguments(parser)
+    return parser
+
+
+def build_completion_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="moc-env completion",
+        description="Print a bash or zsh completion script",
+    )
+    parser.add_argument(
+        "shell",
+        choices=("bash", "zsh"),
+        help="Shell for which to print a completion script",
+    )
     return parser
 
 
@@ -478,6 +493,43 @@ def _resolve_github_token(args: argparse.Namespace) -> str | None:
 
 def main(argv: list[str] | None = None) -> int:
     arguments = sys.argv[1:] if argv is None else argv
+    if arguments and arguments[0] == "__complete-environment":
+        prefix = arguments[1] if len(arguments) > 1 else ""
+        mode = arguments[2] if len(arguments) > 2 else "environment"
+        if mode not in {"environment", "workload"}:
+            print("moc-env: unknown completion mode", file=sys.stderr)
+            return 2
+        clusters = read_environment_cache()
+        if mode == "environment":
+            values = sorted(
+                {
+                    cluster["environment"]
+                    for cluster in clusters
+                    if isinstance(cluster.get("environment"), str)
+                }
+            )
+        else:
+            values = sorted(
+                cluster["cluster"]
+                for cluster in clusters
+                if cluster.get("type") == "workload"
+                and isinstance(cluster.get("cluster"), str)
+            )
+        for value in values:
+            if value.startswith(prefix):
+                print(value)
+        return 0
+
+    if arguments and arguments[0] == "completion":
+        args = build_completion_parser().parse_args(arguments[1:])
+        print(
+            bash_completion_script()
+            if args.shell == "bash"
+            else zsh_completion_script(),
+            end="",
+        )
+        return 0
+
     if arguments and arguments[0] == "list":
         argv = arguments
         args = build_list_parser().parse_args(argv[1:])
@@ -488,6 +540,13 @@ def main(argv: list[str] | None = None) -> int:
         except (GitHubError, RateLimitError) as exc:
             print(f"moc-env: {exc}", file=sys.stderr)
             return 2
+        try:
+            write_environment_cache(environments)
+        except OSError as exc:
+            print(
+                f"moc-env: could not write environment cache: {exc}",
+                file=sys.stderr,
+            )
         if args.format == "json":
             print(render_environment_list_json(environments), end="")
         else:
