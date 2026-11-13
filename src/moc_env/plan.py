@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from typing import Any
 
@@ -121,3 +122,125 @@ def build_infra_change_plan(
         kind="Infra",
         changes=changes,
     )
+
+
+def render_change_plan_text(plan: ChangePlan) -> str:
+    """Render a compact, deterministic human-readable change plan."""
+
+    lines = [
+        "=" * 78,
+        f"MOC infra change plan: {plan.environment.name}",
+        "=" * 78,
+        f"Hub cluster:    {plan.environment.infra_cluster}",
+        f"Overall:        {plan.overall_state}",
+        "",
+    ]
+    if not plan.changes:
+        lines.extend(
+            [
+                "No repository changes are required by the reviewed desired state.",
+                "Open pull requests, if any, still require separate review.",
+            ]
+        )
+        return "\n".join(lines).rstrip() + "\n"
+
+    lines.extend(["Branches:"])
+    branches: dict[tuple[str, str, str], int] = {}
+    for change in plan.changes:
+        key = (change.repository, change.base_ref, change.branch)
+        branches[key] = branches.get(key, 0) + 1
+    for (repository, base_ref, branch), count in branches.items():
+        lines.append(
+            f"  {repository}: {base_ref} -> {branch} ({count} change(s))"
+        )
+
+    lines.extend(["", "Planned changes:"])
+    for index, change in enumerate(plan.changes, start=1):
+        dependencies = ", ".join(change.depends_on) if change.depends_on else "none"
+        lines.extend(
+            [
+                "-" * 78,
+                f"[{index}] {change.operation}: {change.field}",
+                f"  Repository: {change.repository}",
+                f"  Branch:     {change.branch} (from {change.base_ref})",
+                f"  Path:       {change.path}",
+                f"  Desired:    {json.dumps(change.desired, sort_keys=True, default=str)}",
+                f"  Current:    {json.dumps(change.current, sort_keys=True, default=str)}",
+                f"  Depends on: {dependencies}",
+                f"  Reason:     {change.reason}",
+            ]
+        )
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def render_change_plan_json(plan: ChangePlan) -> str:
+    return json.dumps(plan.to_dict(), indent=2, sort_keys=True) + "\n"
+
+
+def _markdown_value(value: Any) -> str:
+    rendered = json.dumps(value, sort_keys=True, default=str)
+    return rendered.replace("|", "\\|").replace("\n", "<br>")
+
+
+def render_change_plan_markdown(plan: ChangePlan) -> str:
+    """Render a Phase 8 plan as review-friendly Markdown."""
+
+    lines = [
+        "# 🗺️ Infra Change Plan",
+        "",
+        f"## `{plan.environment.name}` — {plan.overall_state}",
+        "",
+        (
+            "This plan is read-only. It does not create branches, commits, "
+            "pull requests, or repository changes."
+        ),
+        "",
+        "## Summary",
+        "",
+        "| Measure | Value |",
+        "|---|---:|",
+        f"| Planned changes | {len(plan.changes)} |",
+    ]
+    for operation, count in plan.to_dict()["summary"]["operation_counts"].items():
+        lines.append(f"| `{operation}` | {count} |")
+
+    if not plan.changes:
+        lines.extend(
+            [
+                "",
+                (
+                    "No repository changes are required by the reviewed desired state. "
+                    "Open pull requests, if any, still require separate review."
+                ),
+            ]
+        )
+        return "\n".join(lines).rstrip() + "\n"
+
+    lines.extend(
+        [
+            "",
+            "## Planned changes",
+            "",
+            (
+                "| # | Operation | Repository | Branch | Path | Field | "
+                "Desired | Current | Depends on | Reason |"
+            ),
+            "|---:|---|---|---|---|---|---|---|---|---|",
+        ]
+    )
+    for index, change in enumerate(plan.changes, start=1):
+        dependencies = ", ".join(change.depends_on) if change.depends_on else "—"
+        lines.append(
+            "| "
+            f"{index} | "
+            f"`{change.operation}` | "
+            f"`{change.repository}` | "
+            f"`{change.branch}` | "
+            f"`{change.path}` | "
+            f"`{change.field}` | "
+            f"`{_markdown_value(change.desired)}` | "
+            f"`{_markdown_value(change.current)}` | "
+            f"{dependencies} | "
+            f"{change.reason} |"
+        )
+    return "\n".join(lines).rstrip() + "\n"
