@@ -145,6 +145,16 @@ The command records repository HEAD SHAs, source content hashes, and cached
 document text under `.cache/doc-catalog/`. It is local and read-only with
 respect to the upstream repositories.
 
+Compare local `oac-apps` values with the manual documentation layer:
+
+```sh
+uv run moc-env discover-values
+```
+
+The report identifies variables that need manual definitions, manual entries
+without current repository occurrences, changed or missing evidence, default
+conflicts, and unsupported YAML files. It does not modify manual documentation.
+
 Write the guide to a file:
 
 ```sh

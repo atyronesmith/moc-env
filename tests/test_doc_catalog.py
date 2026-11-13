@@ -27,9 +27,9 @@ def _run_git(repository: Path, *arguments: str) -> None:
         env={
             **os.environ,
             "GIT_AUTHOR_NAME": "Test Author",
-            "GIT_AUTHOR_EMAIL": "test@example.com",
+            "GIT_AUTHOR_EMAIL": "test-user",
             "GIT_COMMITTER_NAME": "Test Author",
-            "GIT_COMMITTER_EMAIL": "test@example.com",
+            "GIT_COMMITTER_EMAIL": "test-user",
         },
     )
 
