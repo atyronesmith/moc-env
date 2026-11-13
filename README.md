@@ -83,7 +83,8 @@ make run ARGS="--issue 666"
 make run-no-prs ENV=bu-ist-demo
 ```
 
-List all environment names that can be used for status checks:
+List hub and workload clusters, including each cluster type and the
+environment-level status command:
 
 ```sh
 uv run moc-env list
@@ -93,6 +94,14 @@ JSON output:
 
 ```sh
 uv run moc-env list --format json
+```
+
+`list` also writes a user-local XDG cache used by shell completion. Enable
+Bash or Zsh completion with:
+
+```sh
+eval "$(uv run moc-env completion bash)"
+eval "$(uv run moc-env completion zsh)"
 ```
 
 Export a deterministic draft hub-cluster snapshot from merged `main`. The

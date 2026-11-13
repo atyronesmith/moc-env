@@ -592,37 +592,38 @@ def render_json(report: dict[str, Any]) -> str:
 def render_environment_list_text(environments: list[dict[str, Any]]) -> str:
     lines = [
         "=" * 78,
-        "Defined MOC environments",
+        "Defined MOC environment clusters",
         "=" * 78,
     ]
     if not environments:
-        lines.append("No hub-cluster environments were found in oac-infra.")
+        lines.append("No hub or workload clusters were found in oac-infra.")
         return "\n".join(lines) + "\n"
 
     lines.extend(
         [
             "",
-            f"{'Environment':<20} {'Hub cluster':<24} Hosted workload clusters",
+            f"{'Environment':<20} {'Cluster':<30} {'Type':<10} Status command",
             "-" * 78,
         ]
     )
     for environment in environments:
-        workloads = ", ".join(environment["workload_clusters"]) or "-"
         lines.append(
-            f"{environment['name']:<20} "
-            f"{environment['infra_cluster']:<24} {workloads}"
+            f"{environment['environment']:<20} "
+            f"{environment['cluster']:<30} "
+            f"{environment['type']:<10} "
+            f"{environment['status_command']}"
         )
 
     lines.extend(
         [
             "",
-            "Get a status report with:",
+            "The environment-level status report includes its hub and workload clusters.",
             "",
+            "Sources:",
+            "  Hub clusters: CCI-MOC/oac-infra/hub-images/inventory.yml",
+            "  Workload clusters: CCI-MOC/oac-infra/infra/inventory/00hosts.yaml",
         ]
     )
-    for environment in environments:
-        lines.append(f"  {environment['status_command']}")
-    lines.extend(["", "Source: CCI-MOC/oac-infra/hub-images/inventory.yml"])
     return "\n".join(lines).rstrip() + "\n"
 
 

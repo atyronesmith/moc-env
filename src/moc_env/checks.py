@@ -42,7 +42,7 @@ LOCAL_CLUSTER_COMPONENTS = [
 
 
 def list_environments(client: GitHubClient) -> list[dict[str, Any]]:
-    """List environment base names supported by the status checker."""
+    """List hub and workload clusters supported by the status checker."""
 
     repository = OAC_INFRA_REPOSITORY
     tree = client.get_tree(repository)
@@ -75,7 +75,7 @@ def list_environments(client: GitHubClient) -> list[dict[str, Any]]:
     inventory_root = inventory.get("all", inventory) if isinstance(inventory, dict) else inventory
     all_clusters = inventory_clusters(inventory_root)
 
-    environments: list[dict[str, Any]] = []
+    clusters: list[dict[str, Any]] = []
     for infra_cluster in infra_clusters:
         base_name = infra_cluster[: -len("-infra")]
         workload_clusters = sorted(
@@ -83,17 +83,29 @@ def list_environments(client: GitHubClient) -> list[dict[str, Any]]:
             for cluster in all_clusters
             if cluster.startswith(f"{base_name}-") and cluster != infra_cluster
         )
-        environments.append(
+        status_command = f"moc-env {base_name}"
+        clusters.append(
             {
-                "name": base_name,
-                "infra_cluster": infra_cluster,
-                "workload_clusters": workload_clusters,
-                "status_command": f"moc-env {base_name}",
+                "environment": base_name,
+                "cluster": infra_cluster,
+                "type": "hub",
+                "status_command": status_command,
                 "source_repository": repository,
                 "source_path": hub_inventory_path,
             }
         )
-    return environments
+        for workload_cluster in workload_clusters:
+            clusters.append(
+                {
+                    "environment": base_name,
+                    "cluster": workload_cluster,
+                    "type": "workload",
+                    "status_command": status_command,
+                    "source_repository": repository,
+                    "source_path": inventory_path,
+                }
+            )
+    return clusters
 
 
 def _boot_image_state(url: str | None, cluster: str) -> str:
