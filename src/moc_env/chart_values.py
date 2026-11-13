@@ -339,7 +339,7 @@ class ManualDocumentation:
     topics: tuple[ManualTopic, ...]
 
 
-def _documentation_directory() -> Path:
+def documentation_directory() -> Path:
     """Return the documentation directory bundled with or surrounding the package."""
 
     candidates = (
@@ -405,7 +405,7 @@ def _manual_variable(data: Any) -> ManualVariable:
 def load_chart_values_manual() -> ManualDocumentation:
     """Load manual sources and variable definitions from tracked YAML."""
 
-    documentation = _documentation_directory()
+    documentation = documentation_directory()
     source_document = yaml.safe_load(
         (documentation / "sources.yaml").read_text(encoding="utf-8")
     )

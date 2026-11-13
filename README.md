@@ -135,6 +135,16 @@ Generate an environment-independent Markdown reference for chart values:
 uv run moc-env document-values
 ```
 
+Refresh the local documentation catalog from your local MOC repository clones:
+
+```sh
+uv run moc-env refresh-doc-catalog
+```
+
+The command records repository HEAD SHAs, source content hashes, and cached
+document text under `.cache/doc-catalog/`. It is local and read-only with
+respect to the upstream repositories.
+
 Write the guide to a file:
 
 ```sh

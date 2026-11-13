@@ -255,6 +255,16 @@ individually. The guide does not print an environment's current values.
 Unsupported YAML shapes remain explicit, and the guide does not replace
 upstream Helm chart documentation.
 
+The local documentation catalog can be refreshed from the clones under
+`../MOC`:
+
+```sh
+uv run moc-env refresh-doc-catalog
+```
+
+The refresh records each source’s repository HEAD SHA, content hash, and cached
+document text under `.cache/doc-catalog/`. Manual definitions are not modified.
+
 ## Phase 7 — environment bundles
 
 **Status:** complete

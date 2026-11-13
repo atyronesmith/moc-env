@@ -11,3 +11,4 @@ htmlcov/
 .env
 reports/
 desired-state/
+.cache/
