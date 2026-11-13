@@ -157,15 +157,19 @@ class ChartValuesTest(unittest.TestCase):
         rendered = render_chart_values_markdown(self.observation)
 
         self.assertIn("# 📘 Chart Configuration Reference", rendered)
+        self.assertIn("Generated documentation", rendered)
+        self.assertIn("do not edit the generated Markdown directly", rendered)
         self.assertIn("## Deployment model", rendered)
         self.assertIn("## Scope summary", rendered)
         self.assertIn("## Hosted Cluster DNS and Addressing", rendered)
         self.assertIn("### Hub-level domains", rendered)
         self.assertIn("#### `hcpExternalDomain`", rendered)
         self.assertIn(
-            "**Source(s):** [DNS-1](#sources), [HCP-1](#sources)",
+            "| Source(s) | [DNS-1](#sources), [HCP-1](#sources) |",
             rendered,
         )
+        self.assertIn("| Chart discovery | Charts:", rendered)
+        self.assertIn("| Related keys |", rendered)
         self.assertIn("## Uncurated variables", rendered)
         self.assertIn("### hosted-cluster", rendered)
         self.assertIn("### workload-components", rendered)
