@@ -4,7 +4,9 @@ Resolution order:
 
 1. ``GITHUB_TOKEN`` in the process environment.
 2. A Bitwarden Secrets Manager secret UUID from the environment or CLI.
-3. A macOS Keychain item containing that Bitwarden secret UUID.
+3. ``gh auth token`` when GitHub CLI is available.
+4. A default macOS Keychain item containing a Bitwarden secret UUID.
+5. Unauthenticated use.
 
 The Keychain never stores the GitHub token itself. After selecting a UUID, the
 resolver asks Bitwarden Secrets Manager for the secret whose key is
@@ -36,6 +38,7 @@ SECRET_UUID = re.compile(
 MAX_OUTPUT_BYTES = 1024 * 1024
 KEYCHAIN_TIMEOUT_SECONDS = 15.0
 BITWARDEN_TIMEOUT_SECONDS = 30.0
+GITHUB_CLI_TIMEOUT_SECONDS = 10.0
 CREDENTIAL_ENV_FILE_KEYS = {
     "GITHUB_BWS_SECRET_ID",
     "MOC_ENV_BWS_SECRET_ID",
@@ -83,21 +86,77 @@ class CredentialResolver:
         environment: Mapping[str, str] | None = None,
         run: Callable[..., subprocess.CompletedProcess[bytes]] = subprocess.run,
         keychain_executable: str = "/usr/bin/security",
+        gh_executable: str | None = "gh",
     ) -> None:
         self.platform = platform
         self.environment = dict(os.environ if environment is None else environment)
         self._run = run
         self._keychain_executable = keychain_executable
+        self._gh_executable = gh_executable
 
-    def resolve(self, options: CredentialOptions) -> str:
+    def resolve(
+        self, options: CredentialOptions, *, explicit_bitwarden: bool = False
+    ) -> str | None:
         if options.direct_token:
             return self._valid_token(options.direct_token, "GITHUB_TOKEN")
 
         secret_id = options.bws_secret_id
-        if not secret_id:
-            secret_id = self._keychain_secret_id(options)
+        if secret_id:
+            return self._resolve_bitwarden(options, secret_id)
 
-        return self._resolve_bitwarden(options, secret_id)
+        gh_token = self._gh_token()
+        if gh_token:
+            return gh_token
+
+        try:
+            secret_id = self._keychain_secret_id(options)
+        except CredentialError:
+            if explicit_bitwarden:
+                raise
+            return None
+
+        try:
+            return self._resolve_bitwarden(options, secret_id)
+        except CredentialError:
+            if explicit_bitwarden or options.bws_access_token:
+                raise
+            return None
+
+    def _gh_token(self) -> str | None:
+        gh = self._gh_executable_path()
+        if not gh:
+            return None
+        try:
+            completed = self._run(
+                [gh, "auth", "token"],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=self._sanitized_environment(),
+                timeout=GITHUB_CLI_TIMEOUT_SECONDS,
+                check=False,
+            )
+        except (subprocess.TimeoutExpired, OSError):
+            return None
+        if completed.returncode != 0 or len(completed.stdout) > MAX_OUTPUT_BYTES:
+            return None
+        try:
+            token = completed.stdout.decode("utf-8").strip()
+            return self._valid_token(token, "GitHub CLI token")
+        except (UnicodeDecodeError, CredentialError):
+            return None
+
+    def _gh_executable_path(self) -> str | None:
+        if self._gh_executable is None:
+            return None
+        if self._gh_executable == "gh":
+            path = self.environment.get("PATH", "")
+            gh = shutil.which("gh", path=path) if path else None
+        else:
+            gh = self._gh_executable
+        if not gh or not os.path.isabs(gh) or not self._is_executable_file(gh):
+            return None
+        return gh
 
     def _keychain_secret_id(self, options: CredentialOptions) -> str:
         secret_id = self._keychain(

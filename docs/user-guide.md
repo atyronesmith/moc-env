@@ -77,7 +77,9 @@ make check
 
 The CLI can read public GitHub repositories without a token, but GitHub's
 unauthenticated REST quota is small. For repeated use, configure a read-only
-fine-grained personal access token.
+fine-grained personal access token or log in with GitHub CLI. When no token is
+used, moc-env prints one warning with the remaining request quota after GitHub
+supplies that header. Pass `--no-auth` to force unauthenticated access.
 
 The token needs access to public repositories and these read-only permissions:
 
@@ -93,14 +95,15 @@ Do not grant administration, workflow, interaction-limit, or write permissions.
 `moc-env` resolves a GitHub token in this order:
 
 1. `GITHUB_TOKEN`
-2. `GITHUB_BWS_SECRET_ID` or `MOC_ENV_BWS_SECRET_ID`
-3. A Bitwarden secret UUID in macOS Keychain service
+2. An explicitly configured Bitwarden selector
+3. `gh auth token` when GitHub CLI is installed and logged in
+4. The default Bitwarden secret UUID item in macOS Keychain service
    `moc-env-github-token`
-4. `bws secret get <uuid>` using a Bitwarden machine access token
+5. Unauthenticated access
 
-If no credential is configured, the CLI continues unauthenticated. If a
-credential source is explicitly selected and fails, the command fails rather
-than silently trying another source.
+Unavailable optional steps are skipped silently. If a direct token or explicitly
+selected Bitwarden source fails, the command fails rather than silently trying
+another source.
 
 ### Direct token
 
@@ -610,8 +613,8 @@ Open pull requests are not treated as merged desired state.
 
 ### GitHub rate limits
 
-Use `GITHUB_TOKEN` or the Bitwarden selector workflow. The CLI reports the
-GitHub API error and exits with code `2`.
+Set `GITHUB_TOKEN` or run `gh auth login`; these are the quickest fixes. The CLI
+reports the reset time and exits with code `2`.
 
 ### No known issue number
 
@@ -663,14 +666,6 @@ separately and is not treated as a hard difference by itself.
 
 `plan-infra` derives repository and path from desired-state provenance. Keep
 source metadata intact when editing exported YAML.
-
-### Hosted CI currently fails on Linux
-
-The GitHub Actions `Check` workflow uses Ubuntu. Four current credential tests
-assume the macOS `/usr/bin/security` executable and therefore fail with
-`macOS Keychain utility is unavailable`. The full suite and `make check` pass on
-macOS. The pending fix is to make those tests platform-independent or inject
-the Keychain executable path.
 
 ## Safety boundaries
 

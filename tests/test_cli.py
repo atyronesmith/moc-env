@@ -141,6 +141,57 @@ class CliDispatchTest(unittest.TestCase):
             "moc-env status-workload oac-dev --workload workload1",
         )
 
+    def test_no_auth_forces_unauthenticated_resolution(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            env_file = Path(temporary_directory) / "selectors.env"
+            arguments = cli.build_list_parser().parse_args(
+                ["--no-auth", "--env-file", str(env_file)]
+            )
+            with (
+                patch.dict(os.environ, {"GITHUB_TOKEN": "direct-token-fixture"}),
+                patch.object(
+                    cli,
+                    "CredentialResolver",
+                    side_effect=AssertionError("resolver must not run"),
+                ),
+            ):
+                self.assertIsNone(cli._resolve_github_token(arguments))
+
+    def test_linux_without_token_or_gh_resolves_unauthenticated(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            env_file = Path(temporary_directory) / "selectors.env"
+            arguments = cli.build_list_parser().parse_args(
+                ["--env-file", str(env_file)]
+            )
+            resolver = cli.CredentialResolver(
+                platform="linux", environment={}, gh_executable=None
+            )
+            with (
+                patch.dict(os.environ, {}, clear=True),
+                patch.object(cli, "CredentialResolver", return_value=resolver),
+            ):
+                self.assertIsNone(cli._resolve_github_token(arguments))
+
+    def test_unauthenticated_list_warns_once_with_remaining_quota(self) -> None:
+        class QuotaReportingClient(FakeGitHubClient):
+            def get_tree(self, repository: str, ref: str = "main"):
+                if self.on_response:
+                    self._record_headers({"X-RateLimit-Remaining": "59"})
+                    self._record_headers({"X-RateLimit-Remaining": "58"})
+                return super().get_tree(repository, ref)
+
+        exit_code, _, stderr = self.run_cli(
+            ["list", "--no-auth"],
+            client_class=QuotaReportingClient,
+        )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(
+            stderr,
+            "moc-env: no GitHub credential found; continuing unauthenticated "
+            "(remaining request quota: 59)\n",
+        )
+
     def test_status_json_dispatch(self) -> None:
         exit_code, stdout, _ = self.run_cli(
             ["status", "bu-ist-demo", "--format", "json", "--no-prs"]

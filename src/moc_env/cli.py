@@ -24,7 +24,6 @@ from .chart_value_discovery import (
 )
 from .credentials import (
     CredentialError,
-    CredentialNotFoundError,
     CredentialResolver,
     credential_options_from_environment,
     load_credential_environment_file,
@@ -93,6 +92,11 @@ from .validate import (
 
 
 def _add_credential_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--no-auth",
+        action="store_true",
+        help="Force unauthenticated GitHub access",
+    )
     parser.add_argument(
         "--bws-secret-id",
         help="Bitwarden Secrets Manager UUID whose key is GITHUB_TOKEN",
@@ -620,6 +624,9 @@ def build_check_environment_parser() -> argparse.ArgumentParser:
 
 
 def _resolve_github_token(args: argparse.Namespace) -> str | None:
+    if args.no_auth:
+        return None
+
     try:
         credential_environment = load_credential_environment_file(args.env_file)
         credential_options = credential_options_from_environment(credential_environment)
@@ -639,33 +646,43 @@ def _resolve_github_token(args: argparse.Namespace) -> str | None:
     if credential_overrides:
         credential_options = replace(credential_options, **credential_overrides)
 
-    resolver = CredentialResolver()
-    explicit_keychain_selector = bool(
-        os.environ.get("GITHUB_BWS_SECRET_ID_KEYCHAIN_SERVICE")
-        or os.environ.get("GITHUB_BWS_SECRET_ID_KEYCHAIN_ACCOUNT")
-        or os.environ.get("GITHUB_TOKEN_KEYCHAIN_SERVICE")
-        or os.environ.get("GITHUB_TOKEN_KEYCHAIN_ACCOUNT")
+    explicit_bitwarden = bool(
+        credential_options.bws_secret_id
+        or credential_environment.get("GITHUB_BWS_SECRET_ID_KEYCHAIN_SERVICE")
+        or credential_environment.get("GITHUB_BWS_SECRET_ID_KEYCHAIN_ACCOUNT")
+        or credential_environment.get("GITHUB_TOKEN_KEYCHAIN_SERVICE")
+        or credential_environment.get("GITHUB_TOKEN_KEYCHAIN_ACCOUNT")
         or args.bws_secret_id_keychain_service
         or args.bws_secret_id_keychain_account
     )
+
+    resolver = CredentialResolver()
     try:
-        try:
-            return resolver.resolve(credential_options)
-        except CredentialNotFoundError:
-            if (
-                credential_options.direct_token
-                or credential_options.bws_secret_id
-                or explicit_keychain_selector
-            ):
-                raise
-            print(
-                "moc-env: no GitHub credential found; continuing unauthenticated",
-                file=sys.stderr,
-            )
-            return None
+        return resolver.resolve(
+            credential_options, explicit_bitwarden=explicit_bitwarden
+        )
     except CredentialError as exc:
         print(f"moc-env: {exc}", file=sys.stderr)
         raise SystemExit(2)
+
+
+def _print_unauthenticated_warning(remaining: int) -> None:
+    print(
+        "moc-env: no GitHub credential found; continuing unauthenticated "
+        f"(remaining request quota: {remaining})",
+        file=sys.stderr,
+    )
+
+
+def _new_github_client(
+    args: argparse.Namespace,
+    github_token: str | None,
+    refs: dict[str, str] | None = None,
+) -> GitHubClient:
+    client = GitHubClient(token=github_token, timeout=args.timeout, refs=refs)
+    if github_token is None:
+        client.on_response = _print_unauthenticated_warning
+    return client
 
 
 def main(
@@ -739,7 +756,7 @@ def main(
         argv = arguments
         args = build_list_parser().parse_args(argv[1:])
         github_token = _resolve_github_token(args)
-        client = GitHubClient(token=github_token, timeout=args.timeout)
+        client = _new_github_client(args, github_token)
         try:
             environments = list_environments(client)
         except (GitHubError, RateLimitError) as exc:
@@ -840,7 +857,7 @@ def main(
     if arguments and arguments[0] == "document-values":
         args = build_document_values_parser().parse_args(arguments[1:])
         github_token = _resolve_github_token(args)
-        client = GitHubClient(token=github_token, timeout=args.timeout)
+        client = _new_github_client(args, github_token)
         stage_step = 0
 
         def print_values_progress(
@@ -883,7 +900,7 @@ def main(
         args = build_export_infra_parser().parse_args(arguments[1:])
         environment = Environment(name=args.environment)
         github_token = _resolve_github_token(args)
-        client = GitHubClient(token=github_token, timeout=args.timeout)
+        client = _new_github_client(args, github_token)
         stage_step = 0
 
         def print_export_progress(
@@ -929,7 +946,7 @@ def main(
             print(f"moc-env: {exc}", file=sys.stderr)
             return 2
         github_token = _resolve_github_token(args)
-        client = GitHubClient(token=github_token, timeout=args.timeout)
+        client = _new_github_client(args, github_token)
         stage_step = 0
 
         def print_workload_export_progress(
@@ -996,7 +1013,7 @@ def main(
             issue_number=issue_number,
         )
         github_token = _resolve_github_token(args)
-        client = GitHubClient(token=github_token, timeout=args.timeout)
+        client = _new_github_client(args, github_token)
         stage_step = 0
 
         def print_environment_export_progress(
@@ -1097,7 +1114,7 @@ def main(
 
         environment = desired_environment(document)
         github_token = _resolve_github_token(args)
-        client = GitHubClient(token=github_token, timeout=args.timeout)
+        client = _new_github_client(args, github_token)
         stage_step = 0
 
         def print_comparison_progress(
@@ -1179,7 +1196,7 @@ def main(
 
         environment = desired_environment(document)
         github_token = _resolve_github_token(args)
-        client = GitHubClient(token=github_token, timeout=args.timeout)
+        client = _new_github_client(args, github_token)
         stage_step = 0
 
         def print_plan_progress(
@@ -1267,7 +1284,7 @@ def main(
 
         environment = desired_environment(document)
         github_token = _resolve_github_token(args)
-        client = GitHubClient(token=github_token, timeout=args.timeout)
+        client = _new_github_client(args, github_token)
         stage_step = 0
 
         def print_workload_comparison_progress(
@@ -1346,7 +1363,7 @@ def main(
 
         environment = desired_environment(document)
         github_token = _resolve_github_token(args)
-        client = GitHubClient(token=github_token, timeout=args.timeout)
+        client = _new_github_client(args, github_token)
         stage_step = 0
 
         def print_environment_comparison_progress(
@@ -1443,11 +1460,7 @@ def main(
             if not separator or not repository or not ref:
                 parser.error("--ref must have the form REPO=REF")
             repository_refs[f"CCI-MOC/{repository}"] = ref
-        client = GitHubClient(
-            token=github_token,
-            timeout=args.timeout,
-            refs=repository_refs,
-        )
+        client = _new_github_client(args, github_token, repository_refs)
         try:
             environment_rows = list_environments(client)
             known_names = sorted(
