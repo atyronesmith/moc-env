@@ -211,6 +211,7 @@ class ReportRenderingTest(unittest.TestCase):
                         "title": {"value": "Fixture buildout"},
                         "state": {"value": "open"},
                         "merged": {"value": False},
+                        "classification": {"value": "open"},
                         "head_ref": {"value": "fixture-buildout"},
                         "html_url": {"value": "https://github.com/CCI-MOC/oac-apps/pull/237"},
                         "changed_files": ["values/fixture/hcp-config.yaml"],
@@ -221,7 +222,7 @@ class ReportRenderingTest(unittest.TestCase):
         rendered = render_markdown({**self.report, "checks": [check]})
         self.assertIn("**Relevant pull requests**", rendered)
         self.assertIn(
-            "| PR | Title | State | Merged | Head branch | Link | Changed files |",
+            "| PR | Title | State | Merged | Classification | Head branch | Link | Changed files |",
             rendered,
         )
         self.assertIn("`237` | `Fixture buildout` | `open` | No", rendered)
@@ -320,9 +321,19 @@ class ReportRenderingTest(unittest.TestCase):
             "stage": "GitOps configuration",
             "check": "Relevant pull requests",
             "expected": "No open PRs; relevant changes merged into main",
-            "present": {"matching_pr_count": 3, "merged_pr_count": 3},
+            "present": {
+                "matching_pr_count": 3,
+                "merged_pr_count": 3,
+                "open_pr_count": 0,
+                "closed_unmerged_pr_count": 0,
+            },
             "missing": None,
-            "actual": {"matching_pr_count": 3, "open_count": 0, "merged_count": 3},
+            "actual": {
+                "matching_pr_count": 3,
+                "open_count": 0,
+                "merged_count": 3,
+                "closed_unmerged_count": 0,
+            },
             "evidence": {"pull_requests": []},
         }
         report = {**self.report, "checks": [check]}
@@ -330,6 +341,7 @@ class ReportRenderingTest(unittest.TestCase):
         self.assertIn("Pull request counts:", rendered)
         self.assertIn("Matching PRs", rendered)
         self.assertIn("Merged PRs", rendered)
+        self.assertIn("Closed-unmerged PRs", rendered)
         self.assertIn("Open PRs", rendered)
         self.assertNotIn("Present:", rendered)
         self.assertNotIn("Missing:", rendered)

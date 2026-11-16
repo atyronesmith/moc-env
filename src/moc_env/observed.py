@@ -19,6 +19,7 @@ OAC_APPS_REPOSITORY = "CCI-MOC/oac-apps"
 INVENTORY_PATH = "infra/inventory/00hosts.yaml"
 HUB_INVENTORY_PATH = "hub-images/inventory.yml"
 KEYCLOAK_PATH = "main.tf"
+PR_FILE_FETCH_LIMIT = 20
 ProgressCallback = Callable[[str, str, str, str], None]
 
 
@@ -203,6 +204,7 @@ class PullRequestObservation:
     head_sha: SourceValue
     url: SourceValue
     changed_files: SourceValue
+    classification: SourceValue
 
 
 @dataclass(frozen=True)
@@ -576,6 +578,7 @@ def read_apps_observation(
     environment: Environment,
     progress: ProgressCallback | None = None,
     include_pull_requests: bool = True,
+    path_scope: str = "environment",
 ) -> AppsObservation:
     """Read merged oac-apps paths and environment-relevant pull requests."""
 
@@ -588,38 +591,69 @@ def read_apps_observation(
             "git/trees/main?recursive=1",
         )
     tree = client.get_tree(repository)
-    terms = (
-        environment.name,
-        environment.infra_cluster,
-        *(
-            environment.workload_clusters
-            if environment.workload_clusters is not None
-            else (environment.workload_cluster,)
-        ),
+    hub = environment.infra_cluster
+    environment_path_prefixes = (
+        f"hosted-clusters/{hub}/",
+        f"values/{hub}/",
+        f"apps/{hub}/",
     )
+    workload_path_prefixes = tuple(
+        prefix
+        for workload in environment.workload_clusters or ()
+        for prefix in (
+            f"hosted-clusters/{hub}/{workload}/",
+            f"values/{hub}/{workload}/",
+            f"apps/{hub}/{workload}/",
+        )
+    )
+
+    def changes_environment_path(path: str) -> bool:
+        if path_scope == "workload":
+            return path.startswith(workload_path_prefixes)
+        if not path.startswith(environment_path_prefixes):
+            return False
+        return path_scope != "hub" or not path.startswith(workload_path_prefixes)
+
     pull_requests: list[PullRequestObservation] = []
     if include_pull_requests:
         if progress is not None:
             progress(
                 "GitOps configuration",
-                "search pull requests for in-flight changes that reference the environment",
+                "inspect pull-request file lists for changes under environment paths",
                 repository,
                 "pulls?state=all",
             )
-        for pull in client.pulls(repository):
-            searchable = " ".join(
-                [
-                    str(pull.get("title") or ""),
-                    str(pull.get("body") or ""),
-                    str(pull.get("head", {}).get("ref") or ""),
-                ]
-            )
-            if not any(term in searchable for term in terms):
-                continue
+        all_pulls = list(client.pulls(repository))
+        closed_pulls = sorted(
+            (pull for pull in all_pulls if pull.get("state") == "closed"),
+            key=lambda pull: str(pull.get("updated_at") or ""),
+            reverse=True,
+        )[:PR_FILE_FETCH_LIMIT]
+        closed_numbers = {
+            pull.get("number") for pull in closed_pulls if pull.get("number") is not None
+        }
+        candidates = [
+            pull
+            for pull in all_pulls
+            if pull.get("state") == "open" or pull.get("number") in closed_numbers
+        ]
+        for pull in candidates:
             files = tuple(
                 file.get("filename")
                 for file in client.pr_files(repository, pull["number"])
                 if file.get("filename") is not None
+            )
+            environment_files = tuple(
+                path for path in files if changes_environment_path(path)
+            )
+            if not environment_files:
+                continue
+            pull_state = pull.get("state")
+            merged = bool(pull.get("merged_at"))
+            classification = (
+                "open"
+                if pull_state == "open"
+                else ("merged" if merged else "closed_unmerged")
             )
             source = (repository, f"pulls/{pull['number']}", "all")
             files_source = (
@@ -640,7 +674,8 @@ def read_apps_observation(
                         pull.get("head", {}).get("sha"), *source
                     ),
                     url=SourceValue(pull.get("html_url"), *source),
-                    changed_files=SourceValue(files, *files_source),
+                    changed_files=SourceValue(environment_files, *files_source),
+                    classification=SourceValue(classification, *source),
                 )
             )
     return AppsObservation(
@@ -834,6 +869,7 @@ def read_environment_observation(
     environment: Environment,
     progress: ProgressCallback | None = None,
     include_pull_requests: bool = True,
+    path_scope: str = "environment",
 ) -> ObservedEnvironment:
     """Read all Phase 1 observations for an environment."""
 
@@ -852,6 +888,7 @@ def read_environment_observation(
         environment,
         progress,
         include_pull_requests=include_pull_requests,
+        path_scope=path_scope,
     )
     return ObservedEnvironment(
         environment=environment,

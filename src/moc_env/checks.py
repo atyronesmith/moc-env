@@ -217,13 +217,18 @@ class StatusChecker:
         if self.progress is not None:
             self.progress(stage, action, repository, path)
 
-    def run(self, environment: Environment) -> StatusReport:
+    def run(
+        self,
+        environment: Environment,
+        path_scope: str = "environment",
+    ) -> StatusReport:
         checks: list[CheckResult] = []
         observation = read_environment_observation(
             self.client,
             environment,
             progress=self._emit_progress,
             include_pull_requests=self.include_prs,
+            path_scope=path_scope,
         )
         environment = observation.environment
         if observation.issue is not None:
@@ -241,7 +246,7 @@ class StatusChecker:
     def run_hub(self, environment: Environment) -> StatusReport:
         """Return the repository-status report scoped to the hub cluster."""
 
-        report = self.run(environment)
+        report = self.run(environment, path_scope="hub")
         checks = [
             check
             for check in report.checks
@@ -270,7 +275,7 @@ class StatusChecker:
             if workload not in environment.workload_clusters:
                 raise ValueError(f"unknown workload cluster: {workload}")
             environment = replace(environment, workload_clusters=(workload,))
-        report = self.run(environment)
+        report = self.run(environment, path_scope="workload")
         checks = [
             check
             for check in report.checks
@@ -911,9 +916,12 @@ class StatusChecker:
                     path="pulls",
                     ref="all",
                     state="missing",
-                    expected="PR referencing the environment",
+                    expected="No open PR changing an environment-owned path",
                     actual={"matching_pr_count": 0},
-                    reason="No open or merged PR references the environment.",
+                    reason=(
+                        "No open, merged, or closed-unmerged PR changes a file "
+                        "under this environment's oac-apps paths."
+                    ),
                     present={"matching_pr_count": 0},
                     missing={"matching_pull_requests": 1},
                     evidence={},
@@ -922,9 +930,18 @@ class StatusChecker:
             )
             return results
 
-        open_prs = [item for item in pull_requests if item.state.value == "open"]
-        merged_prs = [item for item in pull_requests if item.merged.value]
-        state = "pr_open" if open_prs else "pr_merged"
+        open_prs = [
+            item for item in pull_requests if item.classification.value == "open"
+        ]
+        merged_prs = [
+            item for item in pull_requests if item.classification.value == "merged"
+        ]
+        closed_unmerged_prs = [
+            item
+            for item in pull_requests
+            if item.classification.value == "closed_unmerged"
+        ]
+        state = "pr_open" if open_prs else "declared_in_main"
         evidence = []
         for item in pull_requests:
             pull = item
@@ -934,6 +951,7 @@ class StatusChecker:
                     "title": pull.title.to_dict(),
                     "state": pull.state.to_dict(),
                     "merged": pull.merged.to_dict(),
+                    "classification": pull.classification.to_dict(),
                     "head_ref": pull.head_ref.to_dict(),
                     "head_sha": pull.head_sha.to_dict(),
                     "html_url": pull.url.to_dict(),
@@ -948,7 +966,11 @@ class StatusChecker:
             )
             missing = {"open_prs_to_merge": len(open_prs)}
         else:
-            reason = f"All {len(merged_prs)} relevant PRs have been merged into main."
+            reason = (
+                f"No relevant PRs are open; {len(merged_prs)} merged and "
+                f"{len(closed_unmerged_prs)} closed-unmerged PRs are listed "
+                "as history."
+            )
             missing = None
 
         results.append(
@@ -961,16 +983,19 @@ class StatusChecker:
                 path="pulls",
                 ref="all",
                 state=state,
-                expected="No open PRs; relevant changes merged into main",
+                expected="No open PR changing an environment-owned path",
                 actual={
                     "matching_pr_count": len(pull_requests),
                     "open_count": len(open_prs),
                     "merged_count": len(merged_prs),
+                    "closed_unmerged_count": len(closed_unmerged_prs),
                 },
                 reason=reason,
                 present={
                     "matching_pr_count": len(pull_requests),
                     "merged_pr_count": len(merged_prs),
+                    "open_pr_count": len(open_prs),
+                    "closed_unmerged_pr_count": len(closed_unmerged_prs),
                 },
                 missing=missing,
                 evidence={"pull_requests": evidence},
