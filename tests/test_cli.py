@@ -6,6 +6,7 @@ import json
 import os
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -31,6 +32,7 @@ class CliDispatchTest(unittest.TestCase):
         self,
         arguments: list[str],
         client_class=FakeGitHubClient,
+        clock=None,
     ) -> tuple[int, str, str]:
         stdout = io.StringIO()
         stderr = io.StringIO()
@@ -40,7 +42,7 @@ class CliDispatchTest(unittest.TestCase):
             contextlib.redirect_stdout(stdout),
             contextlib.redirect_stderr(stderr),
         ):
-            exit_code = cli.main(arguments)
+            exit_code = cli.main(arguments, clock=clock)
         return exit_code, stdout.getvalue(), stderr.getvalue()
 
     def test_list_text_dispatch(self) -> None:
@@ -332,6 +334,59 @@ class CliDispatchTest(unittest.TestCase):
         self.assertEqual(exit_code, 2)
         self.assertEqual(stdout, "")
         self.assertIn("defaults.bad-key", stderr)
+
+    def test_status_json_is_byte_stable_with_fixed_client_and_clock(self) -> None:
+        fixed_clock = lambda: datetime(
+            2026, 11, 16, 12, 34, 56, tzinfo=timezone.utc
+        )
+        with patch.dict(os.environ, {"GITHUB_TOKEN": ""}):
+            exit_code, stdout, _ = self.run_cli(
+                [
+                    "status",
+                    "bu-ist-demo",
+                    "--format",
+                    "json",
+                    "--no-prs",
+                ],
+                clock=fixed_clock,
+            )
+
+        self.assertEqual(exit_code, 0)
+        golden = Path(__file__).parent / "fixtures" / "status-report.json"
+        self.assertEqual(stdout, golden.read_text(encoding="utf-8"))
+
+    def test_metadata_command_redacts_credential_values(self) -> None:
+        with patch.dict(os.environ, {"GITHUB_TOKEN": ""}):
+            exit_code, stdout, _ = self.run_cli(
+                [
+                    "status",
+                    "bu-ist-demo",
+                    "--bws-secret-id",
+                    "super-secret-value",
+                    "--bws-secret-id-keychain-service=chain-secret-value",
+                    "--format",
+                    "json",
+                    "--no-prs",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        self.assertNotIn("super-secret-value", stdout)
+        self.assertNotIn("chain-secret-value", stdout)
+        report = json.loads(stdout)
+        self.assertEqual(
+            report["metadata"]["command"],
+            [
+                "status",
+                "bu-ist-demo",
+                "--bws-secret-id",
+                "<redacted>",
+                "--bws-secret-id-keychain-service=<redacted>",
+                "--format",
+                "json",
+                "--no-prs",
+            ],
+        )
 
     def test_status_markdown_dispatch_and_output_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

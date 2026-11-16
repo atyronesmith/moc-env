@@ -1,0 +1,941 @@
+{
+  "checks": [
+    {
+      "actual": "open",
+      "check": "MOC issue",
+      "evidence": {
+        "state": {
+          "confidence": "exact",
+          "provenance": {
+            "path": "issues/666",
+            "ref": "main",
+            "repository": "CCI-MOC/MOC-issues"
+          },
+          "value": "open"
+        },
+        "title": {
+          "confidence": "exact",
+          "provenance": {
+            "path": "issues/666",
+            "ref": "main",
+            "repository": "CCI-MOC/MOC-issues"
+          },
+          "value": "RH HW Request - IS&T Tester cluster"
+        },
+        "url": {
+          "confidence": "exact",
+          "provenance": {
+            "path": "issues/666",
+            "ref": "main",
+            "repository": "CCI-MOC/MOC-issues"
+          },
+          "value": "https://github.com/CCI-MOC/MOC-issues/issues/666"
+        }
+      },
+      "expected": "Open issue recording the environment request",
+      "gaps": [],
+      "id": "request.issue",
+      "next_action": null,
+      "observed": [
+        {
+          "name": "value",
+          "value": "open"
+        }
+      ],
+      "path": "issues/666",
+      "present": {
+        "issue_state": "open",
+        "title": "RH HW Request - IS&T Tester cluster"
+      },
+      "reason": "Issue #666 is open and records the environment request.",
+      "ref": "main",
+      "repository": "CCI-MOC/MOC-issues",
+      "scope": "shared",
+      "severity": "info",
+      "stage": "Request",
+      "state": "requested",
+      "url": "https://github.com/CCI-MOC/MOC-issues/issues/666"
+    },
+    {
+      "actual": {
+        "found": true,
+        "host_count": 1
+      },
+      "check": "bu-ist-demo-infra host inventory",
+      "evidence": {
+        "hosts": [
+          {
+            "bmc_addr": null,
+            "boot_image_url": "http://10.2.0.82/boot/discovery.iso",
+            "name": "control-0",
+            "node_name": "MOC-R4PAC10U31-S1A"
+          }
+        ]
+      },
+      "expected": "Inventory group for bu-ist-demo-infra",
+      "gaps": [],
+      "id": "hub.inventory",
+      "next_action": null,
+      "observed": [
+        {
+          "name": "found",
+          "value": true
+        },
+        {
+          "name": "host_count",
+          "value": 1
+        }
+      ],
+      "path": "infra/inventory/00hosts.yaml",
+      "present": {
+        "cluster_group": "bu-ist-demo-infra",
+        "host_count": 1
+      },
+      "reason": "The inventory contains a bu-ist-demo-infra group with 1 hosts.",
+      "ref": "main",
+      "repository": "CCI-MOC/oac-infra",
+      "scope": "hub",
+      "severity": "info",
+      "stage": "Hardware and inventory",
+      "state": "declared_in_main",
+      "url": "https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml"
+    },
+    {
+      "actual": [
+        "http://10.2.0.82/boot/discovery.iso"
+      ],
+      "check": "bu-ist-demo-infra boot image",
+      "evidence": {
+        "check_rule": "The boot-image filename must contain the full cluster name `bu-ist-demo-infra`; generic `discovery.iso` does not satisfy this rule.",
+        "generic_discovery_iso": true
+      },
+      "expected": "Cluster-specific discovery image for bu-ist-demo-infra",
+      "gaps": [
+        {
+          "expected": "an image name containing bu-ist-demo-infra",
+          "name": "cluster_specific_image",
+          "observed": null
+        }
+      ],
+      "id": "hub.boot_image",
+      "missing": {
+        "cluster_specific_image": "an image name containing bu-ist-demo-infra"
+      },
+      "next_action": "Generate and publish a hub-specific discovery ISO, then replace the generic boot_image_url for every host in the hub cluster group.",
+      "observed": [
+        {
+          "name": "0",
+          "value": "http://10.2.0.82/boot/discovery.iso"
+        }
+      ],
+      "path": "infra/inventory/00hosts.yaml",
+      "present": {
+        "boot_image_url": "http://10.2.0.82/boot/discovery.iso"
+      },
+      "reason": "A boot image URL is present, but it points to the generic discovery.iso rather than a cluster-specific image.",
+      "ref": "main",
+      "repository": "CCI-MOC/oac-infra",
+      "scope": "hub",
+      "severity": "blocking",
+      "stage": "Hardware and inventory",
+      "state": "partial",
+      "url": "https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml"
+    },
+    {
+      "actual": {
+        "found": true,
+        "host_count": 1
+      },
+      "check": "bu-ist-demo-workload0 host inventory",
+      "evidence": {
+        "hosts": [
+          {
+            "bmc_addr": null,
+            "boot_image_url": "http://10.2.0.82/boot/discovery.iso",
+            "name": "compute-0",
+            "node_name": "MOC-R4PAC10U31-S1B"
+          }
+        ]
+      },
+      "expected": "Inventory group for bu-ist-demo-workload0",
+      "gaps": [],
+      "id": "workload.inventory",
+      "next_action": null,
+      "observed": [
+        {
+          "name": "found",
+          "value": true
+        },
+        {
+          "name": "host_count",
+          "value": 1
+        }
+      ],
+      "path": "infra/inventory/00hosts.yaml",
+      "present": {
+        "cluster_group": "bu-ist-demo-workload0",
+        "host_count": 1
+      },
+      "reason": "The inventory contains a bu-ist-demo-workload0 group with 1 hosts.",
+      "ref": "main",
+      "repository": "CCI-MOC/oac-infra",
+      "scope": "workload",
+      "severity": "info",
+      "stage": "Hardware and inventory",
+      "state": "declared_in_main",
+      "url": "https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml"
+    },
+    {
+      "actual": [
+        "http://10.2.0.82/boot/discovery.iso"
+      ],
+      "check": "bu-ist-demo-workload0 boot image",
+      "evidence": {
+        "check_rule": "The boot-image filename must contain the full cluster name `bu-ist-demo-workload0`; generic `discovery.iso` does not satisfy this rule.",
+        "generic_discovery_iso": true
+      },
+      "expected": "Cluster-specific discovery image for bu-ist-demo-workload0",
+      "gaps": [
+        {
+          "expected": "an image name containing bu-ist-demo-workload0",
+          "name": "cluster_specific_image",
+          "observed": null
+        }
+      ],
+      "id": "workload.boot_image",
+      "missing": {
+        "cluster_specific_image": "an image name containing bu-ist-demo-workload0"
+      },
+      "next_action": "Generate and publish a workload-specific discovery ISO, then replace the generic boot_image_url for every host in the workload cluster group.",
+      "observed": [
+        {
+          "name": "0",
+          "value": "http://10.2.0.82/boot/discovery.iso"
+        }
+      ],
+      "path": "infra/inventory/00hosts.yaml",
+      "present": {
+        "boot_image_url": "http://10.2.0.82/boot/discovery.iso"
+      },
+      "reason": "A boot image URL is present, but it points to the generic discovery.iso rather than a cluster-specific image.",
+      "ref": "main",
+      "repository": "CCI-MOC/oac-infra",
+      "scope": "workload",
+      "severity": "blocking",
+      "stage": "Hardware and inventory",
+      "state": "partial",
+      "url": "https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml"
+    },
+    {
+      "actual": {
+        "found": true
+      },
+      "check": "Hub image inventory",
+      "evidence": {
+        "path_present": true
+      },
+      "expected": "Hub-image inventory entry for bu-ist-demo-infra",
+      "gaps": [],
+      "id": "hub.image_inventory",
+      "next_action": null,
+      "observed": [
+        {
+          "name": "found",
+          "value": true
+        }
+      ],
+      "path": "hub-images/inventory.yml",
+      "present": {
+        "inventory_key": "bu-ist-demo-infra"
+      },
+      "reason": "The hub-image inventory contains the all.children.bu-ist-demo-infra key.",
+      "ref": "main",
+      "repository": "CCI-MOC/oac-infra",
+      "scope": "hub",
+      "severity": "info",
+      "stage": "Cluster build",
+      "state": "declared_in_main",
+      "url": "https://github.com/CCI-MOC/oac-infra/blob/main/hub-images/inventory.yml"
+    },
+    {
+      "actual": [
+        "cluster_domain_name",
+        "base_domain",
+        "machine_network",
+        "api_ip",
+        "ingress_ip",
+        "dns_ip"
+      ],
+      "check": "Hub image variables",
+      "evidence": {
+        "path_present": true,
+        "values": {
+          "api_ip": "10.20.27.11",
+          "base_domain": "int.massopen.cloud",
+          "cluster_domain_name": "bu-ist-demo",
+          "dns_ip": "8.8.8.8",
+          "ingress_ip": "10.20.27.12",
+          "machine_network": "10.20.26.0/23"
+        }
+      },
+      "expected": [
+        "cluster_domain_name",
+        "base_domain",
+        "machine_network",
+        "api_ip",
+        "ingress_ip",
+        "dns_ip"
+      ],
+      "gaps": [],
+      "id": "hub.image_vars",
+      "next_action": null,
+      "observed": [
+        {
+          "name": "0",
+          "value": "cluster_domain_name"
+        },
+        {
+          "name": "1",
+          "value": "base_domain"
+        },
+        {
+          "name": "2",
+          "value": "machine_network"
+        },
+        {
+          "name": "3",
+          "value": "api_ip"
+        },
+        {
+          "name": "4",
+          "value": "ingress_ip"
+        },
+        {
+          "name": "5",
+          "value": "dns_ip"
+        }
+      ],
+      "path": "hub-images/group_vars/bu-ist-demo-infra/vars.yml",
+      "present": {
+        "fields": [
+          "cluster_domain_name",
+          "base_domain",
+          "machine_network",
+          "api_ip",
+          "ingress_ip",
+          "dns_ip"
+        ],
+        "values": {
+          "api_ip": "10.20.27.11",
+          "base_domain": "int.massopen.cloud",
+          "cluster_domain_name": "bu-ist-demo",
+          "dns_ip": "8.8.8.8",
+          "ingress_ip": "10.20.27.12",
+          "machine_network": "10.20.26.0/23"
+        }
+      },
+      "reason": "All required hub-image variables are present in main.",
+      "ref": "main",
+      "repository": "CCI-MOC/oac-infra",
+      "scope": "hub",
+      "severity": "info",
+      "stage": "Cluster build",
+      "state": "declared_in_main",
+      "url": "https://github.com/CCI-MOC/oac-infra/blob/main/hub-images/group_vars/bu-ist-demo-infra/vars.yml"
+    },
+    {
+      "actual": {
+        "client": "bu-ist-demo-infra",
+        "redirect_uri": "https://oauth-openshift.apps.bu-ist-demo.int.massopen.cloud/oauth2callback/mocsso",
+        "secret_name": "cluster/bu-ist-demo-infra/keycloak-oidc"
+      },
+      "check": "Infra OIDC client",
+      "evidence": {
+        "client": {
+          "block_name": {
+            "confidence": "exact",
+            "provenance": {
+              "path": "main.tf",
+              "ref": "main",
+              "repository": "CCI-MOC/moc-keycloak"
+            },
+            "value": "bu_ist_demo_infra"
+          },
+          "cluster_name": {
+            "confidence": "exact",
+            "provenance": {
+              "path": "main.tf",
+              "ref": "main",
+              "repository": "CCI-MOC/moc-keycloak"
+            },
+            "value": "bu-ist-demo-infra"
+          },
+          "redirect_uri": {
+            "confidence": "exact",
+            "provenance": {
+              "path": "main.tf",
+              "ref": "main",
+              "repository": "CCI-MOC/moc-keycloak"
+            },
+            "value": "https://oauth-openshift.apps.bu-ist-demo.int.massopen.cloud/oauth2callback/mocsso"
+          },
+          "secret_name": {
+            "confidence": "exact",
+            "provenance": {
+              "path": "main.tf",
+              "ref": "main",
+              "repository": "CCI-MOC/moc-keycloak"
+            },
+            "value": "cluster/bu-ist-demo-infra/keycloak-oidc"
+          }
+        },
+        "fields": {
+          "client": {
+            "expected": "bu-ist-demo-infra",
+            "observed": "bu-ist-demo-infra",
+            "status": "match"
+          },
+          "redirect_uri": {
+            "expected": "https://oauth-openshift.apps.bu-ist-demo.int.massopen.cloud/oauth2callback/mocsso",
+            "observed": "https://oauth-openshift.apps.bu-ist-demo.int.massopen.cloud/oauth2callback/mocsso",
+            "status": "match"
+          },
+          "secret_name": {
+            "expected": "cluster/bu-ist-demo-infra/keycloak-oidc",
+            "observed": "cluster/bu-ist-demo-infra/keycloak-oidc",
+            "status": "match"
+          }
+        }
+      },
+      "expected": {
+        "client": "bu-ist-demo-infra",
+        "redirect_uri": "https://oauth-openshift.apps.bu-ist-demo.int.massopen.cloud/oauth2callback/mocsso",
+        "secret_name": "cluster/bu-ist-demo-infra/keycloak-oidc"
+      },
+      "gaps": [],
+      "id": "hub.oidc_client",
+      "next_action": null,
+      "observed": [
+        {
+          "name": "client",
+          "value": "bu-ist-demo-infra"
+        },
+        {
+          "name": "redirect_uri",
+          "value": "https://oauth-openshift.apps.bu-ist-demo.int.massopen.cloud/oauth2callback/mocsso"
+        },
+        {
+          "name": "secret_name",
+          "value": "cluster/bu-ist-demo-infra/keycloak-oidc"
+        }
+      ],
+      "path": "main.tf",
+      "present": {
+        "fields": {
+          "client": "match",
+          "redirect_uri": "match",
+          "secret_name": "match"
+        }
+      },
+      "reason": "All expected Keycloak OIDC client fields match.",
+      "ref": "main",
+      "repository": "CCI-MOC/moc-keycloak",
+      "scope": "hub",
+      "severity": "info",
+      "source": {
+        "path": "main.tf",
+        "ref": "main",
+        "repository": "CCI-MOC/moc-keycloak"
+      },
+      "stage": "Identity",
+      "state": "declared_in_main",
+      "url": "https://github.com/CCI-MOC/moc-keycloak/blob/main/main.tf"
+    },
+    {
+      "actual": {
+        "matched_file_count": 0
+      },
+      "check": "Infra hosted-cluster defaults",
+      "evidence": {
+        "expected_path_count": 1,
+        "expected_paths": [
+          "hosted-clusters/bu-ist-demo-infra/values.yaml"
+        ],
+        "optional_paths": [],
+        "path_count": 0,
+        "paths": []
+      },
+      "expected": {
+        "file_count": 1,
+        "scope": "hosted-clusters/bu-ist-demo-infra/values.yaml"
+      },
+      "gaps": [
+        {
+          "expected": 1,
+          "name": "file_count",
+          "observed": null
+        },
+        {
+          "expected": [
+            "hosted-clusters/bu-ist-demo-infra/values.yaml"
+          ],
+          "name": "paths",
+          "observed": null
+        }
+      ],
+      "id": "hub.hosted_cluster_defaults",
+      "missing": {
+        "file_count": 1,
+        "paths": [
+          "hosted-clusters/bu-ist-demo-infra/values.yaml"
+        ]
+      },
+      "next_action": "Create or complete the hub hosted-cluster defaults file at hosted-clusters/<hub>/values.yaml in CCI-MOC/oac-infra.",
+      "observed": [
+        {
+          "name": "matched_file_count",
+          "value": 0
+        }
+      ],
+      "path": "hosted-clusters/bu-ist-demo-infra/values.yaml",
+      "present": {
+        "file_count": 0
+      },
+      "reason": "No merged main paths were found for the default values for hosted clusters on this hub cluster.",
+      "ref": "main",
+      "repository": "CCI-MOC/oac-apps",
+      "scope": "hub",
+      "severity": "blocking",
+      "stage": "GitOps configuration",
+      "state": "missing",
+      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/values.yaml"
+    },
+    {
+      "actual": {
+        "matched_file_count": 0
+      },
+      "check": "Hub-wide component values",
+      "evidence": {
+        "expected_path_count": 1,
+        "expected_paths": [
+          "values/bu-ist-demo-infra/hcp-config.yaml"
+        ],
+        "optional_paths": [],
+        "path_count": 0,
+        "paths": []
+      },
+      "expected": {
+        "file_count": 1,
+        "scope": "values/bu-ist-demo-infra"
+      },
+      "gaps": [
+        {
+          "expected": 1,
+          "name": "file_count",
+          "observed": null
+        },
+        {
+          "expected": [
+            "values/bu-ist-demo-infra/hcp-config.yaml"
+          ],
+          "name": "paths",
+          "observed": null
+        }
+      ],
+      "id": "hub.component_values",
+      "missing": {
+        "file_count": 1,
+        "paths": [
+          "values/bu-ist-demo-infra/hcp-config.yaml"
+        ]
+      },
+      "next_action": "Create or complete values/<hub>/hcp-config.yaml in CCI-MOC/oac-infra for hub-wide HCP and secret-selector values.",
+      "observed": [
+        {
+          "name": "matched_file_count",
+          "value": 0
+        }
+      ],
+      "path": "values/bu-ist-demo-infra",
+      "present": {
+        "file_count": 0
+      },
+      "reason": "No merged main paths were found for hub-wide HCP and secret-selector values.",
+      "ref": "main",
+      "repository": "CCI-MOC/oac-apps",
+      "scope": "hub",
+      "severity": "blocking",
+      "stage": "GitOps configuration",
+      "state": "missing",
+      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/values/bu-ist-demo-infra"
+    },
+    {
+      "actual": {
+        "matched_file_count": 0
+      },
+      "check": "Infra local-cluster values",
+      "evidence": {
+        "expected_path_count": 13,
+        "expected_paths": [
+          "values/bu-ist-demo-infra/local-cluster/acm.yaml",
+          "values/bu-ist-demo-infra/local-cluster/acm-placements.yaml",
+          "values/bu-ist-demo-infra/local-cluster/cert-manager.yaml",
+          "values/bu-ist-demo-infra/local-cluster/cluster-certificates.yaml",
+          "values/bu-ist-demo-infra/local-cluster/cluster-version.yaml",
+          "values/bu-ist-demo-infra/local-cluster/external-dns-operator.yaml",
+          "values/bu-ist-demo-infra/local-cluster/external-secrets.yaml",
+          "values/bu-ist-demo-infra/local-cluster/hcp-config.yaml",
+          "values/bu-ist-demo-infra/local-cluster/keycloak-oauth.yaml",
+          "values/bu-ist-demo-infra/local-cluster/metallb.yaml",
+          "values/bu-ist-demo-infra/local-cluster/openshift-gitops.yaml",
+          "values/bu-ist-demo-infra/local-cluster/portworx.yaml",
+          "values/bu-ist-demo-infra/local-cluster/user-workload-monitoring.yaml"
+        ],
+        "optional_paths": [],
+        "path_count": 0,
+        "paths": []
+      },
+      "expected": {
+        "file_count": 13,
+        "scope": "values/bu-ist-demo-infra/local-cluster"
+      },
+      "gaps": [
+        {
+          "expected": 13,
+          "name": "file_count",
+          "observed": null
+        },
+        {
+          "expected": [
+            "values/bu-ist-demo-infra/local-cluster/acm.yaml",
+            "values/bu-ist-demo-infra/local-cluster/acm-placements.yaml",
+            "values/bu-ist-demo-infra/local-cluster/cert-manager.yaml",
+            "values/bu-ist-demo-infra/local-cluster/cluster-certificates.yaml",
+            "values/bu-ist-demo-infra/local-cluster/cluster-version.yaml",
+            "values/bu-ist-demo-infra/local-cluster/external-dns-operator.yaml",
+            "values/bu-ist-demo-infra/local-cluster/external-secrets.yaml",
+            "values/bu-ist-demo-infra/local-cluster/hcp-config.yaml",
+            "values/bu-ist-demo-infra/local-cluster/keycloak-oauth.yaml",
+            "values/bu-ist-demo-infra/local-cluster/metallb.yaml",
+            "values/bu-ist-demo-infra/local-cluster/openshift-gitops.yaml",
+            "values/bu-ist-demo-infra/local-cluster/portworx.yaml",
+            "values/bu-ist-demo-infra/local-cluster/user-workload-monitoring.yaml"
+          ],
+          "name": "paths",
+          "observed": null
+        }
+      ],
+      "id": "hub.local_cluster_values",
+      "missing": {
+        "file_count": 13,
+        "paths": [
+          "values/bu-ist-demo-infra/local-cluster/acm.yaml",
+          "values/bu-ist-demo-infra/local-cluster/acm-placements.yaml",
+          "values/bu-ist-demo-infra/local-cluster/cert-manager.yaml",
+          "values/bu-ist-demo-infra/local-cluster/cluster-certificates.yaml",
+          "values/bu-ist-demo-infra/local-cluster/cluster-version.yaml",
+          "values/bu-ist-demo-infra/local-cluster/external-dns-operator.yaml",
+          "values/bu-ist-demo-infra/local-cluster/external-secrets.yaml",
+          "values/bu-ist-demo-infra/local-cluster/hcp-config.yaml",
+          "values/bu-ist-demo-infra/local-cluster/keycloak-oauth.yaml",
+          "values/bu-ist-demo-infra/local-cluster/metallb.yaml",
+          "values/bu-ist-demo-infra/local-cluster/openshift-gitops.yaml",
+          "values/bu-ist-demo-infra/local-cluster/portworx.yaml",
+          "values/bu-ist-demo-infra/local-cluster/user-workload-monitoring.yaml"
+        ]
+      },
+      "next_action": "Copy the required local-cluster component files from an existing hub environment and adjust cluster-specific names and addresses.",
+      "observed": [
+        {
+          "name": "matched_file_count",
+          "value": 0
+        }
+      ],
+      "path": "values/bu-ist-demo-infra/local-cluster",
+      "present": {
+        "file_count": 0
+      },
+      "reason": "No merged main paths were found for the hub cluster's local operator and shared-service values.",
+      "ref": "main",
+      "repository": "CCI-MOC/oac-apps",
+      "scope": "hub",
+      "severity": "blocking",
+      "stage": "GitOps configuration",
+      "state": "missing",
+      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/values/bu-ist-demo-infra/local-cluster"
+    },
+    {
+      "actual": {
+        "matched_file_count": 0
+      },
+      "check": "Infra ArgoCD applications",
+      "evidence": {
+        "expected_path_count": 1,
+        "expected_paths": [
+          "apps/bu-ist-demo-infra/keycloak-oauth.yaml"
+        ],
+        "optional_paths": [],
+        "path_count": 0,
+        "paths": []
+      },
+      "expected": {
+        "file_count": 1,
+        "scope": "apps/bu-ist-demo-infra"
+      },
+      "gaps": [
+        {
+          "expected": 1,
+          "name": "file_count",
+          "observed": null
+        },
+        {
+          "expected": [
+            "apps/bu-ist-demo-infra/keycloak-oauth.yaml"
+          ],
+          "name": "paths",
+          "observed": null
+        }
+      ],
+      "id": "hub.argocd_apps",
+      "missing": {
+        "file_count": 1,
+        "paths": [
+          "apps/bu-ist-demo-infra/keycloak-oauth.yaml"
+        ]
+      },
+      "next_action": "Add Argo CD application manifests for the hub after its hosted-cluster, hub-wide component, and local-cluster values are present, and reference the correct clusters.",
+      "observed": [
+        {
+          "name": "matched_file_count",
+          "value": 0
+        }
+      ],
+      "path": "apps/bu-ist-demo-infra",
+      "present": {
+        "file_count": 0
+      },
+      "reason": "No merged main paths were found for direct ArgoCD applications applied on the hub cluster.",
+      "ref": "main",
+      "repository": "CCI-MOC/oac-apps",
+      "scope": "hub",
+      "severity": "blocking",
+      "stage": "GitOps configuration",
+      "state": "missing",
+      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/apps/bu-ist-demo-infra"
+    },
+    {
+      "actual": {
+        "matched_file_count": 0
+      },
+      "check": "Workload hosted-cluster values",
+      "evidence": {
+        "expected_path_count": 1,
+        "expected_paths": [
+          "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml"
+        ],
+        "optional_paths": [],
+        "path_count": 0,
+        "paths": []
+      },
+      "expected": {
+        "file_count": 1,
+        "scope": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml"
+      },
+      "gaps": [
+        {
+          "expected": 1,
+          "name": "file_count",
+          "observed": null
+        },
+        {
+          "expected": [
+            "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml"
+          ],
+          "name": "paths",
+          "observed": null
+        }
+      ],
+      "id": "workload.hosted_cluster_values",
+      "missing": {
+        "file_count": 1,
+        "paths": [
+          "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml"
+        ]
+      },
+      "next_action": "Create the missing hosted-cluster values file from the closest existing environment; set the cluster name, parent hub, networking, and node pools before adding components.",
+      "observed": [
+        {
+          "name": "matched_file_count",
+          "value": 0
+        }
+      ],
+      "path": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml",
+      "present": {
+        "file_count": 0
+      },
+      "reason": "No merged main paths were found for the hosted workload cluster definition.",
+      "ref": "main",
+      "repository": "CCI-MOC/oac-apps",
+      "scope": "workload",
+      "severity": "blocking",
+      "stage": "GitOps configuration",
+      "state": "missing",
+      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml"
+    },
+    {
+      "actual": {
+        "matched_file_count": 0
+      },
+      "check": "Workload component values",
+      "evidence": {
+        "expected_path_count": 0,
+        "expected_paths": [],
+        "optional_paths": [],
+        "path_count": 0,
+        "paths": []
+      },
+      "expected": "At least one matching path",
+      "gaps": [
+        {
+          "expected": 1,
+          "name": "file_count",
+          "observed": null
+        },
+        {
+          "expected": [
+            "values/bu-ist-demo-infra/bu-ist-demo-workload0/"
+          ],
+          "name": "paths",
+          "observed": null
+        }
+      ],
+      "id": "workload.component_values",
+      "missing": {
+        "file_count": 1,
+        "paths": [
+          "values/bu-ist-demo-infra/bu-ist-demo-workload0/"
+        ]
+      },
+      "next_action": "Create the workload component-values directory, starting with hcp-config.yaml and only the shared components this workload needs.",
+      "observed": [
+        {
+          "name": "matched_file_count",
+          "value": 0
+        }
+      ],
+      "path": "values/bu-ist-demo-infra/bu-ist-demo-workload0",
+      "present": {
+        "file_count": 0
+      },
+      "reason": "No merged main paths were found for component values scoped to the workload cluster.",
+      "ref": "main",
+      "repository": "CCI-MOC/oac-apps",
+      "scope": "workload",
+      "severity": "blocking",
+      "stage": "GitOps configuration",
+      "state": "missing",
+      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/values/bu-ist-demo-infra/bu-ist-demo-workload0"
+    }
+  ],
+  "environment": {
+    "domain": "bu-ist-demo.int.massopen.cloud",
+    "domain_source": "repository",
+    "infra_cluster": "bu-ist-demo-infra",
+    "issue_number": 666,
+    "name": "bu-ist-demo",
+    "workload_cluster": "bu-ist-demo-workload0",
+    "workload_clusters": [
+      "bu-ist-demo-workload0"
+    ]
+  },
+  "metadata": {
+    "authenticated": false,
+    "command": [
+      "status",
+      "bu-ist-demo",
+      "--format",
+      "json",
+      "--no-prs"
+    ],
+    "generated_at": "2026-11-16T12:34:56Z",
+    "rate_limit_remaining": 4999,
+    "schema_version": 2,
+    "sources": [
+      {
+        "ref": "main",
+        "repository": "CCI-MOC/MOC-issues",
+        "sha": "1111111111111111111111111111111111111111"
+      },
+      {
+        "ref": "main",
+        "repository": "CCI-MOC/moc-keycloak",
+        "sha": "4444444444444444444444444444444444444444"
+      },
+      {
+        "ref": "main",
+        "repository": "CCI-MOC/oac-apps",
+        "sha": "3333333333333333333333333333333333333333"
+      },
+      {
+        "ref": "main",
+        "repository": "CCI-MOC/oac-infra",
+        "sha": "2222222222222222222222222222222222222222"
+      }
+    ],
+    "tool_version": "0.1.0"
+  },
+  "overall_state": "CONFIGURATION IN PROGRESS",
+  "scope": "environment",
+  "summary": {
+    "advisory_count": 0,
+    "check_count": 14,
+    "severity_counts": {
+      "blocking": 8,
+      "info": 6
+    },
+    "stages": [
+      {
+        "check_count": 1,
+        "stage": "Request",
+        "state_counts": {
+          "requested": 1
+        }
+      },
+      {
+        "check_count": 4,
+        "stage": "Hardware and inventory",
+        "state_counts": {
+          "declared_in_main": 2,
+          "partial": 2
+        }
+      },
+      {
+        "check_count": 2,
+        "stage": "Cluster build",
+        "state_counts": {
+          "declared_in_main": 2
+        }
+      },
+      {
+        "check_count": 1,
+        "stage": "Identity",
+        "state_counts": {
+          "declared_in_main": 1
+        }
+      },
+      {
+        "check_count": 6,
+        "stage": "GitOps configuration",
+        "state_counts": {
+          "missing": 6
+        }
+      }
+    ],
+    "state_counts": {
+      "declared_in_main": 5,
+      "missing": 6,
+      "partial": 2,
+      "requested": 1
+    }
+  }
+}

@@ -493,6 +493,20 @@ def _scope_title(scope: str) -> str:
     return titles.get(scope, f"{scope.title()} environment configuration status")
 
 
+def _metadata_header_lines(report: dict[str, Any]) -> list[str]:
+    metadata = report.get("metadata")
+    if not isinstance(metadata, dict):
+        return []
+    sources = " ".join(
+        f"{source['repository']}@{source['sha'][:7]}"
+        for source in metadata.get("sources", [])
+    )
+    return [
+        f"Generated: {metadata['generated_at']}",
+        f"Sources: {sources or '-'}",
+    ]
+
+
 def render_text(report: dict[str, Any]) -> str:
     environment = report["environment"]
     scope = report.get("scope", "environment")
@@ -509,6 +523,7 @@ def render_text(report: dict[str, Any]) -> str:
         "=" * 78,
         f"{_scope_title(scope)}: {environment['name']}",
         "=" * 78,
+        *_metadata_header_lines(report),
         f"Hub cluster:      {environment['infra_cluster']}",
         f"Workload clusters: {workload_summary}",
         f"Domain:           {environment['domain']}",
@@ -764,6 +779,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     )
     lines = [
         f"# {_scope_title(scope)}",
+        *_metadata_header_lines(report),
         "",
         f"## `{environment['name']}` — {report['overall_state']}",
         "",

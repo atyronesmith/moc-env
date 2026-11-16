@@ -623,6 +623,13 @@ local-cluster components, plus an optional Keycloak client-name override. The
 overall status is driven only by `blocking` gaps; `advisory` gaps are counted
 separately and do not make an environment partially configured.
 
+Report metadata records when the report was generated, the tool version, the
+sanitized command, the repository refs and SHAs read, whether GitHub requests
+were authenticated, and the remaining GitHub rate limit when GitHub supplies
+it. In JSON, each check has normalized `expected`, `observed`, and `gaps`
+arrays; the older `expected`, `present`, `missing`, and `actual` fields are
+retained temporarily for compatibility.
+
 ### Pull-request calls are too expensive
 
 Use `--no-prs` for status, comparison, or planning commands when PR state is

@@ -493,6 +493,9 @@ def read_issue_observation(
             repository,
             path,
         )
+    # MOC-issues is otherwise read through its issue endpoint. Fetch its tree
+    # once so report metadata can record the repository ref SHA.
+    client.get_tree(repository)
     issue = client.get_json(f"/repos/{repository}/{path}")
     source = (repository, path)
     return IssueObservation(

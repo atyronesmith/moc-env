@@ -28,6 +28,29 @@ class GitHubClient:
         self.token = token or os.environ.get("GITHUB_TOKEN")
         self.timeout = timeout
         self.base_url = "https://api.github.com"
+        self.source_snapshots: dict[tuple[str, str], str] = {}
+        self.rate_limit_remaining: int | None = None
+
+    @property
+    def authenticated(self) -> bool:
+        return bool(self.token)
+
+    def record_source(self, repository: str, ref: str, sha: str | None) -> None:
+        """Record a repository snapshot without making another API request."""
+
+        if sha:
+            self.source_snapshots[(repository, ref)] = sha
+
+    def sources(self) -> list[dict[str, str]]:
+        return [
+            {"repository": repository, "ref": ref, "sha": sha}
+            for (repository, ref), sha in sorted(self.source_snapshots.items())
+        ]
+
+    def _record_headers(self, headers: Any) -> None:
+        remaining = headers.get("X-RateLimit-Remaining")
+        if remaining is not None and remaining.isdigit():
+            self.rate_limit_remaining = int(remaining)
 
     def _headers(self) -> dict[str, str]:
         headers = {
@@ -44,9 +67,11 @@ class GitHubClient:
         try:
             with urlopen(request, timeout=self.timeout) as response:
                 body = response.read().decode("utf-8")
+                self._record_headers(response.headers)
                 return json.loads(body), response.headers
         except HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace")
+            self._record_headers(exc.headers)
             remaining = exc.headers.get("X-RateLimit-Remaining")
             if exc.code in (403, 429) and remaining == "0":
                 reset = int(exc.headers.get("X-RateLimit-Reset", "0"))
@@ -91,6 +116,7 @@ class GitHubClient:
         data = self.get_json(f"/repos/{repository}/git/trees/{ref}?recursive=1")
         if not isinstance(data, dict) or data.get("truncated") is True:
             raise GitHubError(f"GitHub tree response was truncated for {repository}@{ref}")
+        self.record_source(repository, ref, data.get("sha"))
         return {
             item["path"]: item
             for item in data.get("tree", [])

@@ -90,6 +90,26 @@ class ReportRenderingTest(unittest.TestCase):
                 self.assertIn(f"{title}: fixture-env", render_text(report))
                 self.assertIn(f"# {title}", render_markdown(report))
 
+    def test_text_and_markdown_headers_include_generation_and_sources(self) -> None:
+        report = {
+            **self.report,
+            "metadata": {
+                "generated_at": "2026-11-16T12:34:56Z",
+                "sources": [
+                    {
+                        "repository": "CCI-MOC/oac-infra",
+                        "ref": "main",
+                        "sha": "2222222222222222222222222222222222222222",
+                    }
+                ],
+            },
+        }
+        expected_source = "CCI-MOC/oac-infra@2222222"
+        self.assertIn("Generated: 2026-11-16T12:34:56Z", render_text(report))
+        self.assertIn(f"Sources: {expected_source}", render_text(report))
+        self.assertIn("Generated: 2026-11-16T12:34:56Z", render_markdown(report))
+        self.assertIn(f"Sources: {expected_source}", render_markdown(report))
+
     def test_markdown_renders_host_table(self) -> None:
         check = {
             **self.report["checks"][0],
