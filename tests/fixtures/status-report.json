@@ -1,66 +1,11 @@
 {
   "checks": [
     {
-      "actual": "open",
-      "check": "MOC issue",
-      "evidence": {
-        "state": {
-          "confidence": "exact",
-          "provenance": {
-            "path": "issues/666",
-            "ref": "main",
-            "repository": "CCI-MOC/MOC-issues"
-          },
-          "value": "open"
-        },
-        "title": {
-          "confidence": "exact",
-          "provenance": {
-            "path": "issues/666",
-            "ref": "main",
-            "repository": "CCI-MOC/MOC-issues"
-          },
-          "value": "RH HW Request - IS&T Tester cluster"
-        },
-        "url": {
-          "confidence": "exact",
-          "provenance": {
-            "path": "issues/666",
-            "ref": "main",
-            "repository": "CCI-MOC/MOC-issues"
-          },
-          "value": "https://github.com/CCI-MOC/MOC-issues/issues/666"
-        }
-      },
-      "expected": "Open issue recording the environment request",
-      "gaps": [],
-      "id": "request.issue",
-      "next_action": null,
-      "observed": [
-        {
-          "name": "value",
-          "value": "open"
-        }
-      ],
-      "path": "issues/666",
-      "present": {
-        "issue_state": "open",
-        "title": "RH HW Request - IS&T Tester cluster"
-      },
-      "reason": "Issue #666 is open and records the environment request.",
-      "ref": "main",
-      "repository": "CCI-MOC/MOC-issues",
-      "scope": "shared",
-      "severity": "info",
-      "stage": "Request",
-      "state": "requested",
-      "url": "https://github.com/CCI-MOC/MOC-issues/issues/666"
-    },
-    {
       "actual": {
         "found": true,
         "host_count": 1
       },
+      "blocked_by": [],
       "check": "bu-ist-demo-infra host inventory",
       "evidence": {
         "hosts": [
@@ -87,6 +32,8 @@
         }
       ],
       "path": "infra/inventory/00hosts.yaml",
+      "phase": 1,
+      "phase_title": "Host inventory entry in oac-infra",
       "present": {
         "cluster_group": "bu-ist-demo-infra",
         "host_count": 1
@@ -101,197 +48,12 @@
       "url": "https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml"
     },
     {
-      "actual": [
-        "http://10.2.0.82/boot/discovery.iso"
-      ],
-      "check": "bu-ist-demo-infra boot image",
-      "evidence": {
-        "check_rule": "The boot-image filename must contain the full cluster name `bu-ist-demo-infra`; generic `discovery.iso` does not satisfy this rule.",
-        "generic_discovery_iso": true
-      },
-      "expected": "Cluster-specific discovery image for bu-ist-demo-infra",
-      "gaps": [
-        {
-          "expected": "bu-ist-demo-infra-agent-discovery.iso",
-          "name": "cluster_specific_image",
-          "observed": null
-        }
-      ],
-      "id": "hub.boot_image",
-      "missing": {
-        "cluster_specific_image": "bu-ist-demo-infra-agent-discovery.iso"
-      },
-      "next_action": "Generate and publish a hub-specific discovery ISO, then replace the generic boot_image_url for every host in the hub cluster group.",
-      "observed": [
-        {
-          "name": "0",
-          "value": "http://10.2.0.82/boot/discovery.iso"
-        }
-      ],
-      "path": "infra/inventory/00hosts.yaml",
-      "present": {
-        "boot_image_url": "http://10.2.0.82/boot/discovery.iso"
-      },
-      "reason": "A boot image URL is present, but it points to the generic discovery.iso rather than a cluster-specific image.",
-      "ref": "main",
-      "repository": "CCI-MOC/oac-infra",
-      "scope": "hub",
-      "severity": "blocking",
-      "stage": "Hardware and inventory",
-      "state": "partial",
-      "url": "https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml"
-    },
-    {
-      "actual": {
-        "found": true,
-        "host_count": 1
-      },
-      "check": "bu-ist-demo-workload0 host inventory",
-      "evidence": {
-        "hosts": [
-          {
-            "bmc_addr": null,
-            "boot_image_url": "http://10.2.0.82/boot/discovery.iso",
-            "name": "compute-0",
-            "node_name": "MOC-R4PAC10U31-S1B"
-          }
-        ]
-      },
-      "expected": "Inventory group for bu-ist-demo-workload0",
-      "gaps": [],
-      "id": "workload.inventory",
-      "next_action": null,
-      "observed": [
-        {
-          "name": "found",
-          "value": true
-        },
-        {
-          "name": "host_count",
-          "value": 1
-        }
-      ],
-      "path": "infra/inventory/00hosts.yaml",
-      "present": {
-        "cluster_group": "bu-ist-demo-workload0",
-        "host_count": 1
-      },
-      "reason": "The inventory contains a bu-ist-demo-workload0 group with 1 hosts.",
-      "ref": "main",
-      "repository": "CCI-MOC/oac-infra",
-      "scope": "workload",
-      "severity": "info",
-      "stage": "Hardware and inventory",
-      "state": "declared_in_main",
-      "url": "https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml"
-    },
-    {
-      "actual": [
-        {
-          "bm_management": "ipmi",
-          "documented_resource_class": "bu-ist-demo-worker",
-          "host": "compute-0",
-          "mac_addr": "00:11:22:33:44:55",
-          "node_name": "MOC-R4PAC10U31-S1B",
-          "resource_class": "bu-ist-demo-worker"
-        }
-      ],
-      "check": "bu-ist-demo-workload0 update-agents inputs",
-      "evidence": {
-        "agent_label_hosts": [
-          {
-            "bm_management": "ipmi",
-            "documented_resource_class": "bu-ist-demo-worker",
-            "host": "compute-0",
-            "mac_addr": "00:11:22:33:44:55",
-            "node_name": "MOC-R4PAC10U31-S1B",
-            "resource_class": "bu-ist-demo-worker"
-          }
-        ],
-        "missing_variables": {},
-        "openstack_hosts_skipped": 0,
-        "resource_class_documentation_path": "docs/hardware-and-network-configuration.md",
-        "resource_class_mismatches": []
-      },
-      "expected": [
-        "mac_addr",
-        "resource_class"
-      ],
-      "gaps": [],
-      "id": "workload.agent_labels_inputs",
-      "next_action": null,
-      "observed": [
-        {
-          "name": "0",
-          "value": {
-            "bm_management": "ipmi",
-            "documented_resource_class": "bu-ist-demo-worker",
-            "host": "compute-0",
-            "mac_addr": "00:11:22:33:44:55",
-            "node_name": "MOC-R4PAC10U31-S1B",
-            "resource_class": "bu-ist-demo-worker"
-          }
-        }
-      ],
-      "path": "infra/update-agents.yaml",
-      "present": {
-        "checked_host_count": 1,
-        "complete_host_count": 1
-      },
-      "reason": "Every non-openstack host has the mac_addr and resource_class inputs required by infra/update-agents.yaml.",
-      "ref": "main",
-      "repository": "CCI-MOC/oac-infra",
-      "scope": "workload",
-      "severity": "info",
-      "stage": "Hardware and inventory",
-      "state": "declared_in_main",
-      "url": "https://github.com/CCI-MOC/oac-infra/blob/main/infra/update-agents.yaml"
-    },
-    {
-      "actual": [
-        "http://10.2.0.82/boot/discovery.iso"
-      ],
-      "check": "bu-ist-demo-workload0 boot image",
-      "evidence": {
-        "check_rule": "The workload boot-image filename may contain the workload name `bu-ist-demo-workload0`, its oac-shortened name, the parent hub name `bu-ist-demo-infra`, or the hub's oac-shortened name. Unrecognized names are advisory because naming is not consistent across environments; generic `discovery.iso` remains a gap.",
-        "generic_discovery_iso": true
-      },
-      "expected": "Cluster-specific discovery image for bu-ist-demo-workload0",
-      "gaps": [
-        {
-          "expected": "bu-ist-demo-infra-agent-discovery.iso",
-          "name": "cluster_specific_image",
-          "observed": null
-        }
-      ],
-      "id": "workload.boot_image",
-      "missing": {
-        "cluster_specific_image": "bu-ist-demo-infra-agent-discovery.iso"
-      },
-      "next_action": "Generate and publish the parent hub's agent discovery ISO, then replace the generic boot_image_url for every host in the workload cluster group.",
-      "observed": [
-        {
-          "name": "0",
-          "value": "http://10.2.0.82/boot/discovery.iso"
-        }
-      ],
-      "path": "infra/inventory/00hosts.yaml",
-      "present": {
-        "boot_image_url": "http://10.2.0.82/boot/discovery.iso"
-      },
-      "reason": "A boot image URL is present, but the workload is still on the generic discovery.iso rather than the expected `bu-ist-demo-infra-agent-discovery.iso`.",
-      "ref": "main",
-      "repository": "CCI-MOC/oac-infra",
-      "scope": "workload",
-      "severity": "blocking",
-      "stage": "Hardware and inventory",
-      "state": "partial",
-      "url": "https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml"
-    },
-    {
       "actual": {
         "found": true
       },
+      "blocked_by": [
+        "hub.inventory"
+      ],
       "check": "Hub image inventory",
       "evidence": {
         "path_present": true
@@ -307,6 +69,8 @@
         }
       ],
       "path": "hub-images/inventory.yml",
+      "phase": 2,
+      "phase_title": "Hub-image inventory entry and group variables",
       "present": {
         "inventory_key": "bu-ist-demo-infra"
       },
@@ -327,6 +91,9 @@
         "api_ip",
         "ingress_ip",
         "dns_ip"
+      ],
+      "blocked_by": [
+        "hub.image_inventory"
       ],
       "check": "Hub image variables",
       "evidence": {
@@ -378,6 +145,8 @@
         }
       ],
       "path": "hub-images/group_vars/bu-ist-demo-infra/vars.yml",
+      "phase": 2,
+      "phase_title": "Hub-image inventory entry and group variables",
       "present": {
         "fields": [
           "cluster_domain_name",
@@ -406,11 +175,61 @@
       "url": "https://github.com/CCI-MOC/oac-infra/blob/main/hub-images/group_vars/bu-ist-demo-infra/vars.yml"
     },
     {
+      "actual": [
+        "http://10.2.0.82/boot/discovery.iso"
+      ],
+      "blocked_by": [
+        "hub.image_inventory",
+        "hub.image_vars"
+      ],
+      "check": "bu-ist-demo-infra boot image",
+      "evidence": {
+        "check_rule": "The boot-image filename must contain the full cluster name `bu-ist-demo-infra`; generic `discovery.iso` does not satisfy this rule.",
+        "generic_discovery_iso": true
+      },
+      "expected": "Cluster-specific discovery image for bu-ist-demo-infra",
+      "gaps": [
+        {
+          "expected": "bu-ist-demo-infra-agent-discovery.iso",
+          "name": "cluster_specific_image",
+          "observed": null
+        }
+      ],
+      "id": "hub.boot_image",
+      "missing": {
+        "cluster_specific_image": "bu-ist-demo-infra-agent-discovery.iso"
+      },
+      "next_action": "Generate and publish a hub-specific discovery ISO, then replace the generic boot_image_url for every host in the hub cluster group.",
+      "observed": [
+        {
+          "name": "0",
+          "value": "http://10.2.0.82/boot/discovery.iso"
+        }
+      ],
+      "path": "infra/inventory/00hosts.yaml",
+      "phase": 3,
+      "phase_title": "Cluster discovery image published and referenced by the inventory",
+      "present": {
+        "boot_image_url": "http://10.2.0.82/boot/discovery.iso"
+      },
+      "reason": "A boot image URL is present, but it points to the generic discovery.iso rather than a cluster-specific image.",
+      "ref": "main",
+      "repository": "CCI-MOC/oac-infra",
+      "scope": "hub",
+      "severity": "blocking",
+      "stage": "Hardware and inventory",
+      "state": "partial",
+      "url": "https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml"
+    },
+    {
       "actual": {
         "client": "bu-ist-demo-infra",
         "redirect_uri": "https://oauth-openshift.apps.bu-ist-demo.int.massopen.cloud/oauth2callback/mocsso",
         "secret_name": "cluster/bu-ist-demo-infra/keycloak-oidc"
       },
+      "blocked_by": [
+        "hub.boot_image"
+      ],
       "check": "Infra OIDC client",
       "evidence": {
         "client": {
@@ -492,6 +311,8 @@
         }
       ],
       "path": "main.tf",
+      "phase": 4,
+      "phase_title": "Keycloak OIDC client",
       "present": {
         "fields": {
           "client": "match",
@@ -517,6 +338,9 @@
       "actual": {
         "matched_file_count": 0
       },
+      "blocked_by": [
+        "hub.boot_image"
+      ],
       "check": "Infra hosted-cluster defaults",
       "evidence": {
         "expected_path_count": 1,
@@ -560,6 +384,8 @@
         }
       ],
       "path": "hosted-clusters/bu-ist-demo-infra/values.yaml",
+      "phase": 5,
+      "phase_title": "GitOps values and applications in oac-apps",
       "present": {
         "file_count": 0
       },
@@ -576,6 +402,9 @@
       "actual": {
         "matched_file_count": 0
       },
+      "blocked_by": [
+        "hub.hosted_cluster_defaults"
+      ],
       "check": "Hub-wide component values",
       "evidence": {
         "expected_path_count": 1,
@@ -619,6 +448,8 @@
         }
       ],
       "path": "values/bu-ist-demo-infra",
+      "phase": 5,
+      "phase_title": "GitOps values and applications in oac-apps",
       "present": {
         "file_count": 0
       },
@@ -635,6 +466,9 @@
       "actual": {
         "matched_file_count": 0
       },
+      "blocked_by": [
+        "hub.hosted_cluster_defaults"
+      ],
       "check": "Infra local-cluster values",
       "evidence": {
         "expected_path_count": 13,
@@ -714,6 +548,8 @@
         }
       ],
       "path": "values/bu-ist-demo-infra/local-cluster",
+      "phase": 5,
+      "phase_title": "GitOps values and applications in oac-apps",
       "present": {
         "file_count": 0
       },
@@ -730,6 +566,12 @@
       "actual": {
         "matched_file_count": 0
       },
+      "blocked_by": [
+        "hub.hosted_cluster_defaults",
+        "hub.component_values",
+        "hub.local_cluster_values",
+        "hub.oidc_client"
+      ],
       "check": "Infra ArgoCD applications",
       "evidence": {
         "expected_path_count": 1,
@@ -773,6 +615,8 @@
         }
       ],
       "path": "apps/bu-ist-demo-infra",
+      "phase": 5,
+      "phase_title": "GitOps values and applications in oac-apps",
       "present": {
         "file_count": 0
       },
@@ -787,8 +631,172 @@
     },
     {
       "actual": {
+        "found": true,
+        "host_count": 1
+      },
+      "blocked_by": [],
+      "check": "bu-ist-demo-workload0 host inventory",
+      "evidence": {
+        "hosts": [
+          {
+            "bmc_addr": null,
+            "boot_image_url": "http://10.2.0.82/boot/discovery.iso",
+            "name": "compute-0",
+            "node_name": "MOC-R4PAC10U31-S1B"
+          }
+        ]
+      },
+      "expected": "Inventory group for bu-ist-demo-workload0",
+      "gaps": [],
+      "id": "workload.inventory",
+      "next_action": null,
+      "observed": [
+        {
+          "name": "found",
+          "value": true
+        },
+        {
+          "name": "host_count",
+          "value": 1
+        }
+      ],
+      "path": "infra/inventory/00hosts.yaml",
+      "phase": 1,
+      "phase_title": "Host inventory entry in oac-infra",
+      "present": {
+        "cluster_group": "bu-ist-demo-workload0",
+        "host_count": 1
+      },
+      "reason": "The inventory contains a bu-ist-demo-workload0 group with 1 hosts.",
+      "ref": "main",
+      "repository": "CCI-MOC/oac-infra",
+      "scope": "workload",
+      "severity": "info",
+      "stage": "Hardware and inventory",
+      "state": "declared_in_main",
+      "url": "https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml"
+    },
+    {
+      "actual": [
+        {
+          "bm_management": "ipmi",
+          "documented_resource_class": "bu-ist-demo-worker",
+          "host": "compute-0",
+          "mac_addr": "00:11:22:33:44:55",
+          "node_name": "MOC-R4PAC10U31-S1B",
+          "resource_class": "bu-ist-demo-worker"
+        }
+      ],
+      "blocked_by": [
+        "workload.inventory"
+      ],
+      "check": "bu-ist-demo-workload0 update-agents inputs",
+      "evidence": {
+        "agent_label_hosts": [
+          {
+            "bm_management": "ipmi",
+            "documented_resource_class": "bu-ist-demo-worker",
+            "host": "compute-0",
+            "mac_addr": "00:11:22:33:44:55",
+            "node_name": "MOC-R4PAC10U31-S1B",
+            "resource_class": "bu-ist-demo-worker"
+          }
+        ],
+        "missing_variables": {},
+        "openstack_hosts_skipped": 0,
+        "resource_class_documentation_path": "docs/hardware-and-network-configuration.md",
+        "resource_class_mismatches": []
+      },
+      "expected": [
+        "mac_addr",
+        "resource_class"
+      ],
+      "gaps": [],
+      "id": "workload.agent_labels_inputs",
+      "next_action": null,
+      "observed": [
+        {
+          "name": "0",
+          "value": {
+            "bm_management": "ipmi",
+            "documented_resource_class": "bu-ist-demo-worker",
+            "host": "compute-0",
+            "mac_addr": "00:11:22:33:44:55",
+            "node_name": "MOC-R4PAC10U31-S1B",
+            "resource_class": "bu-ist-demo-worker"
+          }
+        }
+      ],
+      "path": "infra/update-agents.yaml",
+      "phase": 2,
+      "phase_title": "Discovery image and agent inputs",
+      "present": {
+        "checked_host_count": 1,
+        "complete_host_count": 1
+      },
+      "reason": "Every non-openstack host has the mac_addr and resource_class inputs required by infra/update-agents.yaml.",
+      "ref": "main",
+      "repository": "CCI-MOC/oac-infra",
+      "scope": "workload",
+      "severity": "info",
+      "stage": "Hardware and inventory",
+      "state": "declared_in_main",
+      "url": "https://github.com/CCI-MOC/oac-infra/blob/main/infra/update-agents.yaml"
+    },
+    {
+      "actual": [
+        "http://10.2.0.82/boot/discovery.iso"
+      ],
+      "blocked_by": [
+        "workload.inventory",
+        "hub.boot_image"
+      ],
+      "check": "bu-ist-demo-workload0 boot image",
+      "evidence": {
+        "check_rule": "The workload boot-image filename may contain the workload name `bu-ist-demo-workload0`, its oac-shortened name, the parent hub name `bu-ist-demo-infra`, or the hub's oac-shortened name. Unrecognized names are advisory because naming is not consistent across environments; generic `discovery.iso` remains a gap.",
+        "generic_discovery_iso": true
+      },
+      "expected": "Cluster-specific discovery image for bu-ist-demo-workload0",
+      "gaps": [
+        {
+          "expected": "bu-ist-demo-infra-agent-discovery.iso",
+          "name": "cluster_specific_image",
+          "observed": null
+        }
+      ],
+      "id": "workload.boot_image",
+      "missing": {
+        "cluster_specific_image": "bu-ist-demo-infra-agent-discovery.iso"
+      },
+      "next_action": "Generate and publish the parent hub's agent discovery ISO, then replace the generic boot_image_url for every host in the workload cluster group.",
+      "observed": [
+        {
+          "name": "0",
+          "value": "http://10.2.0.82/boot/discovery.iso"
+        }
+      ],
+      "path": "infra/inventory/00hosts.yaml",
+      "phase": 2,
+      "phase_title": "Discovery image and agent inputs",
+      "present": {
+        "boot_image_url": "http://10.2.0.82/boot/discovery.iso"
+      },
+      "reason": "A boot image URL is present, but the workload is still on the generic discovery.iso rather than the expected `bu-ist-demo-infra-agent-discovery.iso`.",
+      "ref": "main",
+      "repository": "CCI-MOC/oac-infra",
+      "scope": "workload",
+      "severity": "blocking",
+      "stage": "Hardware and inventory",
+      "state": "partial",
+      "url": "https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml"
+    },
+    {
+      "actual": {
         "matched_file_count": 0
       },
+      "blocked_by": [
+        "hub.hosted_cluster_defaults"
+      ],
       "check": "Workload hosted-cluster values",
       "evidence": {
         "expected_path_count": 1,
@@ -832,6 +840,8 @@
         }
       ],
       "path": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml",
+      "phase": 3,
+      "phase_title": "Hosted-cluster values",
       "present": {
         "file_count": 0
       },
@@ -848,6 +858,9 @@
       "actual": {
         "matched_file_count": 0
       },
+      "blocked_by": [
+        "workload.hosted_cluster_values"
+      ],
       "check": "Workload component values",
       "evidence": {
         "expected_path_count": 0,
@@ -886,6 +899,8 @@
         }
       ],
       "path": "values/bu-ist-demo-infra/bu-ist-demo-workload0",
+      "phase": 4,
+      "phase_title": "Workload component values",
       "present": {
         "file_count": 0
       },
@@ -899,6 +914,65 @@
       "url": "https://github.com/CCI-MOC/oac-apps/blob/main/values/bu-ist-demo-infra/bu-ist-demo-workload0"
     },
     {
+      "actual": "open",
+      "blocked_by": [],
+      "check": "MOC issue",
+      "evidence": {
+        "state": {
+          "confidence": "exact",
+          "provenance": {
+            "path": "issues/666",
+            "ref": "main",
+            "repository": "CCI-MOC/MOC-issues"
+          },
+          "value": "open"
+        },
+        "title": {
+          "confidence": "exact",
+          "provenance": {
+            "path": "issues/666",
+            "ref": "main",
+            "repository": "CCI-MOC/MOC-issues"
+          },
+          "value": "RH HW Request - IS&T Tester cluster"
+        },
+        "url": {
+          "confidence": "exact",
+          "provenance": {
+            "path": "issues/666",
+            "ref": "main",
+            "repository": "CCI-MOC/MOC-issues"
+          },
+          "value": "https://github.com/CCI-MOC/MOC-issues/issues/666"
+        }
+      },
+      "expected": "Open issue recording the environment request",
+      "gaps": [],
+      "id": "request.issue",
+      "next_action": null,
+      "observed": [
+        {
+          "name": "value",
+          "value": "open"
+        }
+      ],
+      "path": "issues/666",
+      "phase": 0,
+      "phase_title": "Environment request",
+      "present": {
+        "issue_state": "open",
+        "title": "RH HW Request - IS&T Tester cluster"
+      },
+      "reason": "Issue #666 is open and records the environment request.",
+      "ref": "main",
+      "repository": "CCI-MOC/MOC-issues",
+      "scope": "shared",
+      "severity": "info",
+      "stage": "Request",
+      "state": "requested",
+      "url": "https://github.com/CCI-MOC/MOC-issues/issues/666"
+    },
+    {
       "actual": {
         "closed_unmerged_count": 0,
         "matching_pr_count": 1,
@@ -908,6 +982,7 @@
           "CCI-MOC/oac-apps": 1
         }
       },
+      "blocked_by": [],
       "check": "Relevant pull requests",
       "evidence": {
         "pull_requests": [
@@ -1029,6 +1104,8 @@
         }
       ],
       "path": "pulls",
+      "phase": 5,
+      "phase_title": "GitOps values and applications in oac-apps",
       "present": {
         "closed_unmerged_pr_count": 0,
         "matching_pr_count": 1,
@@ -1047,6 +1124,10 @@
       "state": "pr_open"
     }
   ],
+  "current_phase": {
+    "hub": 3,
+    "workload": 2
+  },
   "environment": {
     "domain": "bu-ist-demo.int.massopen.cloud",
     "domain_source": "repository",
@@ -1094,6 +1175,92 @@
     "tool_version": "0.1.0"
   },
   "overall_state": "CONFIGURATION IN PROGRESS",
+  "phases": {
+    "hub": [
+      {
+        "guide": {
+          "document": "docs/infra-cluster-deployment.md",
+          "heading": "Infrastructure Configuration"
+        },
+        "phase": 1,
+        "title": "Host inventory entry in oac-infra"
+      },
+      {
+        "guide": {
+          "document": "docs/infra-cluster-deployment.md",
+          "heading": "Cluster Deployment"
+        },
+        "phase": 2,
+        "title": "Hub-image inventory entry and group variables"
+      },
+      {
+        "guide": {
+          "document": "docs/infra-cluster-deployment.md",
+          "heading": "Cluster Deployment"
+        },
+        "phase": 3,
+        "title": "Cluster discovery image published and referenced by the inventory"
+      },
+      {
+        "guide": {
+          "document": "docs/infra-cluster-deployment.md",
+          "heading": "Cluster Configuration"
+        },
+        "phase": 4,
+        "title": "Keycloak OIDC client"
+      },
+      {
+        "guide": {
+          "document": "docs/infra-cluster-deployment.md",
+          "heading": "Cluster Configuration"
+        },
+        "phase": 5,
+        "title": "GitOps values and applications in oac-apps"
+      }
+    ],
+    "workload": [
+      {
+        "guide": {
+          "document": "docs/infra-cluster-deployment.md",
+          "heading": "Infrastructure Configuration"
+        },
+        "phase": 1,
+        "title": "Host inventory entry in oac-infra"
+      },
+      {
+        "guide": {
+          "document": "docs/infra-cluster-deployment.md",
+          "heading": "Cluster Deployment"
+        },
+        "phase": 2,
+        "title": "Discovery image and agent inputs"
+      },
+      {
+        "guide": {
+          "document": "docs/infra-cluster-deployment.md",
+          "heading": "Cluster Configuration"
+        },
+        "phase": 3,
+        "title": "Hosted-cluster values"
+      },
+      {
+        "guide": {
+          "document": "docs/infra-cluster-deployment.md",
+          "heading": "Cluster Configuration"
+        },
+        "phase": 4,
+        "title": "Workload component values"
+      },
+      {
+        "guide": {
+          "document": "docs/infra-cluster-deployment.md",
+          "heading": "Cluster Configuration"
+        },
+        "phase": 5,
+        "title": "Merged GitOps changes"
+      }
+    ]
+  },
   "scope": "environment",
   "summary": {
     "advisory_count": 0,
@@ -1103,13 +1270,6 @@
       "info": 7
     },
     "stages": [
-      {
-        "check_count": 1,
-        "stage": "Request",
-        "state_counts": {
-          "requested": 1
-        }
-      },
       {
         "check_count": 5,
         "stage": "Hardware and inventory",
@@ -1138,6 +1298,13 @@
         "state_counts": {
           "missing": 6,
           "pr_open": 1
+        }
+      },
+      {
+        "check_count": 1,
+        "stage": "Request",
+        "state_counts": {
+          "requested": 1
         }
       }
     ],

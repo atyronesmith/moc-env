@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import unittest
 
 from moc_env.checks import StatusChecker
@@ -118,6 +119,61 @@ class StatusCheckerTest(unittest.TestCase):
             "Create the workload component-values directory",
             component_values["next_action"],
         )
+
+    def test_checks_have_ordered_deployment_phase_metadata(self) -> None:
+        report = StatusChecker(FakeGitHubClient()).run(
+            Environment(name="bu-ist-demo", issue_number=666)
+        ).to_dict()
+        checks = report["checks"]
+        by_id = {check["id"]: check for check in checks}
+
+        self.assertTrue(checks)
+        for check in checks:
+            with self.subTest(check=check["id"]):
+                self.assertIsInstance(check["phase"], int)
+                self.assertIsInstance(check["phase_title"], str)
+                self.assertIsInstance(check["blocked_by"], list)
+
+        self.assertEqual(by_id["hub.inventory"]["phase"], 1)
+        self.assertEqual(by_id["hub.image_inventory"]["phase"], 2)
+        self.assertEqual(by_id["hub.boot_image"]["phase"], 3)
+        self.assertEqual(by_id["hub.oidc_client"]["phase"], 4)
+        self.assertEqual(by_id["hub.argocd_apps"]["phase"], 5)
+        self.assertEqual(
+            by_id["hub.image_inventory"]["blocked_by"], ["hub.inventory"]
+        )
+        self.assertEqual(
+            by_id["workload.hosted_cluster_values"]["blocked_by"],
+            ["hub.hosted_cluster_defaults"],
+        )
+
+        scope_order = {"hub": 0, "workload": 1, "shared": 2}
+        order = [
+            (scope_order[check["scope"]], check["phase"]) for check in checks
+        ]
+        self.assertEqual(order, sorted(order))
+
+    def test_empty_hub_current_phase_and_json_metadata(self) -> None:
+        class EmptyRepositoryClient(FakeGitHubClient):
+            def get_tree(self, repository: str, ref: str = "main"):
+                return {}
+
+        report = StatusChecker(
+            EmptyRepositoryClient(),
+            include_prs=False,
+        ).run_hub(Environment(name="bu-ist-demo")).to_dict()
+
+        self.assertEqual(report["current_phase"], 1)
+        checks = {check["id"]: check for check in report["checks"]}
+        self.assertEqual(checks["hub.inventory"]["state"], "missing")
+        self.assertEqual(checks["hub.inventory"]["blocked_by"], [])
+        self.assertEqual(
+            checks["hub.image_inventory"]["blocked_by"], ["hub.inventory"]
+        )
+
+        rendered = json.dumps(report)
+        for field in ("phase", "phase_title", "blocked_by", "current_phase"):
+            self.assertIn(field, rendered)
 
     def test_environment_name_that_already_ends_in_infra_is_not_suffixed_again(self) -> None:
         environment = Environment(name="oac-prod-infra")

@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+from .phases import phase_definitions
+
 
 @dataclass(frozen=True)
 class Environment:
@@ -84,6 +86,9 @@ class CheckResult:
     source: dict[str, Any] | None = None
     url: str | None = None
     next_action: str | None = None
+    phase: int | None = None
+    phase_title: str | None = None
+    blocked_by: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -178,6 +183,8 @@ class StatusReport:
 
         return {
             "scope": self.scope,
+            "current_phase": self._current_phase(),
+            "phases": self._phase_definitions(),
             **({"metadata": self.metadata.to_dict()} if self.metadata else {}),
             "environment": self.environment.to_dict(),
             "overall_state": self.overall_state,
@@ -197,6 +204,35 @@ class StatusReport:
             },
             "checks": [check.to_dict() for check in self.checks],
         }
+
+    def _current_phase(self) -> int | str | dict[str, int | str]:
+        """Return the lowest phase with a blocking gap for each report scope."""
+
+        if self.scope == "environment":
+            return {
+                scope: self._scope_current_phase(scope)
+                for scope in ("hub", "workload")
+            }
+        return self._scope_current_phase(self.scope)
+
+    def _phase_definitions(self) -> Any:
+        if self.scope == "environment":
+            return {
+                scope: [phase.to_dict() for phase in phase_definitions(scope)]
+                for scope in ("hub", "workload")
+            }
+        return [phase.to_dict() for phase in phase_definitions(self.scope)]
+
+    def _scope_current_phase(self, scope: str) -> int | str:
+        phases = [
+            check.phase
+            for check in self.checks
+            if check.scope == scope
+            and check.severity == "blocking"
+            and check.phase is not None
+            and check.state != "declared_in_main"
+        ]
+        return min(phases) if phases else "complete"
 
 
 def _payload_items(value: Any) -> list[dict[str, Any]]:
