@@ -82,10 +82,12 @@ class CredentialResolver:
         platform: str = sys.platform,
         environment: Mapping[str, str] | None = None,
         run: Callable[..., subprocess.CompletedProcess[bytes]] = subprocess.run,
+        keychain_executable: str = "/usr/bin/security",
     ) -> None:
         self.platform = platform
         self.environment = dict(os.environ if environment is None else environment)
         self._run = run
+        self._keychain_executable = keychain_executable
 
     def resolve(self, options: CredentialOptions) -> str:
         if options.direct_token:
@@ -148,13 +150,13 @@ class CredentialResolver:
                 "macOS Keychain credential lookup requires macOS; "
                 "set GITHUB_TOKEN or GITHUB_BWS_SECRET_ID instead"
             )
-        if not self._is_executable_file("/usr/bin/security"):
+        if not self._is_executable_file(self._keychain_executable):
             raise CredentialError("macOS Keychain utility is unavailable")
 
         try:
             output = self._capture(
                 [
-                    "/usr/bin/security",
+                    self._keychain_executable,
                     "find-generic-password",
                     "-s",
                     service,
