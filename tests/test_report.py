@@ -63,34 +63,30 @@ class ReportRenderingTest(unittest.TestCase):
 
     def test_markdown_is_verbose_and_actionable(self) -> None:
         rendered = render_markdown(self.report)
-        self.assertIn("# Environment configuration status", rendered)
-        self.assertIn("## Environment identity", rendered)
-        self.assertIn("## Deployment context", rendered)
-        self.assertIn("```mermaid", rendered)
-        self.assertIn("## Stage summary", rendered)
-        self.assertIn("## Detailed findings by stage", rendered)
-        self.assertIn("Why this was checked", rendered)
-        self.assertIn("**Result**", rendered)
-        self.assertIn("| Aspect | Value |", rendered)
-        self.assertIn("| Expected |", rendered)
-        self.assertIn("| Present |", rendered)
-        self.assertIn("| Missing |", rendered)
-        self.assertIn("| Actual |", rendered)
-        self.assertIn("## Suggested next actions", rendered)
-        self.assertIn("Suggested action", rendered)
+        self.assertIn("# fixture-env — environment configuration status", rendered)
+        self.assertIn("**0 blocking gaps, 1 advisories, and 0 of 1 checks pass**", rendered)
+        self.assertIn("## Phase summary", rendered)
+        self.assertIn("## Next actions", rendered)
+        self.assertIn("## Not checked — verify by hand", rendered)
+        self.assertIn("## Details", rendered)
+        self.assertIn("## Pull requests", rendered)
+        self.assertIn("## Legend", rendered)
+        self.assertIn("<details open>", rendered)
+        self.assertIn("| Field | Expected | Observed |", rendered)
+        self.assertIn("- [ ]", rendered)
         self.assertIn("Generate and publish a hub-specific discovery ISO", rendered)
-        self.assertIn("fixture-env-agent-discovery.iso", rendered)
+        self.assertNotIn("```mermaid", rendered)
         self.assertNotIn("## Raw report data", rendered)
         self.assertNotIn("```json", rendered)
 
     def test_not_checked_is_rendered_after_next_actions(self) -> None:
         for rendered in (render_text(self.report), render_markdown(self.report)):
             with self.subTest(renderer=rendered):
-                actions = rendered.index("NEXT" if "RESULT:" in rendered else "Suggested next actions")
+                actions = rendered.index("NEXT" if "RESULT:" in rendered else "## Next actions")
                 heading = rendered.index(
                     "NOT CHECKED — verify by hand"
                     if "RESULT:" in rendered
-                    else "Not checked — verify by hand"
+                    else "## Not checked — verify by hand"
                 )
                 self.assertLess(actions, heading)
                 manual_section = rendered[heading:]
@@ -125,8 +121,11 @@ class ReportRenderingTest(unittest.TestCase):
         expected_source = "oac-infra@2222222"
         self.assertIn("as of 2026-11-16 12:34:56 UTC", render_text(report))
         self.assertIn(expected_source, render_text(report))
-        self.assertIn("Generated: 2026-11-16T12:34:56Z", render_markdown(report))
-        self.assertIn("Sources: CCI-MOC/oac-infra@2222222", render_markdown(report))
+        self.assertIn("Generated 2026-11-16 12:34:56 UTC", render_markdown(report))
+        self.assertIn(
+            "[CCI-MOC/oac-infra@2222222](https://github.com/CCI-MOC/oac-infra/commit/2222222222222222222222222222222222222222)",
+            render_markdown(report),
+        )
 
     def test_markdown_renders_host_table(self) -> None:
         check = {
@@ -166,12 +165,34 @@ class ReportRenderingTest(unittest.TestCase):
                 "paths": ["values/fixture/present.yaml"],
             },
         }
-        rendered = render_markdown({**self.report, "checks": [check]})
-        self.assertIn("**Expected paths**", rendered)
-        self.assertIn("| Path | Status |", rendered)
-        source_url = "https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml"
-        self.assertIn(f"[`values/fixture/present.yaml`]({source_url}) | **Present**", rendered)
-        self.assertIn(f"[`values/fixture/missing.yaml`]({source_url}) | **Missing**", rendered)
+        known_parent = {
+            **self.report["checks"][0],
+            "state": "declared_in_main",
+            "path": "values/fixture",
+        }
+        rendered = render_markdown({**self.report, "checks": [check, known_parent]})
+        self.assertIn("| Field | Expected | Observed |", rendered)
+        self.assertIn(
+            "[`values/fixture/present.yaml`]"
+            "(https://github.com/CCI-MOC/oac-infra/blob/main/values/fixture/present.yaml) "
+            "| `present` | `present`",
+            rendered,
+        )
+        self.assertIn(
+            "[`values/fixture/missing.yaml`]"
+            "(https://github.com/CCI-MOC/oac-infra/tree/main/values/fixture) "
+            "| `present` | `missing`",
+            rendered,
+        )
+
+    def test_markdown_renders_missing_issue_instruction(self) -> None:
+        report = {
+            **self.report,
+            "environment": {**self.report["environment"], "issue_number": None},
+        }
+        rendered = render_markdown(report)
+        self.assertIn("MOC issue: not set — pass `--issue N`", rendered)
+        self.assertNotIn("MOC issue: None", rendered)
 
     def test_markdown_renders_expected_field_table(self) -> None:
         check = {
@@ -185,10 +206,9 @@ class ReportRenderingTest(unittest.TestCase):
             },
         }
         rendered = render_markdown({**self.report, "checks": [check]})
-        self.assertIn("**Expected fields**", rendered)
-        self.assertIn("| Expected field | Status | Observed value |", rendered)
-        self.assertIn("`cluster_domain_name` | **Present** | `fixture-env`", rendered)
-        self.assertIn("`api_ip` | **Missing** | —", rendered)
+        self.assertIn("| Field | Expected | Observed |", rendered)
+        self.assertIn("`cluster_domain_name` | `present` | `fixture-env`", rendered)
+        self.assertIn("`api_ip` | `present` | `—`", rendered)
         self.assertNotIn("| Aspect | Value |", rendered)
 
     def test_markdown_links_environment_identity_to_sources(self) -> None:
@@ -199,30 +219,38 @@ class ReportRenderingTest(unittest.TestCase):
             {
                 **self.report["checks"][0],
                 "check": "MOC issue",
+                "id": "request.issue",
+                "actual": "open",
                 "url": issue_url,
             },
             {
                 **self.report["checks"][0],
                 "check": "fixture-env-infra host inventory",
+                "path": "infra/inventory/00hosts.yaml",
                 "url": inventory_url,
             },
             {
                 **self.report["checks"][0],
                 "check": "fixture-env-workload0 host inventory",
+                "path": "infra/inventory/00hosts.yaml",
                 "url": inventory_url,
             },
             {
                 **self.report["checks"][0],
                 "check": "Hub image variables",
+                "path": "hub-images/group_vars/fixture-env-infra/vars.yml",
                 "url": variables_url,
             },
         ]
         rendered = render_markdown({**self.report, "checks": checks})
-        self.assertIn(f"[`fixture-env`]({issue_url})", rendered)
-        self.assertIn(f"[`123`]({issue_url})", rendered)
-        self.assertIn(f"[`fixture-env-infra`]({inventory_url})", rendered)
-        self.assertIn(f"[`fixture-env-workload0`]({inventory_url})", rendered)
-        self.assertIn(f"[`fixture-env.int.massopen.cloud`]({variables_url})", rendered)
+        self.assertIn(f"MOC issue: [#123]({issue_url}) (open)", rendered)
+        self.assertIn(
+            f"[`infra/inventory/00hosts.yaml`]({inventory_url})", rendered
+        )
+        self.assertIn(
+            f"[`hub-images/group_vars/fixture-env-infra/vars.yml`]({variables_url})",
+            rendered,
+        )
 
     def test_boot_image_rule_is_explicit(self) -> None:
         check = {
@@ -236,7 +264,7 @@ class ReportRenderingTest(unittest.TestCase):
             },
         }
         rendered = render_markdown({**self.report, "checks": [check]})
-        self.assertIn("**Status rule:**", rendered)
+        self.assertIn("Status rule:", rendered)
         self.assertIn("must contain the full cluster name", rendered)
         self.assertIn("generic `discovery.iso`", rendered)
 
@@ -254,24 +282,19 @@ class ReportRenderingTest(unittest.TestCase):
                         "head_ref": {"value": "fixture-buildout"},
                         "html_url": {"value": "https://github.com/CCI-MOC/oac-apps/pull/237"},
                         "repository": {"value": "CCI-MOC/oac-apps"},
-                        "changed_files": ["values/fixture/hcp-config.yaml"],
+                        "changed_files": ["values/fixture-env/hcp-config.yaml"],
                     }
                 ]
             },
         }
         rendered = render_markdown({**self.report, "checks": [check]})
+        self.assertIn("### Open", rendered)
         self.assertIn(
-            "**Relevant pull requests — CCI-MOC/oac-apps**", rendered
-        )
-        self.assertIn(
-            "| PR | Title | State | Merged | Classification | Head branch | Link | Changed files |",
+            "| Repository | PR | Title | Head branch | Changed files |",
             rendered,
         )
-        self.assertIn("`237` | `Fixture buildout` | `open` | No", rendered)
-        self.assertIn(
-            "[https://github.com/CCI-MOC/oac-apps/pull/237](https://github.com/CCI-MOC/oac-apps/pull/237)",
-            rendered,
-        )
+        self.assertIn("[#237](https://github.com/CCI-MOC/oac-apps/pull/237)", rendered)
+        self.assertIn("Fixture buildout", rendered)
 
 
 if __name__ == "__main__":

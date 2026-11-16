@@ -16,7 +16,7 @@ STATE_SYMBOLS = {
     "pr_open": "🚧",
     "partial": "🟡",
     "missing": "❌",
-    "unknown": "❓",
+    "unknown": "⚪",
     "value_mismatch": "⚠️",
 }
 
@@ -144,12 +144,9 @@ def _path_table(check: dict[str, Any], evidence: dict[str, Any]) -> list[str]:
     if not isinstance(expected_paths, list) or not expected_paths:
         return []
     found = set(found_paths or [])
-    source_url = _github_location(
-        check.get("repository"), check.get("path"), check.get("ref")
-    )
     rows = [
         [
-            _linked_code(path, source_url),
+            _linked_code(path, _path_url(check, path)),
             "Present" if path in found else "Missing",
         ]
         for path in expected_paths
@@ -159,6 +156,51 @@ def _path_table(check: dict[str, Any], evidence: dict[str, Any]) -> list[str]:
         "",
         *_markdown_table(["Path", "Status"], rows),
     ]
+
+
+def _path_url(check: dict[str, Any], path: str, report: dict[str, Any] | None = None) -> str | None:
+    evidence = check.get("evidence") or {}
+    if path in set(evidence.get("paths") or []):
+        return _github_location(check.get("repository"), path, check.get("ref"))
+    if report is not None:
+        return _nearest_existing_parent_url(report, check, path)
+    synthetic = {**check, "path": path, "state": "missing"}
+    return _detail_url(synthetic)
+
+
+def _known_repository_paths(report: dict[str, Any], repository: str | None) -> set[str]:
+    pass_states = {"declared_in_main", "requested", "pr_merged"}
+    paths: set[str] = set()
+    for check in report.get("checks", []):
+        if check.get("repository") != repository:
+            continue
+        evidence = check.get("evidence") or {}
+        evidence_paths = evidence.get("paths")
+        if isinstance(evidence_paths, list):
+            paths.update(path for path in evidence_paths if isinstance(path, str))
+        if check.get("state") in pass_states and isinstance(check.get("path"), str):
+            paths.add(check["path"])
+    return paths
+
+
+def _nearest_existing_parent_url(
+    report: dict[str, Any], check: dict[str, Any], path: str
+) -> str | None:
+    repository = check.get("repository")
+    ref = check.get("ref") or "main"
+    if not repository:
+        return None
+    if "/" not in path:
+        return f"https://github.com/{repository}/tree/{ref}"
+    candidate = path.rsplit("/", 1)[0]
+    known_paths = _known_repository_paths(report, repository)
+    while candidate:
+        if candidate.rstrip("/") in known_paths:
+            return f"https://github.com/{repository}/tree/{ref}/{candidate.rstrip('/')}"
+        if "/" not in candidate:
+            break
+        candidate = candidate.rsplit("/", 1)[0]
+    return f"https://github.com/{repository}/tree/{ref}"
 
 
 def _field_table(check: dict[str, Any], evidence: dict[str, Any]) -> list[str]:
@@ -1009,59 +1051,175 @@ def _agent_label_markdown_table(check: dict[str, Any]) -> list[str] | None:
     ]
 
 
-def _check_markdown(check: dict[str, Any], number: int) -> list[str]:
-    evidence = check.get("evidence") or {}
-    check_rule = evidence.get("check_rule")
-    lines = [
-        f"#### {_state(check['state'])} · `{check['severity']}` — "
-        f"{number}. {check['check']}",
-        "",
-        f"**Why this was checked:** {check['reason']}",
-        "",
-        *([f"**Status rule:** {check_rule}", ""] if check_rule else []),
-        "| Source | Value |",
-        "|---|---|",
-        f"| Repository | `{check['repository']}` |",
-        f"| Path | `{check['path']}` |",
-        f"| Ref | `{check['ref']}` |",
-    ]
-    if check.get("url"):
-        lines.append(f"| Link | [Open source]({check['url']}) |")
+def _markdown_human_value(value: Any) -> str:
+    if value is None:
+        return "—"
+    if value is True:
+        return "Yes"
+    if value is False:
+        return "No"
+    if isinstance(value, dict):
+        if "value" in value:
+            return _markdown_human_value(value["value"])
+        return ", ".join(
+            f"{key} = {_markdown_human_value(item)}" for key, item in value.items()
+        ) or "—"
+    if isinstance(value, (list, tuple)):
+        return ", ".join(_markdown_human_value(item) for item in value) or "—"
+    if isinstance(value, str):
+        if "\n" in value or " = " in value:
+            rendered = value.replace(" = ", " ")
+            rendered = rendered.replace("{", "").replace("}", "")
+            rendered = rendered.replace("[", "").replace("]", "")
+            rendered = rendered.replace('"', "")
+            rendered = "<br>".join(
+                line.strip()
+                for line in rendered.splitlines()
+                if line.strip()
+            )
+            return MarkdownCell(rendered)
+        return value or "—"
+    return str(value)
 
-    oidc_table = _oidc_markdown_table(check)
-    field_table = _field_table(check, evidence)
-    if oidc_table:
-        lines.append("")
-        lines.extend(oidc_table)
-    elif field_table:
-        lines.append("")
-        lines.extend(field_table)
-    else:
-        lines.extend(
+
+def _detail_field_rows(check: dict[str, Any], report: dict[str, Any]) -> list[list[Any]]:
+    evidence = check.get("evidence") or {}
+    expected = check.get("expected")
+    actual = check.get("actual")
+
+    expected_paths = evidence.get("expected_paths")
+    if isinstance(expected_paths, list):
+        found_paths = set(evidence.get("paths") or [])
+        return [
             [
-                "",
-                "**Result**",
-                "",
+                _linked_code(path, _path_url(check, path, report)),
+                "present",
+                "present" if path in found_paths else "missing",
             ]
-        )
-        result_rows = [
-            ["Expected", check.get("expected")],
-            ["Present", check.get("present")],
+            for path in expected_paths
         ]
-        if check.get("missing") is not None:
-            result_rows.append(["Missing", check.get("missing")])
-        result_rows.append(["Actual", check.get("actual")])
-        lines.extend(
-            _markdown_table(["Aspect", "Value"], result_rows, plain_first_column=True)
+
+    if check.get("id") == "hub.oidc_client" and isinstance(
+        evidence.get("fields"), dict
+    ):
+        return [
+            [field, result.get("expected"), result.get("observed")]
+            for field, result in evidence["fields"].items()
+            if isinstance(result, dict)
+        ]
+
+    values = evidence.get("values")
+    if isinstance(expected, list) and isinstance(values, dict):
+        return [
+            [field, "present", values.get(field)] for field in expected
+        ]
+
+    if isinstance(expected, dict):
+        keys = expected if isinstance(actual, dict) else list(expected)
+        return [
+            [
+                key,
+                expected.get(key),
+                actual.get(key) if isinstance(actual, dict) else actual,
+            ]
+            for key in keys
+        ]
+    if isinstance(expected, list) and isinstance(actual, list):
+        return [
+            [f"item {index}", value, actual[index] if index < len(actual) else None]
+            for index, value in enumerate(expected)
+        ]
+    if isinstance(actual, dict):
+        return [[key, "—", value] for key, value in actual.items()]
+    return [["value", expected, actual]]
+
+
+def _expanded_field_rows(rows: list[list[Any]]) -> list[list[Any]]:
+    expanded: list[list[Any]] = []
+    for field, expected, observed in rows:
+        _expand_field_row(field, expected, observed, expanded)
+    return expanded
+
+
+def _expand_field_row(
+    field: str, expected: Any, observed: Any, expanded: list[list[Any]]
+) -> None:
+    if isinstance(expected, dict):
+        for key, value in expected.items():
+            observed_value = observed.get(key) if isinstance(observed, dict) else observed
+            _expand_field_row(str(key), value, observed_value, expanded)
+        return
+    if isinstance(expected, list) and any(isinstance(item, dict) for item in expected):
+        for index, item in enumerate(expected):
+            observed_value = observed[index] if isinstance(observed, list) and index < len(observed) else observed
+            _expand_field_row(f"item {index}", item, observed_value, expanded)
+        return
+    if isinstance(observed, dict):
+        for key, value in observed.items():
+            _expand_field_row(str(key), expected, value, expanded)
+        return
+    if isinstance(observed, list) and any(isinstance(item, dict) for item in observed):
+        for index, item in enumerate(observed):
+            _expand_field_row(f"item {index}", expected, item, expanded)
+        return
+    expanded.append([field, expected, observed])
+
+
+def _check_markdown_details(
+    check: dict[str, Any], sources: list[dict[str, Any]], report: dict[str, Any]
+) -> list[str]:
+    evidence = check.get("evidence") or {}
+    source = next(
+        (
+            item
+            for item in sources
+            if item.get("repository") == check.get("repository")
+            and item.get("ref") == check.get("ref")
+        ),
+        {},
+    )
+    short_sha = source.get("sha", "")[:7] or "—"
+    path_url = _markdown_check_url(report, check)
+    path_label = _markdown_inline(check.get("path"))
+    path_text = f"[{path_label}]({path_url})" if path_url else path_label
+    check_rule = evidence.get("check_rule")
+    open_state = check.get("state") not in {
+        "declared_in_main", "requested", "pr_merged"
+    }
+    lines = [
+        f"<details{' open' if open_state else ''}>",
+        f"<summary>{_state(check['state'])} · {check['severity']} — {check['check']}</summary>",
+        "",
+        f"Finding: {check['reason']}",
+        "",
+        f"Source: {check['repository']} · {path_text} @ {short_sha}",
+        "",
+    ]
+    if check_rule:
+        lines.extend([f"Status rule: {check_rule}", ""])
+    rows = [
+        [
+            field if isinstance(field, MarkdownCell) else _markdown_human_value(field),
+            _markdown_human_value(expected),
+            _markdown_human_value(observed),
+        ]
+        for field, expected, observed in _expanded_field_rows(
+            _detail_field_rows(check, report)
         )
+    ]
+    lines.extend(_markdown_table(["Field", "Expected", "Observed"], rows))
     lines.extend(_host_table(check, evidence))
     lines.extend(_agent_label_markdown_table(check))
-    lines.extend(_path_table(check, evidence))
-    if not field_table and not oidc_table:
-        lines.extend(_field_table(check, evidence))
-    lines.extend(_source_value_table(check, evidence))
-    lines.extend(_pull_request_table(evidence))
+    lines.extend(["</details>", ""])
     return lines
+
+
+def _markdown_check_url(report: dict[str, Any], check: dict[str, Any]) -> str | None:
+    if check.get("state") in {"missing", "unknown"} and "/" in (check.get("path") or ""):
+        return _nearest_existing_parent_url(report, check, check["path"])
+    return check.get("url") or _github_location(
+        check.get("repository"), check.get("path"), check.get("ref")
+    )
 
 
 def _identity_link(value: Any, url: str | None) -> str:
@@ -1076,218 +1234,294 @@ def _identity_source_url(report: dict[str, Any], check_name: str) -> str | None:
     return None
 
 
-def _deployment_context_diagram(scope: str) -> list[str]:
-    if scope == "hub":
-        sequence = """\
-sequenceDiagram
-    autonumber
-    participant Request as MOC issue
-    participant Infra as oac-infra inventory and hub-image variables
-    participant Identity as moc-keycloak OIDC client
-    participant HubGitOps as oac-apps hub GitOps
-    participant Hub as Hub cluster
-    Request->>Infra: Record requested hardware, network, and build inputs
-    Infra->>Hub: Build and start the hub cluster
-    Identity->>Hub: Register the hub OIDC client
-    HubGitOps->>Hub: Apply hub local-cluster components and applications\
-"""
-    elif scope == "workload":
-        sequence = """\
-sequenceDiagram
-    autonumber
-    participant Hub as Parent hub cluster
-    participant Inventory as oac-infra workload inventory
-    participant Hosted as Hosted-cluster values
-    participant Components as Workload component values
-    participant Apps as Workload Argo CD applications
-    participant Workload as Workload cluster
-    Hub->>Inventory: Provide parent hub and network context
-    Inventory->>Hosted: Define workload hosts and boot image
-    Hosted->>Workload: Create the hosted control plane
-    Components->>Workload: Configure shared workload components
-    Apps->>Workload: Apply workload applications\
-"""
-    else:
-        sequence = """\
-sequenceDiagram
-    autonumber
-    participant Request as MOC issue
-    participant Infra as oac-infra inventory and variables
-    participant Identity as moc-keycloak OIDC client
-    participant HubGitOps as oac-apps hub GitOps
-    participant Hub as Hub cluster
-    participant WorkloadGitOps as oac-apps workload GitOps
-    participant Workload as Workload cluster
-    Request->>Infra: Record requested hardware, network, and build inputs
-    Infra->>Hub: Build and start the hub cluster
-    Identity->>Hub: Register the hub OIDC client
-    HubGitOps->>Hub: Apply hub local-cluster components and applications
-    Hub->>WorkloadGitOps: Provide parent hub context
-    WorkloadGitOps->>Workload: Define and configure the hosted workload\
-"""
-    return [
-        "## Deployment context",
-        "",
-        "This compact sequence shows where the checked repository evidence fits. "
-        "It does not claim that these deployment steps have run.",
-        "",
-        "```mermaid",
-        sequence,
-        "```",
-        "",
+def _markdown_verdict(report: dict[str, Any]) -> str:
+    checks = report["checks"]
+    pass_states = {"declared_in_main", "requested", "pr_merged"}
+    blocking = [
+        check
+        for check in checks
+        if check["severity"] == "blocking"
+        and check["state"] not in pass_states
+        and check["state"] != "unknown"
     ]
+    advisories = [
+        check
+        for check in checks
+        if check["severity"] == "advisory"
+        and check["state"] not in pass_states
+        and check["state"] != "unknown"
+    ]
+    unknown = [check for check in checks if check["state"] == "unknown"]
+    passing = sum(check["state"] in pass_states for check in checks)
+    verdict = (
+        f"{len(blocking)} blocking gaps, {len(advisories)} advisories, "
+        f"and {passing} of {len(checks)} checks pass"
+    )
+    if unknown:
+        reasons = "; ".join(f"{check['check']}: {check['reason']}" for check in unknown)
+        verdict += f"; unknown: {textwrap.shorten(reasons, width=180, placeholder='…')}"
+    return verdict
+
+
+def _markdown_metadata(report: dict[str, Any]) -> str:
+    metadata = report.get("metadata") or {}
+    generated = metadata.get("generated_at", "unknown").replace("T", " ").replace("Z", " UTC")
+    parts = [f"Generated {generated}"]
+    sources = []
+    non_main = False
+    for source in metadata.get("sources", []):
+        short_sha = source.get("sha", "")[:7] or "—"
+        label = f"{source.get('repository', 'unknown')}@{short_sha}"
+        if source.get("ref") != "main":
+            label = f"{label}@{source.get('ref')}"
+            non_main = True
+        url = f"https://github.com/{source.get('repository')}/commit/{source.get('sha')}"
+        sources.append(f"[{label}]({url})" if source.get("sha") else label)
+    if sources:
+        parts.append("Sources: " + " · ".join(sources))
+    issue = next((check for check in report.get("checks", []) if check.get("id") == "request.issue"), None)
+    issue_number = report.get("environment", {}).get("issue_number")
+    if issue_number is None:
+        parts.append("MOC issue: not set — pass `--issue N`")
+    elif issue and issue.get("url"):
+        parts.append(
+            f"MOC issue: [#{issue_number}]({issue['url']}) ({issue.get('actual')})"
+        )
+    else:
+        parts.append(f"MOC issue: #{issue_number}")
+    prefix = "**This is not a report on main.** " if non_main else ""
+    return prefix + " · ".join(parts)
+
+
+def _markdown_phase_table(report: dict[str, Any]) -> list[str]:
+    environment = report["environment"]
+    checks = report["checks"]
+    scope = report.get("scope", "environment")
+    columns: list[tuple[str, list[dict[str, Any]]]] = []
+    if scope in {"environment", "hub"}:
+        columns.append(
+            (f"HUB {environment['infra_cluster']}", [c for c in checks if c["scope"] == "hub"])
+        )
+    if scope in {"environment", "workload"}:
+        for workload in environment.get("workload_clusters", []):
+            columns.append(
+                (f"WORKLOAD {workload}", [c for c in checks if c["scope"] == "workload"])
+            )
+    lines = ["| Phase | " + " | ".join(header for header, _ in columns) + " |"]
+    lines.append("|---|" + "|".join("---:" for _ in columns) + "|")
+    for phase, title in _phase_rows(report, scope):
+        cells = []
+        for _header, scope_checks in columns:
+            phase_checks = [
+                check for check in scope_checks if check.get("phase") == phase
+            ]
+            cells.append(_phase_cell(phase_checks, False))
+        lines.append(f"| {phase} {title} | " + " | ".join(cells) + " |")
+    lines.append("")
+    return lines
+
+
+def _markdown_next_actions(report: dict[str, Any]) -> list[str]:
+    checks = report["checks"]
+    pass_states = {"declared_in_main", "requested", "pr_merged"}
+    gaps = [
+        check
+        for check in checks
+        if check["severity"] in {"blocking", "advisory"}
+        and check["state"] not in pass_states
+        and check["state"] != "unknown"
+    ]
+    gaps.sort(key=lambda check: (check["severity"] != "blocking", check.get("phase", 0)))
+    lines = ["## Next actions", ""]
+    if not gaps:
+        lines.extend(["Nothing to do in the repositories this tool reads.", ""])
+        return lines
+    open_pulls = [
+        pull
+        for check in checks
+        for pull in (check.get("evidence") or {}).get("pull_requests", [])
+        if isinstance(pull, dict)
+        and pull.get("classification", {}).get("value") == "open"
+    ]
+    action_numbers: dict[str, int] = {}
+    for number, check in enumerate(gaps, start=1):
+        action_numbers.setdefault(check["id"], number)
+    for number, check in enumerate(gaps, start=1):
+        action = check.get("next_action") or f"Resolve {check['check']}."
+        action = action.replace("<", "&lt;").replace(">", "&gt;")
+        repository = check["repository"].removeprefix("CCI-MOC/")
+        path_url = _markdown_check_url(report, check)
+        path_label = _markdown_inline(check.get("path"))
+        path = f"[{path_label}]({path_url})" if path_url else path_label
+        after = [
+            str(action_numbers[item])
+            for item in check.get("blocked_by", [])
+            if item in action_numbers
+        ]
+        suffix = f" (after {', '.join(after)})" if after else ""
+        pr_fix = _open_pr_fix(check, open_pulls)
+        if pr_fix:
+            suffix += f" · {pr_fix}"
+        lines.append(f"{number}. **{repository}** — {path}: {action}{suffix}")
+        guide = _guide(report, check["scope"], check.get("phase", 0))
+        if guide:
+            document, heading = guide.split(" → ", 1)
+            lines.append(f"   Guide: [{document} → {heading}]({document})")
+    lines.append("")
+    return lines
+
+
+def _markdown_manual_checks(report: dict[str, Any]) -> list[str]:
+    lines = ["## Not checked — verify by hand", ""]
+    entries = report.get("not_checked", [])
+    if not entries:
+        lines.extend(["None.", ""])
+        return lines
+    for entry in entries:
+        where = entry["where"]
+        lines.append(
+            f"- [ ] **{entry['title']}** (phase {entry['phase']}) — {entry['why']} "
+            f"Documented at [{where['document']} → {where['heading']}]({where['document']})."
+        )
+    lines.append("")
+    return lines
+
+
+def _pull_field(pull: dict[str, Any], field: str) -> Any:
+    value = pull.get(field)
+    return value.get("value") if isinstance(value, dict) else value
+
+
+def _markdown_pull_requests(report: dict[str, Any]) -> list[str]:
+    pulls = {
+        (
+            _pull_field(pull, "repository"),
+            _pull_field(pull, "number"),
+        ): pull
+        for check in report.get("checks", [])
+        for pull in (check.get("evidence") or {}).get("pull_requests", [])
+        if isinstance(pull, dict)
+    }
+    lines = ["## Pull requests", ""]
+    if not pulls:
+        lines.extend(["None.", ""])
+        return lines
+
+    environment = report["environment"]
+    environment_parts = [
+        environment["name"],
+        environment["infra_cluster"],
+        *environment.get("workload_clusters", []),
+    ]
+
+    def changed_files(pull: dict[str, Any]) -> list[str]:
+        files = _pull_field(pull, "changed_files") or []
+        relevant = [
+            path
+            for path in files
+            if any(part in path for part in environment_parts)
+        ]
+        return relevant
+
+    def pull_rows(classifications: set[str]) -> list[list[Any]]:
+        rows = []
+        for pull in sorted(
+            pulls.values(),
+            key=lambda item: (
+                _pull_field(item, "repository") or "",
+                _pull_field(item, "number") or 0,
+            ),
+        ):
+            if _pull_field(pull, "classification") not in classifications:
+                continue
+            if not changed_files(pull):
+                continue
+            repository = _pull_field(pull, "repository")
+            number = _pull_field(pull, "number")
+            url = _pull_field(pull, "html_url")
+            files = [
+                f"[{path}]({url}/files)" for path in changed_files(pull)
+            ]
+            rows.append(
+                [
+                    repository.removeprefix("CCI-MOC/"),
+                    f"[#{number}]({url})",
+                    _pull_field(pull, "title"),
+                    _pull_field(pull, "head_ref"),
+                    MarkdownCell("<br>".join(files)),
+                ]
+            )
+        return rows
+
+    headers = ["Repository", "PR", "Title", "Head branch", "Changed files"]
+    open_rows = pull_rows({"open"})
+    if open_rows:
+        lines.extend(["### Open", "", *_markdown_table(headers, open_rows, True)])
+    else:
+        lines.extend(["### Open", "", "None.", ""])
+
+    closed_rows = pull_rows({"merged", "closed_unmerged"})
+    lines.extend(["<details>", "<summary>Merged and closed without merging</summary>", ""])
+    if closed_rows:
+        lines.extend(_markdown_table(headers, closed_rows, True))
+    else:
+        lines.append("None.")
+        lines.append("")
+    lines.extend(["</details>", ""])
+    return lines
+
+
+def _markdown_legend(report: dict[str, Any]) -> list[str]:
+    meanings = {
+        "requested": "The MOC issue records the request.",
+        "declared_in_main": "Desired configuration is present on merged main.",
+        "pr_merged": "A relevant pull request has been merged.",
+        "pr_open": "Relevant configuration exists only in an open pull request.",
+        "partial": "Some required configuration is present.",
+        "missing": "Required configuration was not found.",
+        "unknown": "The source could not be read or parsed.",
+        "value_mismatch": "Observed values do not match the expected values.",
+    }
+    states = {
+        check["state"] for check in report.get("checks", [])
+    }
+    lines = ["## Legend", ""]
+    for state, meaning in meanings.items():
+        if state in states:
+            symbol = STATE_SYMBOLS.get(state, "•")
+            lines.append(f"- {symbol} `{state}` — {meaning}")
+    lines.extend(
+        [
+            "",
+            "Repository-state disclaimer: this report describes repository configuration only. It does not prove live cluster synchronization, node readiness, or application health.",
+            "",
+        ]
+    )
+    return lines
 
 
 def render_markdown(report: dict[str, Any]) -> str:
     environment = report["environment"]
-    state_counts = report["summary"]["state_counts"]
     scope = report.get("scope", "environment")
-    environment_name = environment["name"]
-    infra_cluster = environment["infra_cluster"]
-    workload_clusters = environment.get("workload_clusters", [])
-    issue_url = _identity_source_url(report, "MOC issue") or (
-        f"https://github.com/CCI-MOC/MOC-issues/issues/{environment['issue_number']}"
-        if environment["issue_number"] is not None
-        else None
-    )
-    inventory_url = github_url(
-        "CCI-MOC/oac-infra", "infra/inventory/00hosts.yaml"
-    )
-    hub_url = _identity_source_url(
-        report, f"{infra_cluster} host inventory"
-    ) or inventory_url
-    domain_url = _identity_source_url(report, "Hub image variables") or github_url(
-        "CCI-MOC/oac-infra",
-        f"hub-images/group_vars/{infra_cluster}/vars.yml",
-    )
     lines = [
-        f"# {_scope_title(scope)}",
-        *_metadata_header_lines(report),
+        f"# {environment['name']} — {_scope_title(scope).lower()}",
         "",
-        f"## `{environment['name']}` — {report['overall_state']}",
+        f"**{_markdown_verdict(report)}**",
         "",
-        "This report describes **repository configuration state only**. It does not claim that OpenShift, Argo CD, or any shared service is live or healthy.",
+        _markdown_metadata(report),
         "",
-        "## Environment identity",
+        "## Phase summary",
         "",
-        "| Field | Value |",
-        "|---|---|",
-        f"| Scope | `{scope}` |",
-        f"| Environment | {_identity_link(environment_name, issue_url)} |",
-        f"| MOC issue | {_identity_link(environment['issue_number'], issue_url)} |",
-        f"| Hub cluster | {_identity_link(infra_cluster, hub_url)} |",
     ]
-    for workload_cluster in workload_clusters:
-        workload_url = _identity_source_url(
-            report, f"{workload_cluster} host inventory"
-        ) or inventory_url
-        lines.append(
-            f"| Workload cluster | {_identity_link(workload_cluster, workload_url)} |"
-        )
-    if not workload_clusters:
-        notice = environment.get(
-            "workload_notice",
-            "No workload cluster is declared for this hub.",
-        )
-        lines.append(
-            f"| Workload clusters | {notice} |"
-        )
-    lines.extend([
-        f"| Domain | {_identity_link(environment['domain'], domain_url)} |",
-        f"| Overall state | **{report['overall_state']}** |",
-        f"| Advisory gaps | {report['summary']['advisory_count']} |",
-        "",
-        "## Executive summary",
-        "",
-        "| State | Meaning | Count |",
-        "|---|---|---:|",
-        f"| ✅ `declared_in_main` | Present in a merged `main` branch | {state_counts.get('declared_in_main', 0)} |",
-        f"| 🟡 `partial` | Some information exists, but required details are missing | {state_counts.get('partial', 0)} |",
-        f"| ❌ `missing` | No relevant configuration was found | {state_counts.get('missing', 0)} |",
-        f"| 🚧 `pr_open` | Relevant configuration exists only in an open PR | {state_counts.get('pr_open', 0)} |",
-        f"| 🔀 `pr_merged` | A relevant PR has been merged | {state_counts.get('pr_merged', 0)} |",
-        f"| 📝 `requested` | The MOC issue is open and records the request | {state_counts.get('requested', 0)} |",
-        "",
-        f"**Total checks:** {report['summary']['check_count']}",
-        "",
-        *_deployment_context_diagram(scope),
-        "## Stage summary",
-        "",
-        "| Stage | Checks | States |",
-        "|---|---:|---|",
-    ])
-
-    for stage in report["summary"]["stages"]:
-        states = ", ".join(
-            f"{STATE_SYMBOLS.get(state, '•')} `{state}` × {count}"
-            for state, count in stage["state_counts"].items()
-        )
-        lines.append(f"| {stage['stage']} | {stage['check_count']} | {states} |")
-
-    current_stage = None
-    check_number = 0
-    lines.extend(["", "## Detailed findings by stage", ""])
-    for check in report["checks"]:
-        if check["stage"] != current_stage:
-            current_stage = check["stage"]
-            lines.extend([f"### {current_stage}", ""])
-        check_number += 1
-        lines.extend(_check_markdown(check, check_number))
-
-    followups = []
-    for check in report["checks"]:
-        if check["state"] in {"partial", "missing", "pr_open"}:
-            followups.append((check, check.get("missing")))
-
-    lines.extend(["## Suggested next actions", ""])
-    if not followups:
-        lines.append("No configuration gaps were detected by the current repository-state checks.")
-    else:
-        lines.extend(
-            [
-                "These actions are derived directly from the missing or partial checks above.",
-                "",
-                "| Priority | Stage / check | Gap to resolve | Suggested action |",
-                "|---:|---|---|---|",
-            ]
-        )
-        for priority, (check, missing_value) in enumerate(followups, start=1):
-            gap = _markdown_inline(missing_value)
-            if check["state"] == "pr_open":
-                gap = "Merge or close the relevant open pull request."
-            lines.append(
-                f"| {priority} | {check['stage']} / {check['check']} | {gap} "
-                f"| {_markdown_inline(check['next_action'])} |"
-            )
-
-    lines.extend(["", "## Not checked — verify by hand", ""])
-    manual_checks = report.get("not_checked", [])
-    if not manual_checks:
-        lines.append("None.")
-    else:
-        for entry in manual_checks:
-            where = entry["where"]
-            lines.extend(
-                [
-                    f"- **{entry['title']}** (phase {entry['phase']})",
-                    f"  - Why: {entry['why']}",
-                    f"  - Documented at: `{where['document']}` — `{where['heading']}`",
-                ]
-            )
-
-    lines.extend(
-        [
-            "",
-            "## Interpretation rules",
-            "",
-            "- `declared_in_main` means desired-state text is present in a merged repository branch.",
-            "- `partial` means some configuration exists, but one or more required values or files are absent.",
-            "- `missing` means the expected repository path or declaration was not found.",
-            "- `pr_open` means configuration exists only in an open pull request and is not yet merged desired state.",
-            "- This report does **not** prove live cluster synchronization, node readiness, or application health.",
-            "",
-        ]
-    )
+    lines.extend(_markdown_phase_table(report))
+    lines.extend(_markdown_next_actions(report))
+    lines.extend(_markdown_manual_checks(report))
+    lines.extend(["## Details", ""])
+    sources = (report.get("metadata") or {}).get("sources", [])
+    for check in report.get("checks", []):
+        lines.extend(_check_markdown_details(check, sources, report))
+    lines.extend(_markdown_pull_requests(report))
+    lines.extend(_markdown_legend(report))
     return "\n".join(lines).rstrip() + "\n"
 
 

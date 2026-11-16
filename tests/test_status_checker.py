@@ -931,10 +931,8 @@ bu_ist_demo_infra:
         markdown_report = render_markdown(report)
         self.assertIn("Pull requests by repository:", text_report)
         self.assertIn("CCI-MOC/oac-infra: 1", text_report)
-        self.assertIn(
-            "**Relevant pull requests — CCI-MOC/oac-infra**",
-            markdown_report,
-        )
+        self.assertIn("## Pull requests", markdown_report)
+        self.assertIn("CCI-MOC/oac-infra", markdown_report)
 
     def test_status_checker_reports_declared_apps_paths(self) -> None:
         required_components = self.required_components

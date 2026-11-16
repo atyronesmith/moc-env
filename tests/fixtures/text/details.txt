@@ -221,7 +221,7 @@ DETAILED CHECKS
   URL: https://github.com/CCI-MOC/oac-apps/tree/main/hosted-clusters/bu-ist-demo-infra/bu-ist-de
   mo-workload0
 ----------------------------------------------------------------------------------------------------
-  ❓ Hosted-cluster values / Workload API address network
+  ⚪ Hosted-cluster values / Workload API address network
   Finding: hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or
   unavailable.
   Source: CCI-MOC/oac-apps · hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml
@@ -231,7 +231,7 @@ DETAILED CHECKS
   URL: https://github.com/CCI-MOC/oac-apps/tree/main/hosted-clusters/bu-ist-demo-infra/bu-ist-de
   mo-workload0
 ----------------------------------------------------------------------------------------------------
-  ❓ Hosted-cluster values / Workload ingress address network
+  ⚪ Hosted-cluster values / Workload ingress address network
   Finding: hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or
   unavailable.
   Source: CCI-MOC/oac-apps · hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml
@@ -241,7 +241,7 @@ DETAILED CHECKS
   URL: https://github.com/CCI-MOC/oac-apps/tree/main/hosted-clusters/bu-ist-demo-infra/bu-ist-de
   mo-workload0
 ----------------------------------------------------------------------------------------------------
-  ❓ Hosted-cluster values / Workload DNS base domain
+  ⚪ Hosted-cluster values / Workload DNS base domain
   Finding: hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or
   unavailable.
   Source: CCI-MOC/oac-apps · hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml
@@ -251,7 +251,7 @@ DETAILED CHECKS
   URL: https://github.com/CCI-MOC/oac-apps/tree/main/hosted-clusters/bu-ist-demo-infra/bu-ist-de
   mo-workload0
 ----------------------------------------------------------------------------------------------------
-  ❓ Hosted-cluster values / Workload node-pool host capacity
+  ⚪ Hosted-cluster values / Workload node-pool host capacity
   Finding: hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or
   unavailable.
   Source: CCI-MOC/oac-apps · hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml
@@ -261,7 +261,7 @@ DETAILED CHECKS
   URL: https://github.com/CCI-MOC/oac-apps/tree/main/hosted-clusters/bu-ist-demo-infra/bu-ist-de
   mo-workload0
 ----------------------------------------------------------------------------------------------------
-  ❓ Hosted-cluster values / Workload GPU feature support
+  ⚪ Hosted-cluster values / Workload GPU feature support
   Finding: hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or
   unavailable.
   Source: CCI-MOC/oac-apps · hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml
