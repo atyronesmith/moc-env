@@ -189,8 +189,10 @@
       "actual": [
         {
           "bm_management": "ipmi",
+          "documented_resource_class": "bu-ist-demo-worker",
           "host": "compute-0",
           "mac_addr": "00:11:22:33:44:55",
+          "node_name": "MOC-R4PAC10U31-S1B",
           "resource_class": "bu-ist-demo-worker"
         }
       ],
@@ -199,13 +201,17 @@
         "agent_label_hosts": [
           {
             "bm_management": "ipmi",
+            "documented_resource_class": "bu-ist-demo-worker",
             "host": "compute-0",
             "mac_addr": "00:11:22:33:44:55",
+            "node_name": "MOC-R4PAC10U31-S1B",
             "resource_class": "bu-ist-demo-worker"
           }
         ],
         "missing_variables": {},
-        "openstack_hosts_skipped": 0
+        "openstack_hosts_skipped": 0,
+        "resource_class_documentation_path": "docs/hardware-and-network-configuration.md",
+        "resource_class_mismatches": []
       },
       "expected": [
         "mac_addr",
@@ -219,8 +225,10 @@
           "name": "0",
           "value": {
             "bm_management": "ipmi",
+            "documented_resource_class": "bu-ist-demo-worker",
             "host": "compute-0",
             "mac_addr": "00:11:22:33:44:55",
+            "node_name": "MOC-R4PAC10U31-S1B",
             "resource_class": "bu-ist-demo-worker"
           }
         }

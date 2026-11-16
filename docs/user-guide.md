@@ -319,6 +319,8 @@ Open the generated files and review:
 - inventory hosts and boot images;
 - non-OpenStack host `mac_addr` and `resource_class` inputs used by
   `infra/update-agents.yaml`;
+- `resource_class` values against `docs/hardware-and-network-configuration.md`
+  when the host's node name appears in that document's resource-class table;
 - domain and machine network;
 - chart variables;
 - component and application paths;

@@ -207,7 +207,7 @@ all:
         self.assertIn("matches_main", report["summary"]["state_counts"])
         self.assertIn("pr_open", report["summary"]["state_counts"])
         self.assertIn("Step 1: Hardware and inventory", stderr)
-        self.assertIn("Step 5: GitOps configuration", stderr)
+        self.assertIn("Step 6: GitOps configuration", stderr)
 
     def test_cli_check_infra_markdown_dispatch_and_output_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

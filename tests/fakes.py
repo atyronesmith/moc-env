@@ -37,6 +37,9 @@ class FakeGitHubClient(GitHubClient):
                 "infra/update-agents.yaml": {
                     "path": "infra/update-agents.yaml"
                 },
+                "docs/hardware-and-network-configuration.md": {
+                    "path": "docs/hardware-and-network-configuration.md"
+                },
                 "hub-images/inventory.yml": {"path": "hub-images/inventory.yml"},
                 "hub-images/group_vars/bu-ist-demo-infra/vars.yml": {
                     "path": "hub-images/group_vars/bu-ist-demo-infra/vars.yml"
@@ -86,6 +89,18 @@ all:
 - name: Label and approve agents
   hosts: all
   tasks: []
+"""
+        if (
+            repository == "CCI-MOC/oac-infra"
+            and path == "docs/hardware-and-network-configuration.md"
+        ):
+            return """
+# Hardware and network configuration
+
+| Node Name | Resource Class |
+|---|---|
+| MOC-R4PAC10U31-S1A | bu-ist-demo-control |
+| MOC-R4PAC10U31-S1B | bu-ist-demo-worker |
 """
         if repository == "CCI-MOC/oac-infra" and path == "hub-images/inventory.yml":
             return """

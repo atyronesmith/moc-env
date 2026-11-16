@@ -1226,6 +1226,7 @@ all:
         self.assertIn("infra/update-agents.yaml", check["next_action"])
         self.assertIn("compute-0", check["next_action"])
         self.assertIn("resource_class", check["next_action"])
+        self.assertIn("bu-ist-demo-worker", check["next_action"])
         self.assertIn("NodePool", check["next_action"])
         text_report = render_text(report)
         markdown_report = render_markdown(report)
@@ -1234,6 +1235,76 @@ all:
         self.assertIn("MISSING", text_report)
         self.assertIn("Agent label inputs", markdown_report)
         self.assertIn("| `compute-0` | `bmc` |", markdown_report)
+
+    def test_documented_resource_class_mismatch_is_advisory(self) -> None:
+        class ResourceClassMismatchClient(FakeGitHubClient):
+            def get_file(self, repository, path, ref="main"):
+                content = super().get_file(repository, path, ref)
+                if (
+                    repository == "CCI-MOC/oac-infra"
+                    and path == "infra/inventory/00hosts.yaml"
+                ):
+                    return content.replace(
+                        "resource_class: bu-ist-demo-worker",
+                        "resource_class: custom-worker",
+                    )
+                return content
+
+        report = StatusChecker(ResourceClassMismatchClient()).run(
+            Environment(name="bu-ist-demo", issue_number=666)
+        ).to_dict()
+        check = next(
+            item for item in report["checks"]
+            if item["id"] == "workload.agent_labels_inputs"
+        )
+        self.assertEqual(check["state"], "declared_in_main")
+        self.assertEqual(check["severity"], "advisory")
+        self.assertIn("inventory has `custom-worker`", check["reason"])
+        self.assertIn("documentation has `bu-ist-demo-worker`", check["reason"])
+        self.assertEqual(
+            check["evidence"]["resource_class_mismatches"],
+            [
+                {
+                    "host": "compute-0",
+                    "node_name": "MOC-R4PAC10U31-S1B",
+                    "inventory_resource_class": "custom-worker",
+                    "documented_resource_class": "bu-ist-demo-worker",
+                }
+            ],
+        )
+
+    def test_unavailable_resource_class_documentation_is_skipped_silently(
+        self,
+    ) -> None:
+        for document in (
+            "",
+            "# No table here\n",
+            "# Unparsable\n\n| Nope |\n",
+            "| Node Name | Resource Class |\n|---|---|\n"
+            "| other-node | other-class |\n",
+        ):
+            with self.subTest(document=document):
+                class UnavailableDocumentationClient(FakeGitHubClient):
+                    def get_file(self, repository, path, ref="main"):
+                        if (
+                            repository == "CCI-MOC/oac-infra"
+                            and path
+                            == "docs/hardware-and-network-configuration.md"
+                        ):
+                            return document
+                        return super().get_file(repository, path, ref)
+
+                report = StatusChecker(UnavailableDocumentationClient()).run(
+                    Environment(name="bu-ist-demo", issue_number=666)
+                ).to_dict()
+                check = next(
+                    item for item in report["checks"]
+                    if item["id"] == "workload.agent_labels_inputs"
+                )
+                self.assertEqual(check["state"], "declared_in_main")
+                self.assertEqual(check["severity"], "info")
+                self.assertEqual(check["evidence"]["resource_class_mismatches"], [])
+                self.assertNotIn("documentation has", check["reason"])
 
     def test_workload_agent_labels_skips_openstack_hosts(self) -> None:
         class OpenStackHostClient(FakeGitHubClient):
