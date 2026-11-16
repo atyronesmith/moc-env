@@ -25,6 +25,7 @@ from .observed import (
     IssueObservation,
     KeycloakObservation,
     OAC_INFRA_REPOSITORY,
+    HARDWARE_NETWORK_DOC_PATH,
     SourceValue,
     UPDATE_AGENTS_PATH,
     inventory_clusters,
@@ -451,6 +452,7 @@ class StatusChecker:
                         cluster,
                         cluster_observation,
                         observation.update_agents_present,
+                        observation.hardware_resource_classes,
                     )
                 )
 
@@ -723,17 +725,23 @@ class StatusChecker:
         cluster: str,
         cluster_observation: ClusterInventoryObservation,
         update_agents_present: SourceValue,
+        hardware_resource_classes: SourceValue,
     ) -> CheckResult:
         """Check host inputs consumed by infra/update-agents.yaml."""
 
         repository = OAC_INFRA_REPOSITORY
         hosts = cluster_observation.hosts.value
+        documented_resource_classes = hardware_resource_classes.value
         rows = [
             {
                 "host": host.get("name"),
+                "node_name": host.get("node_name"),
                 "bm_management": host.get("bm_management"),
                 "mac_addr": host.get("mac_addr"),
                 "resource_class": host.get("resource_class"),
+                "documented_resource_class": documented_resource_classes.get(
+                    host.get("node_name")
+                ),
             }
             for host in hosts
         ]
@@ -748,6 +756,19 @@ class StatusChecker:
             ]
             for row in checked_rows
         }
+
+        resource_class_mismatches = [
+            {
+                "host": row["host"],
+                "node_name": row["node_name"],
+                "inventory_resource_class": row["resource_class"],
+                "documented_resource_class": row["documented_resource_class"],
+            }
+            for row in checked_rows
+            if row["resource_class"] is not None
+            and row["documented_resource_class"] is not None
+            and row["resource_class"] != row["documented_resource_class"]
+        ]
         missing_by_host = {
             host: variables
             for host, variables in missing_by_host.items()
@@ -780,6 +801,14 @@ class StatusChecker:
                 "Every non-openstack host has the mac_addr and resource_class "
                 "inputs required by infra/update-agents.yaml."
             )
+            if resource_class_mismatches:
+                mismatch = resource_class_mismatches[0]
+                reason += (
+                    " The documented resource class differs for "
+                    f"{mismatch['host']}: inventory has "
+                    f"`{mismatch['inventory_resource_class']}`, documentation "
+                    f"has `{mismatch['documented_resource_class']}`."
+                )
 
         next_action = _next_action("workload.agent_labels_inputs", state)
         if next_action is not None:
@@ -794,6 +823,24 @@ class StatusChecker:
                 f" For hosts {affected_hosts}, provide {missing_variables}. "
                 "resource_class must match the value the NodePool selects on."
             )
+            for row in checked_rows:
+                if (
+                    row["resource_class"] is None
+                    and row["documented_resource_class"] is not None
+                ):
+                    next_action += (
+                        f" Set {row['host']} resource_class to "
+                        f"`{row['documented_resource_class']}`."
+                    )
+        elif resource_class_mismatches:
+            mismatch = resource_class_mismatches[0]
+            next_action = (
+                "Review the resource_class mismatch for "
+                f"{mismatch['host']}: inventory has "
+                f"`{mismatch['inventory_resource_class']}`, documentation has "
+                f"`{mismatch['documented_resource_class']}`. resource_class "
+                "must match the value the NodePool selects on."
+            )
 
         return CheckResult(
             id="workload.agent_labels_inputs",
@@ -804,7 +851,13 @@ class StatusChecker:
             path=UPDATE_AGENTS_PATH,
             ref="main",
             state=state,
-            severity="info" if state == "declared_in_main" else "blocking",
+            severity=(
+                "advisory"
+                if resource_class_mismatches and state == "declared_in_main"
+                else "info"
+                if state == "declared_in_main"
+                else "blocking"
+            ),
             expected=["mac_addr", "resource_class"],
             actual=rows,
             reason=reason,
@@ -816,6 +869,8 @@ class StatusChecker:
             evidence={
                 "agent_label_hosts": rows,
                 "missing_variables": missing_by_host,
+                "resource_class_mismatches": resource_class_mismatches,
+                "resource_class_documentation_path": HARDWARE_NETWORK_DOC_PATH,
                 "openstack_hosts_skipped": len(rows) - len(checked_rows),
             },
             url=github_url(repository, UPDATE_AGENTS_PATH),

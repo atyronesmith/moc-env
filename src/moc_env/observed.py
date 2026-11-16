@@ -18,6 +18,9 @@ MOC_KEYCLOAK_REPOSITORY = "CCI-MOC/moc-keycloak"
 OAC_APPS_REPOSITORY = "CCI-MOC/oac-apps"
 INVENTORY_PATH = "infra/inventory/00hosts.yaml"
 UPDATE_AGENTS_PATH = "infra/update-agents.yaml"
+HARDWARE_NETWORK_DOC_PATH = (
+    "docs/hardware-and-network-configuration.md"
+)
 HUB_INVENTORY_PATH = "hub-images/inventory.yml"
 KEYCLOAK_PATH = "main.tf"
 PR_FILE_FETCH_LIMIT = 20
@@ -160,6 +163,43 @@ class HubVariablesObservation:
 
     path_present: SourceValue
     values: SourceValue
+
+
+def parse_hardware_resource_classes(markdown: str) -> dict[str, str]:
+    """Read Node Name and Resource Class columns from hardware documentation."""
+
+    lines = [line.strip() for line in markdown.splitlines()]
+    for index, header in enumerate(lines[:-1]):
+        if not header.startswith("|") or not header.endswith("|"):
+            continue
+        columns = [cell.strip() for cell in header.strip("|").split("|")]
+        try:
+            node_index = columns.index("Node Name")
+            resource_index = columns.index("Resource Class")
+        except ValueError:
+            continue
+        separator = lines[index + 1]
+        if not separator.startswith("|") or not separator.endswith("|"):
+            continue
+        if not all(
+            cell.strip() in {"---", ":---", "---:", ":---:"}
+            for cell in separator.strip("|").split("|")
+        ):
+            continue
+
+        values: dict[str, str] = {}
+        for row in lines[index + 2 :]:
+            if not row.startswith("|") or not row.endswith("|"):
+                break
+            cells = [cell.strip() for cell in row.strip("|").split("|")]
+            if node_index >= len(cells) or resource_index >= len(cells):
+                continue
+            node_name = cells[node_index]
+            resource_class = cells[resource_index]
+            if node_name and resource_class:
+                values[node_name] = resource_class
+        return values
+    return {}
 
 
 @dataclass(frozen=True)
@@ -322,6 +362,7 @@ class InfraObservation:
     variables_path: str
     inventory_present: SourceValue
     update_agents_present: SourceValue
+    hardware_resource_classes: SourceValue
     clusters: dict[str, ClusterInventoryObservation]
     discovered_workload_clusters: tuple[str, ...]
     workload_clusters: tuple[str, ...]
@@ -363,6 +404,19 @@ def read_infra_observation(
     )
     update_agents = yaml.safe_load(update_agents_text) if update_agents_text else None
     update_agents_supported = update_agents is None or isinstance(update_agents, dict)
+    emit(
+        "Hardware and inventory",
+        "read hardware documentation for documented resource classes",
+        HARDWARE_NETWORK_DOC_PATH,
+    )
+    hardware_doc_text = (
+        client.get_file(OAC_INFRA_REPOSITORY, HARDWARE_NETWORK_DOC_PATH)
+        if HARDWARE_NETWORK_DOC_PATH in tree
+        else None
+    )
+    hardware_resource_classes = parse_hardware_resource_classes(
+        hardware_doc_text or ""
+    )
     inventory = yaml.safe_load(inventory_text) if inventory_text else None
     inventory_root = (
         inventory.get("all", inventory) if isinstance(inventory, dict) else inventory
@@ -487,6 +541,12 @@ def read_infra_observation(
             OAC_INFRA_REPOSITORY,
             UPDATE_AGENTS_PATH,
             confidence="exact" if update_agents_supported else "unsupported",
+        ),
+        hardware_resource_classes=SourceValue(
+            hardware_resource_classes,
+            OAC_INFRA_REPOSITORY,
+            HARDWARE_NETWORK_DOC_PATH,
+            confidence="exact" if hardware_doc_text is not None else "missing",
         ),
         clusters=cluster_observations,
         discovered_workload_clusters=discovered_workloads,
