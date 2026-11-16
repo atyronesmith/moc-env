@@ -4,12 +4,20 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import replace
+from datetime import datetime, timezone
+from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
 import yaml
 
 from .github import GitHubClient, github_url
-from .model import CheckResult, Environment, StatusReport
+from .model import (
+    CheckResult,
+    Environment,
+    ReportMetadata,
+    SourceSnapshot,
+    StatusReport,
+)
 from .observed import (
     AppsObservation,
     InfraObservation,
@@ -23,6 +31,7 @@ from .registry import DEFAULT_REGISTRY_PATH, EnvironmentRegistry
 
 ORG = "CCI-MOC"
 ProgressCallback = Callable[[str, str, str, str], None]
+Clock = Callable[[], datetime]
 
 
 _NEXT_ACTIONS = {
@@ -95,6 +104,13 @@ def _next_action(check_id: str, state: str) -> str | None:
     if state in {"declared_in_main", "requested", "pr_merged"}:
         return None
     return _NEXT_ACTIONS[check_id]
+
+
+def _package_version() -> str:
+    try:
+        return version("moc-env")
+    except PackageNotFoundError:
+        return "unknown"
 
 
 def list_environments(client: GitHubClient) -> list[dict[str, Any]]:
@@ -191,11 +207,17 @@ class StatusChecker:
         include_prs: bool = True,
         progress: ProgressCallback | None = None,
         registry: EnvironmentRegistry | None = None,
+        command: tuple[str, ...] | list[str] | None = None,
+        clock: Clock | None = None,
+        tool_version: str | None = None,
     ) -> None:
         self.client = client
         self.include_prs = include_prs
         self.progress = progress
         self.registry = registry or EnvironmentRegistry.load(DEFAULT_REGISTRY_PATH)
+        self.command = tuple(command or ())
+        self.clock = clock or (lambda: datetime.now(timezone.utc))
+        self.tool_version = tool_version or _package_version()
 
     def _emit_progress(
         self, stage: str, action: str, repository: str, path: str
@@ -231,6 +253,24 @@ class StatusChecker:
             environment=environment,
             checks=checks,
             overall_state=self._overall_state(checks),
+            metadata=self._metadata(),
+        )
+
+    def _metadata(self) -> ReportMetadata:
+        generated_at = self.clock().astimezone(timezone.utc).isoformat().replace(
+            "+00:00", "Z"
+        )
+        sources = tuple(
+            SourceSnapshot(**source) for source in self.client.sources()
+        )
+        return ReportMetadata(
+            schema_version=2,
+            generated_at=generated_at,
+            tool_version=self.tool_version,
+            command=self.command,
+            sources=sources,
+            authenticated=self.client.authenticated,
+            rate_limit_remaining=self.client.rate_limit_remaining,
         )
 
     def run_hub(self, environment: Environment) -> StatusReport:

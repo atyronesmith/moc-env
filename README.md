@@ -459,6 +459,11 @@ Issue numbers and environment-specific local-cluster component policy come from
 the packaged `moc_env/data/environments.yaml` registry. A command-line `--issue`
 value always takes precedence over the registry.
 
+Status reports include a metadata block with schema version, generation time,
+tool version, sanitized command, repository refs and SHAs, authentication
+state, and GitHub rate-limit remaining when available. JSON checks also provide
+normalized `expected`, `observed`, and `gaps` arrays.
+
 Skip pull-request discovery:
 
 ```sh

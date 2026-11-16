@@ -6,8 +6,16 @@ from moc_env.github import GitHubClient
 class FakeGitHubClient(GitHubClient):
     """Offline GitHub client covering the current milestone fixtures."""
 
+    SOURCE_SHAS = {
+        "CCI-MOC/MOC-issues": "1111111111111111111111111111111111111111",
+        "CCI-MOC/oac-infra": "2222222222222222222222222222222222222222",
+        "CCI-MOC/oac-apps": "3333333333333333333333333333333333333333",
+        "CCI-MOC/moc-keycloak": "4444444444444444444444444444444444444444",
+    }
+
     def __init__(self, token: str | None = None, timeout: float = 1) -> None:
         super().__init__(token=token, timeout=timeout)
+        self.rate_limit_remaining = 4999
 
     def get_json(self, path_or_url: str):
         if path_or_url == "/repos/CCI-MOC/MOC-issues/issues/666":
@@ -19,7 +27,11 @@ class FakeGitHubClient(GitHubClient):
         raise AssertionError(f"unexpected get_json path: {path_or_url}")
 
     def get_tree(self, repository: str, ref: str = "main"):
+        if repository == "CCI-MOC/MOC-issues":
+            self.record_source(repository, ref, self.SOURCE_SHAS[repository])
+            return {}
         if repository == "CCI-MOC/oac-infra":
+            self.record_source(repository, ref, self.SOURCE_SHAS[repository])
             return {
                 "infra/inventory/00hosts.yaml": {"path": "infra/inventory/00hosts.yaml"},
                 "hub-images/inventory.yml": {"path": "hub-images/inventory.yml"},
@@ -28,8 +40,10 @@ class FakeGitHubClient(GitHubClient):
                 },
             }
         if repository == "CCI-MOC/oac-apps":
+            self.record_source(repository, ref, self.SOURCE_SHAS[repository])
             return {}
         if repository == "CCI-MOC/moc-keycloak":
+            self.record_source(repository, ref, self.SOURCE_SHAS[repository])
             return {"main.tf": {"path": "main.tf"}}
         raise AssertionError(f"unexpected repository: {repository}")
 

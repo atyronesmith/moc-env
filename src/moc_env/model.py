@@ -87,15 +87,63 @@ class CheckResult:
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
+        # expected / present / missing / actual are deprecated compatibility
+        # payloads. Remove them in the next report-schema release.
+        normalized = {
+            "expected": _payload_items(data["expected"]),
+            "observed": _payload_items(data["actual"]),
+            "gaps": _gap_items(data["expected"], data["actual"], data["missing"]),
+        }
         return {
             "id": data["id"],
             "scope": data["scope"],
             "next_action": data["next_action"],
+            **normalized,
             **{
                 key: value
                 for key, value in data.items()
                 if value is not None and key not in {"id", "scope", "next_action"}
             },
+        }
+
+
+@dataclass(frozen=True)
+class SourceSnapshot:
+    """One repository ref read while producing a report."""
+
+    repository: str
+    ref: str
+    sha: str
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "repository": self.repository,
+            "ref": self.ref,
+            "sha": self.sha,
+        }
+
+
+@dataclass(frozen=True)
+class ReportMetadata:
+    """Reproduction and ordering metadata for a status report."""
+
+    schema_version: int
+    generated_at: str
+    tool_version: str
+    command: tuple[str, ...]
+    sources: tuple[SourceSnapshot, ...]
+    authenticated: bool
+    rate_limit_remaining: int | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "schema_version": self.schema_version,
+            "generated_at": self.generated_at,
+            "tool_version": self.tool_version,
+            "command": list(self.command),
+            "sources": [source.to_dict() for source in self.sources],
+            "authenticated": self.authenticated,
+            "rate_limit_remaining": self.rate_limit_remaining,
         }
 
 
@@ -107,6 +155,7 @@ class StatusReport:
     checks: list[CheckResult]
     overall_state: str
     scope: str = "environment"
+    metadata: ReportMetadata | None = None
 
     def to_dict(self) -> dict[str, Any]:
         state_counts: dict[str, int] = {}
@@ -129,6 +178,7 @@ class StatusReport:
 
         return {
             "scope": self.scope,
+            **({"metadata": self.metadata.to_dict()} if self.metadata else {}),
             "environment": self.environment.to_dict(),
             "overall_state": self.overall_state,
             "summary": {
@@ -147,6 +197,70 @@ class StatusReport:
             },
             "checks": [check.to_dict() for check in self.checks],
         }
+
+
+def _payload_items(value: Any) -> list[dict[str, Any]]:
+    if value is None:
+        return []
+    if isinstance(value, dict):
+        return [{"name": str(key), "value": item} for key, item in value.items()]
+    if isinstance(value, (list, tuple)):
+        items = []
+        for index, item in enumerate(value):
+            if isinstance(item, dict) and "name" in item:
+                normalized = dict(item)
+                normalized.setdefault("value", None)
+                items.append(normalized)
+            else:
+                items.append({"name": str(index), "value": item})
+        return items
+    return [{"name": "value", "value": value}]
+
+
+def _gap_items(expected: Any, observed: Any, missing: Any) -> list[dict[str, Any]]:
+    if missing is None:
+        return []
+
+    expected_mapping = expected if isinstance(expected, dict) else {}
+    observed_mapping = observed if isinstance(observed, dict) else {}
+    if isinstance(missing, dict):
+        gaps = []
+        for name, value in missing.items():
+            key = str(name)
+            gaps.append(
+                {
+                    "name": key,
+                    "expected": expected_mapping.get(key, value),
+                    "observed": observed_mapping.get(key),
+                }
+            )
+        return gaps
+    if isinstance(missing, (list, tuple)):
+        expected_items = expected if isinstance(expected, (list, tuple)) else []
+        observed_items = observed if isinstance(observed, (list, tuple)) else []
+        return [
+            {
+                "name": str(index),
+                "expected": (
+                    expected_items[index]
+                    if index < len(expected_items)
+                    else item
+                ),
+                "observed": (
+                    observed_items[index]
+                    if index < len(observed_items)
+                    else None
+                ),
+            }
+            for index, item in enumerate(missing)
+        ]
+    return [
+        {
+            "name": "value",
+            "expected": expected,
+            "observed": observed,
+        }
+    ]
 
 
 @dataclass(frozen=True)

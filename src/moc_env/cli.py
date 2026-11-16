@@ -10,7 +10,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from .checks import StatusChecker, list_environments
+from .checks import Clock, StatusChecker, list_environments
 from .chart_values import (
     documentation_directory,
     load_chart_values_manual,
@@ -249,6 +249,38 @@ def _render_status_report(args: argparse.Namespace, report: dict[str, Any]) -> i
     else:
         print(rendered, end="")
     return 0
+
+
+_CREDENTIAL_VALUE_OPTIONS = {
+    "--bws-secret-id",
+    "--bws-secret-id-keychain-service",
+    "--bws-secret-id-keychain-account",
+}
+
+
+def _sanitize_command(arguments: list[str]) -> tuple[str, ...]:
+    """Remove credential values while preserving the command shape."""
+
+    sanitized: list[str] = []
+    index = 0
+    while index < len(arguments):
+        argument = arguments[index]
+        if argument in _CREDENTIAL_VALUE_OPTIONS:
+            sanitized.append(argument)
+            index += 1
+            if index < len(arguments):
+                sanitized.append("<redacted>")
+                index += 1
+            continue
+
+        option, separator, _value = argument.partition("=")
+        if separator and option in _CREDENTIAL_VALUE_OPTIONS:
+            sanitized.append(f"{option}=<redacted>")
+            index += 1
+            continue
+        sanitized.append(argument)
+        index += 1
+    return tuple(sanitized)
 
 
 def build_list_parser() -> argparse.ArgumentParser:
@@ -592,7 +624,10 @@ def _resolve_github_token(args: argparse.Namespace) -> str | None:
         raise SystemExit(2)
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(
+    argv: list[str] | None = None,
+    clock: Clock | None = None,
+) -> int:
     arguments = sys.argv[1:] if argv is None else argv
     try:
         registry = EnvironmentRegistry.load(DEFAULT_REGISTRY_PATH)
@@ -1476,6 +1511,8 @@ def main(argv: list[str] | None = None) -> int:
             include_prs=not args.no_prs,
             progress=print_progress,
             registry=registry,
+            command=_sanitize_command(arguments),
+            clock=clock,
         )
         try:
             report = (
