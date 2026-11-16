@@ -110,3 +110,86 @@ bu_ist_demo_infra = {
 
     def pr_files(self, repository: str, number: int):
         yield {"filename": "values/bu-ist-demo-infra/hcp-config.yaml"}
+
+
+class MultiWorkloadFakeGitHubClient(FakeGitHubClient):
+    """Offline fixture with two workloads for one hub and one workload-less hub."""
+
+    def get_tree(self, repository: str, ref: str = "main"):
+        tree = super().get_tree(repository, ref)
+        if repository == "CCI-MOC/oac-infra":
+            tree = {
+                **tree,
+                "hub-images/group_vars/oac-dev-infra/vars.yml": {
+                    "path": "hub-images/group_vars/oac-dev-infra/vars.yml"
+                },
+            }
+            tree.pop("hub-images/group_vars/bu-ist-demo-infra/vars.yml", None)
+        return tree
+
+    def get_file(self, repository: str, path: str, ref: str = "main") -> str:
+        if repository == "CCI-MOC/oac-infra" and path == "infra/inventory/00hosts.yaml":
+            return """
+all:
+  children:
+    oac_dev_clusters:
+      children:
+        oac_dev_infra:
+          vars:
+            cluster: oac-dev-infra
+          children:
+            controller:
+              hosts:
+                control-0:
+                  node_name: MOC-R4PAC10U31-S1A
+        oac_dev_workload0:
+          vars:
+            cluster: oac-dev-workload0
+          children:
+            compute:
+              hosts:
+                compute-0:
+                  node_name: MOC-R4PAC10U31-S1B
+        oac_dev_workload1:
+          vars:
+            cluster: oac-dev-workload1
+          children:
+            compute:
+              hosts:
+                compute-1:
+                  node_name: MOC-R4PAC10U31-S1C
+        dizzy_infra:
+          vars:
+            cluster: dizzy-infra
+          children:
+            controller:
+              hosts:
+                control-0:
+                  node_name: MOC-R4PAC10U31-S1D
+"""
+        if repository == "CCI-MOC/oac-infra" and path == "hub-images/inventory.yml":
+            return """
+all:
+  children:
+    oac-dev-infra:
+      hosts:
+        oac-dev-infra:
+          ansible_connection: local
+    dizzy-infra:
+      hosts:
+        dizzy-infra:
+          ansible_connection: local
+"""
+        if (
+            repository == "CCI-MOC/oac-infra"
+            and path == "hub-images/group_vars/oac-dev-infra/vars.yml"
+        ):
+            return """
+cluster_domain_name: oac-dev
+base_domain: int.massopen.cloud
+machine_network: 10.20.26.0/23
+api_ip: 10.20.27.21
+ingress_ip: 10.20.27.22
+dns_ip: 8.8.8.8
+"""
+        return super().get_file(repository, path, ref)

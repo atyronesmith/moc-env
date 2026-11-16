@@ -10,6 +10,7 @@ from moc_env.observed import (
     read_environment_observation,
     read_infra_observation,
 )
+from moc_env.report import render_markdown, render_text
 
 from fakes import FakeGitHubClient
 
@@ -156,7 +157,9 @@ class StatusCheckerTest(unittest.TestCase):
                 "environment": "bu-ist-demo",
                 "cluster": "bu-ist-demo-workload0",
                 "type": "workload",
-                "status_command": "moc-env status-workload bu-ist-demo",
+                "status_command": (
+                    "moc-env status-workload bu-ist-demo --workload workload0"
+                ),
                 "source_repository": "CCI-MOC/oac-infra",
                 "source_path": "infra/inventory/00hosts.yaml",
             },
@@ -239,7 +242,84 @@ bu_ist_demo_infra = {
             item for item in report["checks"] if item["check"] == "Infra OIDC client"
         )
         self.assertEqual(check["state"], "partial")
-        self.assertEqual(check["missing"]["declarations"], ["redirect_uri", "secret_name"])
+        self.assertEqual(
+            check["missing"]["fields"],
+            ["redirect_uri", "secret_name"],
+        )
+        self.assertEqual(
+            check["evidence"]["fields"]["redirect_uri"],
+            {
+                "expected": (
+                    "https://oauth-openshift.apps.bu-ist-demo.int.massopen.cloud"
+                    "/oauth2callback/mocsso"
+                ),
+                "observed": "https://example.invalid/callback",
+                "status": "mismatch",
+            },
+        )
+        self.assertIn(
+            "openshift_redirect_uri = "
+            "`https://oauth-openshift.apps.bu-ist-demo.int.massopen.cloud"
+            "/oauth2callback/mocsso`",
+            check["next_action"],
+        )
+
+    def test_keycloak_observation_reports_full_match(self) -> None:
+        report = StatusChecker(FakeGitHubClient()).run(
+            Environment(name="bu-ist-demo", issue_number=666)
+        ).to_dict()
+        check = next(
+            item for item in report["checks"] if item["check"] == "Infra OIDC client"
+        )
+
+        self.assertEqual(check["state"], "declared_in_main")
+        self.assertEqual(check["reason"], "All expected Keycloak OIDC client fields match.")
+        self.assertEqual(
+            [result["status"] for result in check["evidence"]["fields"].values()],
+            ["match", "match", "match"],
+        )
+
+    def test_keycloak_observation_reports_near_match_block_name(self) -> None:
+        class DizzyKeycloakClient(FakeGitHubClient):
+            def get_file(self, repository, path, ref="main"):
+                if repository == "CCI-MOC/moc-keycloak":
+                    return """
+dizzy = {
+  cluster_name = "dizzy"
+  openshift_redirect_uri = "https://oauth-openshift.apps.dizzy.int.massopen.cloud/oauth2callback/mocsso"
+  client_secret_name = "cluster/dizzy/keycloak-oidc"
+}
+"""
+                return super().get_file(repository, path, ref)
+
+        report = StatusChecker(DizzyKeycloakClient()).run(
+            Environment(name="dizzy", workload_clusters=())
+        ).to_dict()
+        check = next(
+            item for item in report["checks"] if item["check"] == "Infra OIDC client"
+        )
+
+        self.assertEqual(check["state"], "partial")
+        self.assertIn("near-match block `dizzy`", check["reason"])
+        self.assertEqual(
+            check["evidence"]["fields"]["client"],
+            {
+                "expected": "dizzy-infra",
+                "observed": "dizzy",
+                "status": "mismatch",
+            },
+        )
+        self.assertIn(
+            "client_secret_name = `cluster/dizzy-infra/keycloak-oidc`",
+            check["next_action"],
+        )
+
+        text = render_text(report)
+        markdown = render_markdown(report)
+        self.assertIn("Keycloak OIDC fields:", text)
+        self.assertIn("| Field | Expected | Observed |", markdown)
+        self.assertIn("cluster/dizzy/keycloak-oidc", text)
+        self.assertIn("cluster/dizzy/keycloak-oidc", markdown)
 
     def test_status_checker_reports_missing_repository_files(self) -> None:
         class MissingRepositoryFilesClient(FakeGitHubClient):
@@ -262,7 +342,6 @@ bu_ist_demo_infra = {
         states = {check["check"]: check["state"] for check in report["checks"]}
 
         self.assertEqual(states["bu-ist-demo-infra host inventory"], "missing")
-        self.assertEqual(states["bu-ist-demo-workload0 host inventory"], "missing")
         self.assertEqual(states["Hub image inventory"], "missing")
         self.assertEqual(states["Hub image variables"], "missing")
         self.assertEqual(states["Infra OIDC client"], "missing")
@@ -270,9 +349,11 @@ bu_ist_demo_infra = {
         self.assertEqual(states["Hub-wide component values"], "missing")
         self.assertEqual(states["Infra local-cluster values"], "missing")
         self.assertEqual(states["Infra ArgoCD applications"], "missing")
-        self.assertEqual(states["Workload hosted-cluster values"], "missing")
-        self.assertEqual(states["Workload component values"], "missing")
         self.assertEqual(states["Relevant pull requests"], "missing")
+        self.assertEqual(
+            report["environment"]["workload_notice"],
+            "No workload cluster is declared for this hub.",
+        )
 
     def test_status_checker_reports_partial_repository_files(self) -> None:
         class PartialRepositoryFilesClient(FakeGitHubClient):
@@ -468,6 +549,11 @@ other_infra = {
         ).to_dict()
         check = next(item for item in report["checks"] if item["check"] == "Infra OIDC client")
         self.assertEqual(check["state"], "missing")
+        self.assertEqual(check["reason"], "No Keycloak OIDC client block exists for this hub.")
+        self.assertEqual(
+            [result["status"] for result in check["evidence"]["fields"].values()],
+            ["absent", "absent", "absent"],
+        )
 
     def test_status_checker_reports_boot_image_check_states(self) -> None:
         def boot_states(urls):

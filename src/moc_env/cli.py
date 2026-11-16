@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import difflib
 import os
 import sys
 from dataclasses import replace
@@ -188,7 +189,37 @@ def build_status_workload_parser() -> argparse.ArgumentParser:
         description="Report workload-cluster repository configuration state",
     )
     _add_status_arguments(parser)
+    parser.add_argument(
+        "--workload",
+        help="Workload name, such as workload1 or oac-dev-workload1",
+    )
     return parser
+
+
+def _print_unknown_environment(environment_name: str, known_names: list[str]) -> None:
+    print(f"moc-env: unknown environment: {environment_name}", file=sys.stderr)
+    matches = difflib.get_close_matches(environment_name, known_names, n=1)
+    if matches:
+        print(f"Did you mean: {matches[0]}", file=sys.stderr)
+    print("Known environments:", file=sys.stderr)
+    for name in known_names:
+        print(f"  {name}", file=sys.stderr)
+
+
+def _resolve_workload_argument(
+    environment_name: str,
+    workload: str,
+    workload_clusters: list[str],
+) -> str:
+    for cluster in workload_clusters:
+        short_name = cluster.removeprefix(f"{environment_name}-")
+        if workload in {cluster, short_name}:
+            return cluster
+    print(f"moc-env: unknown workload cluster: {workload}", file=sys.stderr)
+    print("Known workload clusters:", file=sys.stderr)
+    for cluster in workload_clusters:
+        print(f"  {cluster}", file=sys.stderr)
+    raise ValueError(workload)
 
 
 def _render_status_report(args: argparse.Namespace, report: dict[str, Any]) -> int:
@@ -1369,6 +1400,52 @@ def main(argv: list[str] | None = None) -> int:
         environment = Environment(name=args.environment, issue_number=issue_number)
         github_token = _resolve_github_token(args)
         client = GitHubClient(token=github_token, timeout=args.timeout)
+        try:
+            environment_rows = list_environments(client)
+            known_names = sorted(
+                {
+                    row["environment"]
+                    for row in environment_rows
+                    if row["type"] == "hub"
+                }
+            )
+            workload_clusters = [
+                row["cluster"]
+                for row in environment_rows
+                if row["environment"] == args.environment
+                and row["type"] == "workload"
+            ]
+        except (GitHubError, RateLimitError) as exc:
+            print(f"moc-env: {exc}", file=sys.stderr)
+            return 2
+
+        if args.environment not in known_names:
+            if args.issue is not None:
+                print(
+                    "moc-env: warning: environment is not in the oac-infra "
+                    "inventory; continuing with the supplied MOC issue",
+                    file=sys.stderr,
+                )
+            else:
+                _print_unknown_environment(args.environment, known_names)
+                return 2
+
+        selected_workload = None
+        if getattr(args, "workload", None) is not None:
+            try:
+                selected_workload = _resolve_workload_argument(
+                    args.environment,
+                    args.workload,
+                    workload_clusters,
+                )
+            except ValueError:
+                return 2
+
+        environment = Environment(
+            name=args.environment,
+            issue_number=issue_number,
+            workload_clusters=tuple(workload_clusters),
+        )
         stage_step = 0
 
         def print_progress(
@@ -1399,7 +1476,10 @@ def main(argv: list[str] | None = None) -> int:
                     else (
                         checker.run_hub(environment)
                         if arguments[0] == "status-hub"
-                        else checker.run_workload(environment)
+                        else checker.run_workload(
+                            environment,
+                            workload=selected_workload,
+                        )
                     )
             ).to_dict()
         except (CredentialError, GitHubError, RateLimitError) as exc:

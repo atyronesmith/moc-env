@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import re
 from typing import Any
 
@@ -186,6 +186,7 @@ class KeycloakObservation:
 
     path_present: SourceValue
     client: KeycloakClientObservation | None
+    near_match_client: KeycloakClientObservation | None
     source_repository: str
     source_path: str
 
@@ -299,6 +300,8 @@ class ObservedEnvironment:
 
     @property
     def workload_cluster(self) -> ObservedWorkloadCluster:
+        if not self.environment.workload_clusters:
+            raise ValueError("no workload cluster is declared for this hub")
         return ObservedWorkloadCluster(
             inventory=self.infra.clusters[self.environment.workload_cluster],
             apps=self.apps,
@@ -315,6 +318,8 @@ class InfraObservation:
     variables_path: str
     inventory_present: SourceValue
     clusters: dict[str, ClusterInventoryObservation]
+    discovered_workload_clusters: tuple[str, ...]
+    workload_clusters: tuple[str, ...]
     hub_inventory: HubInventoryObservation
     hub_variables: HubVariablesObservation
 
@@ -352,8 +357,21 @@ def read_infra_observation(
         INVENTORY_PATH,
         confidence="exact" if inventory_supported else "unsupported",
     )
+    all_clusters = inventory_clusters(inventory_root)
+    discovered_workloads = tuple(
+        sorted(
+            cluster
+            for cluster in all_clusters
+            if cluster.startswith(f"{environment.base_name}-")
+            and cluster != environment.infra_cluster
+        )
+    )
+    if environment.workload_clusters is None:
+        workload_clusters = discovered_workloads or (environment.workload_cluster,)
+    else:
+        workload_clusters = environment.workload_clusters
     cluster_observations: dict[str, ClusterInventoryObservation] = {}
-    for cluster in (environment.infra_cluster, environment.workload_cluster):
+    for cluster in (environment.infra_cluster, *workload_clusters):
         group = find_cluster_group(inventory_root, cluster)
         hosts = flatten_host(group) if group else []
         cluster_observations[cluster] = ClusterInventoryObservation(
@@ -448,6 +466,8 @@ def read_infra_observation(
         variables_path=variables_path,
         inventory_present=inventory_present,
         clusters=cluster_observations,
+        discovered_workload_clusters=discovered_workloads,
+        workload_clusters=workload_clusters,
         hub_inventory=hub_observation,
         hub_variables=variables_observation,
     )
@@ -506,6 +526,7 @@ def read_keycloak_observation(
         return KeycloakObservation(
             path_present=SourceValue(False, repository, KEYCLOAK_PATH),
             client=None,
+            near_match_client=None,
             source_repository=repository,
             source_path=KEYCLOAK_PATH,
         )
@@ -518,12 +539,11 @@ def read_keycloak_observation(
         re.MULTILINE | re.DOTALL,
     )
     client_observation: KeycloakClientObservation | None = None
+    near_match_observation: KeycloakClientObservation | None = None
     for match in pattern.finditer(text):
         block_name, block = match.groups()
         declared_cluster = _terraform_string(block, "cluster_name")
-        if declared_cluster != cluster:
-            continue
-        client_observation = KeycloakClientObservation(
+        observation = KeycloakClientObservation(
             block_name=SourceValue(block_name, repository, KEYCLOAK_PATH),
             cluster_name=SourceValue(declared_cluster, repository, KEYCLOAK_PATH),
             redirect_uri=SourceValue(
@@ -537,10 +557,15 @@ def read_keycloak_observation(
                 KEYCLOAK_PATH,
             ),
         )
-        break
+        if declared_cluster == cluster:
+            client_observation = observation
+            break
+        if declared_cluster == environment.base_name or block_name == environment.base_name:
+            near_match_observation = observation
     return KeycloakObservation(
         path_present=SourceValue(True, repository, KEYCLOAK_PATH),
         client=client_observation,
+        near_match_client=near_match_observation,
         source_repository=repository,
         source_path=KEYCLOAK_PATH,
     )
@@ -566,7 +591,11 @@ def read_apps_observation(
     terms = (
         environment.name,
         environment.infra_cluster,
-        environment.workload_cluster,
+        *(
+            environment.workload_clusters
+            if environment.workload_clusters is not None
+            else (environment.workload_cluster,)
+        ),
     )
     pull_requests: list[PullRequestObservation] = []
     if include_pull_requests:
@@ -810,6 +839,13 @@ def read_environment_observation(
 
     issue = read_issue_observation(client, environment, progress)
     infra = read_infra_observation(client, environment, progress)
+    if environment.workload_clusters is None:
+        environment = replace(
+            environment,
+            workload_clusters=infra.discovered_workload_clusters,
+        )
+    else:
+        environment = replace(environment, workload_clusters=infra.workload_clusters)
     keycloak = read_keycloak_observation(client, environment, progress)
     apps = read_apps_observation(
         client,

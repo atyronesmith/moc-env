@@ -327,6 +327,39 @@ def _field_value_checklist(check: dict[str, Any]) -> list[str] | None:
     return lines
 
 
+def _oidc_field_table(check: dict[str, Any]) -> list[str] | None:
+    if check.get("id") != "hub.oidc_client":
+        return None
+    evidence = check.get("evidence") or {}
+    fields = evidence.get("fields")
+    if not isinstance(fields, dict):
+        return None
+
+    rows = [
+        (field, result.get("expected"), result.get("observed"))
+        for field, result in fields.items()
+        if isinstance(result, dict)
+    ]
+    if not rows:
+        return None
+    field_width = max(len(field) for field, _, _ in rows) + 2
+    expected_width = max(len(str(expected)) for _, expected, _ in rows) + 2
+    observed_width = max(len(str(observed)) for _, _, observed in rows) + 2
+    lines = [
+        "  Keycloak OIDC fields:",
+        "  Field:".ljust(field_width)
+        + "Expected:".ljust(expected_width)
+        + "Observed:",
+    ]
+    for field, expected, observed in rows:
+        lines.append(
+            f"  {field:<{field_width - 2}}  "
+            f"{str(expected):<{expected_width - 2}}  "
+            f"{str(observed)}"
+        )
+    return lines
+
+
 def _mapping_summary(check: dict[str, Any]) -> list[str] | None:
     """Render present and missing scalar fields without duplicate JSON."""
     present = check.get("present")
@@ -416,6 +449,8 @@ def _pull_request_count_summary(check: dict[str, Any]) -> list[str] | None:
 def _structured_summary(check: dict[str, Any]) -> list[str] | None:
     """Route a check to the most specific compact text renderer."""
     return (
+        _oidc_field_table(check)
+        or
         _path_checklist(check)
         or _field_value_checklist(check)
         or _path_scope_summary(check)
@@ -445,12 +480,21 @@ def _scope_title(scope: str) -> str:
 def render_text(report: dict[str, Any]) -> str:
     environment = report["environment"]
     scope = report.get("scope", "environment")
+    workload_clusters = environment.get("workload_clusters", [])
+    workload_summary = (
+        ", ".join(workload_clusters)
+        if workload_clusters
+        else environment.get(
+            "workload_notice",
+            "No workload cluster is declared for this hub.",
+        )
+    )
     lines = [
         "=" * 78,
         f"{_scope_title(scope)}: {environment['name']}",
         "=" * 78,
         f"Hub cluster:      {environment['infra_cluster']}",
-        f"Workload cluster: {environment['workload_cluster']}",
+        f"Workload clusters: {workload_summary}",
         f"Domain:           {environment['domain']}",
         f"Overall:          {report['overall_state']}",
         "",
@@ -529,6 +573,27 @@ def render_text(report: dict[str, Any]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def _oidc_markdown_table(check: dict[str, Any]) -> list[str] | None:
+    if check.get("id") != "hub.oidc_client":
+        return None
+    evidence = check.get("evidence") or {}
+    fields = evidence.get("fields")
+    if not isinstance(fields, dict):
+        return None
+    rows = [
+        [field, result.get("expected"), result.get("observed")]
+        for field, result in fields.items()
+        if isinstance(result, dict)
+    ]
+    if not rows:
+        return None
+    return [
+        "**Keycloak OIDC fields**",
+        "",
+        *_markdown_table(["Field", "Expected", "Observed"], rows),
+    ]
+
+
 def _check_markdown(check: dict[str, Any], number: int) -> list[str]:
     evidence = check.get("evidence") or {}
     check_rule = evidence.get("check_rule")
@@ -547,8 +612,12 @@ def _check_markdown(check: dict[str, Any], number: int) -> list[str]:
     if check.get("url"):
         lines.append(f"| Link | [Open source]({check['url']}) |")
 
+    oidc_table = _oidc_markdown_table(check)
     field_table = _field_table(check, evidence)
-    if field_table:
+    if oidc_table:
+        lines.append("")
+        lines.extend(oidc_table)
+    elif field_table:
         lines.append("")
         lines.extend(field_table)
     else:
@@ -571,7 +640,7 @@ def _check_markdown(check: dict[str, Any], number: int) -> list[str]:
         )
     lines.extend(_host_table(check, evidence))
     lines.extend(_path_table(check, evidence))
-    if not field_table:
+    if not field_table and not oidc_table:
         lines.extend(_field_table(check, evidence))
     lines.extend(_source_value_table(check, evidence))
     lines.extend(_pull_request_table(evidence))
@@ -658,7 +727,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     scope = report.get("scope", "environment")
     environment_name = environment["name"]
     infra_cluster = environment["infra_cluster"]
-    workload_cluster = environment["workload_cluster"]
+    workload_clusters = environment.get("workload_clusters", [])
     issue_url = _identity_source_url(report, "MOC issue") or (
         f"https://github.com/CCI-MOC/MOC-issues/issues/{environment['issue_number']}"
         if environment["issue_number"] is not None
@@ -669,9 +738,6 @@ def render_markdown(report: dict[str, Any]) -> str:
     )
     hub_url = _identity_source_url(
         report, f"{infra_cluster} host inventory"
-    ) or inventory_url
-    workload_url = _identity_source_url(
-        report, f"{workload_cluster} host inventory"
     ) or inventory_url
     domain_url = _identity_source_url(report, "Hub image variables") or github_url(
         "CCI-MOC/oac-infra",
@@ -692,7 +758,23 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"| Environment | {_identity_link(environment_name, issue_url)} |",
         f"| MOC issue | {_identity_link(environment['issue_number'], issue_url)} |",
         f"| Hub cluster | {_identity_link(infra_cluster, hub_url)} |",
-        f"| Workload cluster | {_identity_link(workload_cluster, workload_url)} |",
+    ]
+    for workload_cluster in workload_clusters:
+        workload_url = _identity_source_url(
+            report, f"{workload_cluster} host inventory"
+        ) or inventory_url
+        lines.append(
+            f"| Workload cluster | {_identity_link(workload_cluster, workload_url)} |"
+        )
+    if not workload_clusters:
+        notice = environment.get(
+            "workload_notice",
+            "No workload cluster is declared for this hub.",
+        )
+        lines.append(
+            f"| Workload clusters | {notice} |"
+        )
+    lines.extend([
         f"| Domain | {_identity_link(environment['domain'], domain_url)} |",
         f"| Overall state | **{report['overall_state']}** |",
         "",
@@ -714,7 +796,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         "",
         "| Stage | Checks | States |",
         "|---|---:|---|",
-    ]
+    ])
 
     for stage in report["summary"]["stages"]:
         states = ", ".join(
