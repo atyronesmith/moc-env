@@ -21,6 +21,7 @@ packages = ["src/moc_env"]
 [tool.hatch.build.targets.wheel.force-include]
 "docs/sources.yaml" = "moc_env/docs/sources.yaml"
 "docs/variables" = "moc_env/docs/variables"
+"src/moc_env/data/environments.yaml" = "moc_env/data/environments.yaml"
 
 [tool.ruff]
 line-length = 100

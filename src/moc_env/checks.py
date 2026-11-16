@@ -19,26 +19,10 @@ from .observed import (
     inventory_clusters,
     read_environment_observation,
 )
+from .registry import DEFAULT_REGISTRY_PATH, EnvironmentRegistry
 
 ORG = "CCI-MOC"
-KNOWN_ISSUES = {"bu-ist-demo": 666}
 ProgressCallback = Callable[[str, str, str, str], None]
-
-LOCAL_CLUSTER_COMPONENTS = [
-    "acm.yaml",
-    "acm-placements.yaml",
-    "cert-manager.yaml",
-    "cluster-certificates.yaml",
-    "cluster-version.yaml",
-    "external-dns-operator.yaml",
-    "external-secrets.yaml",
-    "hcp-config.yaml",
-    "keycloak-oauth.yaml",
-    "metallb.yaml",
-    "openshift-gitops.yaml",
-    "portworx.yaml",
-    "user-workload-monitoring.yaml",
-]
 
 
 _NEXT_ACTIONS = {
@@ -206,10 +190,12 @@ class StatusChecker:
         client: GitHubClient,
         include_prs: bool = True,
         progress: ProgressCallback | None = None,
+        registry: EnvironmentRegistry | None = None,
     ) -> None:
         self.client = client
         self.include_prs = include_prs
         self.progress = progress
+        self.registry = registry or EnvironmentRegistry.load(DEFAULT_REGISTRY_PATH)
 
     def _emit_progress(
         self, stage: str, action: str, repository: str, path: str
@@ -229,6 +215,9 @@ class StatusChecker:
             progress=self._emit_progress,
             include_pull_requests=self.include_prs,
             path_scope=path_scope,
+            keycloak_client_name=self.registry.keycloak_client_name(
+                environment.name
+            ),
         )
         environment = observation.environment
         if observation.issue is not None:
@@ -237,6 +226,7 @@ class StatusChecker:
         checks.extend(infra_checks)
         checks.extend(self._keycloak_checks(environment, observation.keycloak))
         checks.extend(self._apps_checks(environment, observation.apps))
+        self._apply_boot_image_severities(checks)
         return StatusReport(
             environment=environment,
             checks=checks,
@@ -318,6 +308,7 @@ class StatusChecker:
                 path=path,
                 ref="main",
                 state=state,
+                severity="info",
                 expected="Open issue recording the environment request",
                 actual=issue_state,
                 reason=reason,
@@ -387,6 +378,9 @@ class StatusChecker:
                     path=inventory_path,
                     ref="main",
                     state=state,
+                    severity=(
+                        "info" if state == "declared_in_main" else "blocking"
+                    ),
                     expected=f"Inventory group for {cluster}",
                     actual={"found": group is not None, "host_count": len(hosts)},
                     reason=reason,
@@ -461,6 +455,9 @@ class StatusChecker:
                     path=inventory_path,
                     ref="main",
                     state=boot_state,
+                    severity=(
+                        "info" if boot_state == "declared_in_main" else "blocking"
+                    ),
                     expected=f"Cluster-specific discovery image for {cluster}",
                     actual=boot_urls,
                     reason=boot_reason,
@@ -519,6 +516,7 @@ class StatusChecker:
                 path=hub_inventory_path,
                 ref="main",
                 state=hub_state,
+                severity="info" if hub_state == "declared_in_main" else "blocking",
                 expected=f"Hub-image inventory entry for {environment.infra_cluster}",
                 actual={"found": hub_found},
                 reason=hub_reason,
@@ -577,6 +575,7 @@ class StatusChecker:
                 path=vars_path,
                 ref="main",
                 state=state,
+                severity="info" if state == "declared_in_main" else "blocking",
                 expected=expected_fields,
                 actual=present_fields,
                 reason=reason,
@@ -606,8 +605,9 @@ class StatusChecker:
     ) -> list[CheckResult]:
         repository = observation.source_repository
         path = observation.source_path
+        keycloak_client_name = self.registry.keycloak_client_name(environment.name)
         expected = {
-            "client": environment.infra_cluster,
+            "client": keycloak_client_name,
             "redirect_uri": (
                 f"https://oauth-openshift.apps.{environment.domain}"
                 "/oauth2callback/mocsso"
@@ -698,6 +698,7 @@ class StatusChecker:
                 path=path,
                 ref="main",
                 state=state,
+                severity="info" if state == "declared_in_main" else "blocking",
                 expected={name: result["expected"] for name, result in fields.items()},
                 actual={name: result["observed"] for name, result in fields.items()},
                 reason=reason,
@@ -787,7 +788,10 @@ class StatusChecker:
                 "Infra local-cluster values",
                 None,
                 local_prefix,
-                [local_prefix + name for name in LOCAL_CLUSTER_COMPONENTS],
+                [
+                    local_prefix + name
+                    for name in self.registry.required_components(environment.name)
+                ],
                 "the hub cluster's local operator and shared-service values",
             ),
             (
@@ -813,6 +817,15 @@ class StatusChecker:
             purpose,
         ) in path_checks:
             search_path = exact or (prefix or "")
+            optional_paths = (
+                [
+                    local_prefix + name
+                    for name in self.registry.optional_components(environment.name)
+                ]
+                if check_id == "hub.local_cluster_values"
+                else []
+            )
+            expected_paths = required_paths + optional_paths
             found = sorted(
                 path
                 for path in tree
@@ -834,8 +847,9 @@ class StatusChecker:
 
             required_found = [path for path in required_paths if path in tree]
             required_missing = [path for path in required_paths if path not in tree]
-            if required_paths:
-                if not required_missing:
+            optional_missing = [path for path in optional_paths if path not in tree]
+            if expected_paths:
+                if not required_missing and not optional_missing:
                     state = "declared_in_main"
                 elif required_found or found:
                     state = "partial"
@@ -848,21 +862,29 @@ class StatusChecker:
                 reason = f"All expected files for {purpose} are present in main."
                 missing = None
             elif state == "partial":
+                missing_paths = required_missing + optional_missing
                 reason = (
                     f"Some files for {purpose} are present, but expected paths "
-                    "are missing: " + ", ".join(required_missing) + "."
+                    "are missing: " + ", ".join(missing_paths) + "."
                 )
-                missing = {"paths": required_missing}
+                missing = {"paths": missing_paths}
             else:
                 reason = f"No merged main paths were found for {purpose}."
-                missing = {"paths": required_paths or [search_path]}
+                missing = {"paths": expected_paths or [search_path]}
+
+            severity = "info"
+            if state != "declared_in_main":
+                if required_missing or not expected_paths:
+                    severity = "blocking"
+                else:
+                    severity = "advisory"
 
             expected = (
                 {
-                    "file_count": len(required_paths),
+                    "file_count": len(expected_paths),
                     "scope": (exact or prefix or "").rstrip("/"),
                 }
-                if required_paths
+                if expected_paths
                 else "At least one matching path"
             )
             present = {"file_count": len(found)}
@@ -891,12 +913,14 @@ class StatusChecker:
                     missing=missing,
                     evidence={
                         "path_count": len(found),
-                        "expected_path_count": len(required_paths),
-                        "expected_paths": required_paths,
+                        "expected_path_count": len(expected_paths),
+                        "expected_paths": expected_paths,
+                        "optional_paths": optional_paths,
                         "paths": found,
                     },
                     url=github_url(repository, exact or (prefix or "").rstrip("/")),
                     next_action=_next_action(check_id, state),
+                    severity=severity,
                 )
             )
 
@@ -926,6 +950,7 @@ class StatusChecker:
                     missing={"matching_pull_requests": 1},
                     evidence={},
                     next_action=_next_action("pull_requests", "missing"),
+                    severity="info",
                 )
             )
             return results
@@ -1000,19 +1025,46 @@ class StatusChecker:
                 missing=missing,
                 evidence={"pull_requests": evidence},
                 next_action=_next_action("pull_requests", state),
+                severity="blocking" if open_prs else "info",
             )
         )
         return results
 
+    def _apply_boot_image_severities(self, checks: list[CheckResult]) -> None:
+        """Downgrade generic boot-image gaps when later-stage evidence exists."""
+
+        by_id = {check.id: check for check in checks}
+        for check in checks:
+            if check.id not in {"hub.boot_image", "workload.boot_image"}:
+                continue
+            urls = check.actual
+            if not isinstance(urls, list) or len(urls) != 1:
+                continue
+            if urls[0].rsplit("/", 1)[-1] != "discovery.iso":
+                continue
+
+            if check.id == "hub.boot_image":
+                defaults = by_id.get("hub.hosted_cluster_defaults")
+                local_values = by_id.get("hub.local_cluster_values")
+                later_evidence = (
+                    defaults is not None
+                    and defaults.state == "declared_in_main"
+                    and local_values is not None
+                    and local_values.state == "declared_in_main"
+                )
+            else:
+                workload_values = by_id.get("workload.hosted_cluster_values")
+                later_evidence = (
+                    workload_values is not None
+                    and workload_values.state == "declared_in_main"
+                )
+            if later_evidence:
+                check.severity = "advisory"
+
     @staticmethod
     def _overall_state(checks: list[CheckResult]) -> str:
-        states = {check.state for check in checks}
-        if "pr_open" in states:
+        if any(check.severity == "blocking" for check in checks):
             return "CONFIGURATION IN PROGRESS"
-        if states and states.issubset(
-            {"declared_in_main", "requested", "pr_merged"}
-        ):
+        if checks:
             return "DECLARED IN MAIN"
-        if "declared_in_main" in states or "pr_merged" in states:
-            return "PARTIALLY CONFIGURED"
         return "NOT CONFIGURED"

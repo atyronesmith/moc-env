@@ -611,11 +611,17 @@ GitHub API error and exits with code `2`.
 
 ### No known issue number
 
-If the environment is not built into the known-issue map, pass it explicitly:
+Issue numbers come from the packaged `moc_env/data/environments.yaml` registry.
+If the environment has no registry entry, pass the issue explicitly:
 
 ```sh
 uv run moc-env example-env --issue 123
 ```
+
+The same registry defines default and per-environment required and optional
+local-cluster components, plus an optional Keycloak client-name override. The
+overall status is driven only by `blocking` gaps; `advisory` gaps are counted
+separately and do not make an environment partially configured.
 
 ### Pull-request calls are too expensive
 

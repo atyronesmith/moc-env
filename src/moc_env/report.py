@@ -513,6 +513,7 @@ def render_text(report: dict[str, Any]) -> str:
         f"Workload clusters: {workload_summary}",
         f"Domain:           {environment['domain']}",
         f"Overall:          {report['overall_state']}",
+        f"Advisory gaps:    {report['summary']['advisory_count']}",
         "",
         "State summary:",
     ]
@@ -533,7 +534,8 @@ def render_text(report: dict[str, Any]) -> str:
         lines.extend(
             [
                 "-" * 78,
-                f"[{_state(check['state'])}] {check['stage']} / {check['check']}",
+                f"[{_state(check['state'])}; {check['severity']}] "
+                f"{check['stage']} / {check['check']}",
                 f"  Why checked:  {check['reason']}",
                 f"  Repository:   {check['repository']}",
                 f"  Path:         {check['path']} @ {check['ref']}",
@@ -614,7 +616,8 @@ def _check_markdown(check: dict[str, Any], number: int) -> list[str]:
     evidence = check.get("evidence") or {}
     check_rule = evidence.get("check_rule")
     lines = [
-        f"#### {_state(check['state'])} — {number}. {check['check']}",
+        f"#### {_state(check['state'])} · `{check['severity']}` — "
+        f"{number}. {check['check']}",
         "",
         f"**Why this was checked:** {check['reason']}",
         "",
@@ -793,6 +796,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     lines.extend([
         f"| Domain | {_identity_link(environment['domain'], domain_url)} |",
         f"| Overall state | **{report['overall_state']}** |",
+        f"| Advisory gaps | {report['summary']['advisory_count']} |",
         "",
         "## Executive summary",
         "",

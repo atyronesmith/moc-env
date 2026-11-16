@@ -19,6 +19,7 @@ class ReportRenderingTest(unittest.TestCase):
                 path="infra/inventory/00hosts.yaml",
                 ref="main",
                 state="partial",
+                severity="advisory",
                 expected="Cluster-specific discovery image",
                 actual=["http://10.2.0.82/boot/discovery.iso"],
                 reason="A URL exists, but it points to the generic discovery.iso.",

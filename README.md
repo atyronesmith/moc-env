@@ -455,6 +455,10 @@ Override the associated MOC issue:
 uv run moc-env status bu-ist-demo --issue 666
 ```
 
+Issue numbers and environment-specific local-cluster component policy come from
+the packaged `moc_env/data/environments.yaml` registry. A command-line `--issue`
+value always takes precedence over the registry.
+
 Skip pull-request discovery:
 
 ```sh

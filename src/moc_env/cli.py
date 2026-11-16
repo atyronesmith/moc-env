@@ -10,7 +10,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from .checks import KNOWN_ISSUES, StatusChecker, list_environments
+from .checks import StatusChecker, list_environments
 from .chart_values import (
     documentation_directory,
     load_chart_values_manual,
@@ -79,6 +79,7 @@ from .report import (
     render_markdown,
     render_text,
 )
+from .registry import DEFAULT_REGISTRY_PATH, EnvironmentRegistry, RegistryError
 from .validate import (
     load_environment_document,
     load_yaml_document,
@@ -128,7 +129,7 @@ def _add_status_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--issue",
         type=int,
-        help="MOC-issues number; defaults to 666 for bu-ist-demo",
+        help="MOC-issues number; overrides the packaged environment registry",
     )
     parser.add_argument(
         "--format",
@@ -593,6 +594,12 @@ def _resolve_github_token(args: argparse.Namespace) -> str | None:
 
 def main(argv: list[str] | None = None) -> int:
     arguments = sys.argv[1:] if argv is None else argv
+    try:
+        registry = EnvironmentRegistry.load(DEFAULT_REGISTRY_PATH)
+    except RegistryError as exc:
+        print(f"moc-env: {exc}", file=sys.stderr)
+        return 2
+
     if not arguments:
         print(build_parser().format_help(), end="")
         return 0
@@ -916,7 +923,7 @@ def main(argv: list[str] | None = None) -> int:
         args = build_export_environment_parser().parse_args(arguments[1:])
         issue_number = args.issue
         if issue_number is None:
-            issue_number = KNOWN_ISSUES.get(args.environment)
+            issue_number = registry.issue(args.environment)
         if issue_number is None:
             print(
                 "moc-env: environment has no known MOC issue; pass --issue",
@@ -1395,7 +1402,7 @@ def main(argv: list[str] | None = None) -> int:
         args = parser.parse_args(arguments[1:])
         issue_number = args.issue
         if issue_number is None:
-            issue_number = KNOWN_ISSUES.get(args.environment)
+            issue_number = registry.issue(args.environment)
 
         environment = Environment(name=args.environment, issue_number=issue_number)
         github_token = _resolve_github_token(args)
@@ -1468,6 +1475,7 @@ def main(argv: list[str] | None = None) -> int:
             client=client,
             include_prs=not args.no_prs,
             progress=print_progress,
+            registry=registry,
         )
         try:
             report = (

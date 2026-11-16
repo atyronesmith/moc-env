@@ -512,6 +512,7 @@ def read_keycloak_observation(
     client: GitHubClient,
     environment: Environment,
     progress: ProgressCallback | None = None,
+    client_name: str | None = None,
 ) -> KeycloakObservation:
     """Read and normalize the hub cluster's Keycloak OIDC client."""
 
@@ -535,7 +536,7 @@ def read_keycloak_observation(
 
     text = client.get_file(repository, KEYCLOAK_PATH)
 
-    cluster = environment.infra_cluster
+    cluster = client_name or environment.infra_cluster
     pattern = re.compile(
         rf'^\s*([A-Za-z0-9_-]+)\s*=\s*\{{(.*?)^\s*\}}',
         re.MULTILINE | re.DOTALL,
@@ -870,6 +871,7 @@ def read_environment_observation(
     progress: ProgressCallback | None = None,
     include_pull_requests: bool = True,
     path_scope: str = "environment",
+    keycloak_client_name: str | None = None,
 ) -> ObservedEnvironment:
     """Read all Phase 1 observations for an environment."""
 
@@ -882,7 +884,12 @@ def read_environment_observation(
         )
     else:
         environment = replace(environment, workload_clusters=infra.workload_clusters)
-    keycloak = read_keycloak_observation(client, environment, progress)
+    keycloak = read_keycloak_observation(
+        client,
+        environment,
+        progress,
+        client_name=keycloak_client_name,
+    )
     apps = read_apps_observation(
         client,
         environment,
