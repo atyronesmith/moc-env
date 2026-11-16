@@ -870,6 +870,53 @@
     },
     {
       "actual": [
+        "http://10.2.0.82/boot/discovery.iso"
+      ],
+      "blocked_by": [
+        "workload.inventory",
+        "hub.boot_image"
+      ],
+      "check": "bu-ist-demo-workload0 boot image",
+      "evidence": {
+        "check_rule": "The workload boot-image filename may contain the workload name `bu-ist-demo-workload0`, its oac-shortened name, the parent hub name `bu-ist-demo-infra`, or the hub's oac-shortened name. Unrecognized names are advisory because naming is not consistent across environments; generic `discovery.iso` remains a gap.",
+        "generic_discovery_iso": true
+      },
+      "expected": "Cluster-specific discovery image for bu-ist-demo-workload0",
+      "gaps": [
+        {
+          "expected": "bu-ist-demo-infra-agent-discovery.iso",
+          "name": "cluster_specific_image",
+          "observed": null
+        }
+      ],
+      "id": "workload.boot_image",
+      "missing": {
+        "cluster_specific_image": "bu-ist-demo-infra-agent-discovery.iso"
+      },
+      "next_action": "Generate and publish the parent hub's agent discovery ISO, then replace the generic boot_image_url for every host in the workload cluster group.",
+      "observed": [
+        {
+          "name": "0",
+          "value": "http://10.2.0.82/boot/discovery.iso"
+        }
+      ],
+      "path": "infra/inventory/00hosts.yaml",
+      "phase": 2,
+      "phase_title": "Obtain the agent discovery ISO from the hub's InfraEnv and publish it on the bastion",
+      "present": {
+        "boot_image_url": "http://10.2.0.82/boot/discovery.iso"
+      },
+      "reason": "A boot image URL is present, but the workload is still on the generic discovery.iso rather than the expected `bu-ist-demo-infra-agent-discovery.iso`.",
+      "ref": "main",
+      "repository": "CCI-MOC/oac-infra",
+      "scope": "workload",
+      "severity": "blocking",
+      "stage": "Hardware and inventory",
+      "state": "partial",
+      "url": "https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml"
+    },
+    {
+      "actual": [
         {
           "bm_management": "ipmi",
           "documented_resource_class": "bu-ist-demo-worker",
@@ -920,8 +967,8 @@
         }
       ],
       "path": "infra/update-agents.yaml",
-      "phase": 2,
-      "phase_title": "Discovery image and agent inputs",
+      "phase": 5,
+      "phase_title": "Label and approve agents with update-agents.yaml",
       "present": {
         "checked_host_count": 1,
         "complete_host_count": 1
@@ -934,53 +981,6 @@
       "stage": "Hardware and inventory",
       "state": "declared_in_main",
       "url": "https://github.com/CCI-MOC/oac-infra/blob/main/infra/update-agents.yaml"
-    },
-    {
-      "actual": [
-        "http://10.2.0.82/boot/discovery.iso"
-      ],
-      "blocked_by": [
-        "workload.inventory",
-        "hub.boot_image"
-      ],
-      "check": "bu-ist-demo-workload0 boot image",
-      "evidence": {
-        "check_rule": "The workload boot-image filename may contain the workload name `bu-ist-demo-workload0`, its oac-shortened name, the parent hub name `bu-ist-demo-infra`, or the hub's oac-shortened name. Unrecognized names are advisory because naming is not consistent across environments; generic `discovery.iso` remains a gap.",
-        "generic_discovery_iso": true
-      },
-      "expected": "Cluster-specific discovery image for bu-ist-demo-workload0",
-      "gaps": [
-        {
-          "expected": "bu-ist-demo-infra-agent-discovery.iso",
-          "name": "cluster_specific_image",
-          "observed": null
-        }
-      ],
-      "id": "workload.boot_image",
-      "missing": {
-        "cluster_specific_image": "bu-ist-demo-infra-agent-discovery.iso"
-      },
-      "next_action": "Generate and publish the parent hub's agent discovery ISO, then replace the generic boot_image_url for every host in the workload cluster group.",
-      "observed": [
-        {
-          "name": "0",
-          "value": "http://10.2.0.82/boot/discovery.iso"
-        }
-      ],
-      "path": "infra/inventory/00hosts.yaml",
-      "phase": 2,
-      "phase_title": "Discovery image and agent inputs",
-      "present": {
-        "boot_image_url": "http://10.2.0.82/boot/discovery.iso"
-      },
-      "reason": "A boot image URL is present, but the workload is still on the generic discovery.iso rather than the expected `bu-ist-demo-infra-agent-discovery.iso`.",
-      "ref": "main",
-      "repository": "CCI-MOC/oac-infra",
-      "scope": "workload",
-      "severity": "blocking",
-      "stage": "Hardware and inventory",
-      "state": "partial",
-      "url": "https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml"
     },
     {
       "actual": {
@@ -1032,8 +1032,8 @@
         }
       ],
       "path": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml",
-      "phase": 3,
-      "phase_title": "Hosted-cluster values",
+      "phase": 6,
+      "phase_title": "oac-apps values",
       "present": {
         "file_count": 0
       },
@@ -1045,155 +1045,6 @@
       "stage": "GitOps configuration",
       "state": "missing",
       "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml"
-    },
-    {
-      "blocked_by": [
-        "workload.hosted_cluster_values"
-      ],
-      "check": "Workload API address network",
-      "evidence": {
-        "error": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable."
-      },
-      "expected": {},
-      "gaps": [],
-      "id": "workload.api_address_network",
-      "next_action": "Verify hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is readable and correctly formatted.",
-      "observed": [],
-      "path": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml",
-      "phase": 3,
-      "phase_title": "Hosted-cluster values",
-      "reason": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable.",
-      "ref": "main",
-      "repository": "CCI-MOC/oac-apps",
-      "scope": "workload",
-      "severity": "advisory",
-      "stage": "Cross-repository prerequisites",
-      "state": "unknown",
-      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml"
-    },
-    {
-      "blocked_by": [
-        "workload.hosted_cluster_values"
-      ],
-      "check": "Workload ingress address network",
-      "evidence": {
-        "error": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable."
-      },
-      "expected": {},
-      "gaps": [],
-      "id": "workload.ingress_address_network",
-      "next_action": "Verify hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is readable and correctly formatted.",
-      "observed": [],
-      "path": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml",
-      "phase": 3,
-      "phase_title": "Hosted-cluster values",
-      "reason": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable.",
-      "ref": "main",
-      "repository": "CCI-MOC/oac-apps",
-      "scope": "workload",
-      "severity": "advisory",
-      "stage": "Cross-repository prerequisites",
-      "state": "unknown",
-      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml"
-    },
-    {
-      "blocked_by": [
-        "workload.hosted_cluster_values"
-      ],
-      "check": "Workload DNS base domain",
-      "evidence": {
-        "error": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable."
-      },
-      "expected": {},
-      "gaps": [],
-      "id": "workload.dns_base_domain",
-      "next_action": "Verify hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is readable and correctly formatted.",
-      "observed": [],
-      "path": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml",
-      "phase": 3,
-      "phase_title": "Hosted-cluster values",
-      "reason": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable.",
-      "ref": "main",
-      "repository": "CCI-MOC/oac-apps",
-      "scope": "workload",
-      "severity": "advisory",
-      "stage": "Cross-repository prerequisites",
-      "state": "unknown",
-      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml"
-    },
-    {
-      "blocked_by": [
-        "workload.hosted_cluster_values"
-      ],
-      "check": "Workload node-pool host capacity",
-      "evidence": {
-        "error": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable."
-      },
-      "expected": {},
-      "gaps": [],
-      "id": "workload.node_pool_hosts",
-      "next_action": "Verify hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is readable and correctly formatted.",
-      "observed": [],
-      "path": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml",
-      "phase": 3,
-      "phase_title": "Hosted-cluster values",
-      "reason": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable.",
-      "ref": "main",
-      "repository": "CCI-MOC/oac-apps",
-      "scope": "workload",
-      "severity": "advisory",
-      "stage": "Cross-repository prerequisites",
-      "state": "unknown",
-      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml"
-    },
-    {
-      "blocked_by": [
-        "workload.hosted_cluster_values"
-      ],
-      "check": "Workload GPU feature support",
-      "evidence": {
-        "error": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable."
-      },
-      "expected": {},
-      "gaps": [],
-      "id": "workload.gpu_without_hosts",
-      "next_action": "Verify hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is readable and correctly formatted.",
-      "observed": [],
-      "path": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml",
-      "phase": 3,
-      "phase_title": "Hosted-cluster values",
-      "reason": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable.",
-      "ref": "main",
-      "repository": "CCI-MOC/oac-apps",
-      "scope": "workload",
-      "severity": "advisory",
-      "stage": "Cross-repository prerequisites",
-      "state": "unknown",
-      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml"
-    },
-    {
-      "actual": {},
-      "blocked_by": [
-        "workload.hosted_cluster_values"
-      ],
-      "check": "Workload address uniqueness",
-      "evidence": {},
-      "expected": "No address used by another cluster",
-      "gaps": [],
-      "id": "workload.address_uniqueness",
-      "next_action": null,
-      "observed": [],
-      "path": "hosted-clusters/",
-      "phase": 3,
-      "phase_title": "Hosted-cluster values",
-      "reason": "No workload address is used by another cluster.",
-      "ref": "main",
-      "repository": "CCI-MOC/oac-apps",
-      "scope": "workload",
-      "severity": "info",
-      "stage": "Cross-repository prerequisites",
-      "state": "declared_in_main",
-      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/"
     },
     {
       "actual": {
@@ -1240,8 +1091,8 @@
         }
       ],
       "path": "values/bu-ist-demo-infra/bu-ist-demo-workload0",
-      "phase": 4,
-      "phase_title": "Workload component values",
+      "phase": 6,
+      "phase_title": "oac-apps values",
       "present": {
         "file_count": 0
       },
@@ -1253,6 +1104,155 @@
       "stage": "GitOps configuration",
       "state": "missing",
       "url": "https://github.com/CCI-MOC/oac-apps/blob/main/values/bu-ist-demo-infra/bu-ist-demo-workload0"
+    },
+    {
+      "blocked_by": [
+        "workload.hosted_cluster_values"
+      ],
+      "check": "Workload API address network",
+      "evidence": {
+        "error": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable."
+      },
+      "expected": {},
+      "gaps": [],
+      "id": "workload.api_address_network",
+      "next_action": "Verify hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is readable and correctly formatted.",
+      "observed": [],
+      "path": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml",
+      "phase": 6,
+      "phase_title": "oac-apps values",
+      "reason": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable.",
+      "ref": "main",
+      "repository": "CCI-MOC/oac-apps",
+      "scope": "workload",
+      "severity": "advisory",
+      "stage": "Cross-repository prerequisites",
+      "state": "unknown",
+      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml"
+    },
+    {
+      "blocked_by": [
+        "workload.hosted_cluster_values"
+      ],
+      "check": "Workload ingress address network",
+      "evidence": {
+        "error": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable."
+      },
+      "expected": {},
+      "gaps": [],
+      "id": "workload.ingress_address_network",
+      "next_action": "Verify hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is readable and correctly formatted.",
+      "observed": [],
+      "path": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml",
+      "phase": 6,
+      "phase_title": "oac-apps values",
+      "reason": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable.",
+      "ref": "main",
+      "repository": "CCI-MOC/oac-apps",
+      "scope": "workload",
+      "severity": "advisory",
+      "stage": "Cross-repository prerequisites",
+      "state": "unknown",
+      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml"
+    },
+    {
+      "blocked_by": [
+        "workload.hosted_cluster_values"
+      ],
+      "check": "Workload DNS base domain",
+      "evidence": {
+        "error": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable."
+      },
+      "expected": {},
+      "gaps": [],
+      "id": "workload.dns_base_domain",
+      "next_action": "Verify hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is readable and correctly formatted.",
+      "observed": [],
+      "path": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml",
+      "phase": 6,
+      "phase_title": "oac-apps values",
+      "reason": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable.",
+      "ref": "main",
+      "repository": "CCI-MOC/oac-apps",
+      "scope": "workload",
+      "severity": "advisory",
+      "stage": "Cross-repository prerequisites",
+      "state": "unknown",
+      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml"
+    },
+    {
+      "blocked_by": [
+        "workload.hosted_cluster_values"
+      ],
+      "check": "Workload node-pool host capacity",
+      "evidence": {
+        "error": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable."
+      },
+      "expected": {},
+      "gaps": [],
+      "id": "workload.node_pool_hosts",
+      "next_action": "Verify hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is readable and correctly formatted.",
+      "observed": [],
+      "path": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml",
+      "phase": 6,
+      "phase_title": "oac-apps values",
+      "reason": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable.",
+      "ref": "main",
+      "repository": "CCI-MOC/oac-apps",
+      "scope": "workload",
+      "severity": "advisory",
+      "stage": "Cross-repository prerequisites",
+      "state": "unknown",
+      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml"
+    },
+    {
+      "blocked_by": [
+        "workload.hosted_cluster_values"
+      ],
+      "check": "Workload GPU feature support",
+      "evidence": {
+        "error": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable."
+      },
+      "expected": {},
+      "gaps": [],
+      "id": "workload.gpu_without_hosts",
+      "next_action": "Verify hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is readable and correctly formatted.",
+      "observed": [],
+      "path": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml",
+      "phase": 6,
+      "phase_title": "oac-apps values",
+      "reason": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable.",
+      "ref": "main",
+      "repository": "CCI-MOC/oac-apps",
+      "scope": "workload",
+      "severity": "advisory",
+      "stage": "Cross-repository prerequisites",
+      "state": "unknown",
+      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml"
+    },
+    {
+      "actual": {},
+      "blocked_by": [
+        "workload.hosted_cluster_values"
+      ],
+      "check": "Workload address uniqueness",
+      "evidence": {},
+      "expected": "No address used by another cluster",
+      "gaps": [],
+      "id": "workload.address_uniqueness",
+      "next_action": null,
+      "observed": [],
+      "path": "hosted-clusters/",
+      "phase": 6,
+      "phase_title": "oac-apps values",
+      "reason": "No workload address is used by another cluster.",
+      "ref": "main",
+      "repository": "CCI-MOC/oac-apps",
+      "scope": "workload",
+      "severity": "info",
+      "stage": "Cross-repository prerequisites",
+      "state": "declared_in_main",
+      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/"
     },
     {
       "actual": {
@@ -1291,8 +1291,8 @@
         }
       ],
       "path": "ansible/group_vars/all/realms.yaml",
-      "phase": 5,
-      "phase_title": "Merged GitOps changes",
+      "phase": 7,
+      "phase_title": "Shared-service prerequisites",
       "reason": "The bu-ist-demo-workload0 Pure storage realm is complete.",
       "ref": "main",
       "repository": "CCI-MOC/everpure-moc",
@@ -1324,8 +1324,8 @@
         }
       ],
       "path": "main.tf",
-      "phase": 5,
-      "phase_title": "Merged GitOps changes",
+      "phase": 7,
+      "phase_title": "Shared-service prerequisites",
       "reason": "The moc-aws OIDC cluster entry for bu-ist-demo-workload0 is present.",
       "ref": "main",
       "repository": "CCI-MOC/moc-aws",
@@ -1357,8 +1357,8 @@
         }
       ],
       "path": "cert-manager-policies.tf",
-      "phase": 5,
-      "phase_title": "Merged GitOps changes",
+      "phase": 7,
+      "phase_title": "Shared-service prerequisites",
       "reason": "The cert-manager policy entry cert_manager_policy_bu_ist_demo_workload0 covers bu-ist-demo-workload0.",
       "ref": "main",
       "repository": "CCI-MOC/moc-aws",
@@ -1694,6 +1694,33 @@
         "heading": "Cluster Configuration"
       },
       "why": "Running setup-gitops.sh and applying the bootstrap Helm template changes live cluster state, which this repository-only report cannot verify."
+    },
+    {
+      "phase": 4,
+      "title": "Agents visible in hardware-inventory",
+      "where": {
+        "document": "docs/workload-cluster-deployment.md",
+        "heading": "Infrastructure Configuration"
+      },
+      "why": "Agent visibility in the hub's hardware-inventory namespace requires live cluster state that repository configuration cannot prove."
+    },
+    {
+      "phase": 5,
+      "title": "Agents labelled and approved",
+      "where": {
+        "document": "docs/workload-cluster-deployment.md",
+        "heading": "Infrastructure Configuration"
+      },
+      "why": "Labelling and approving agents with update-agents.yaml changes live hub cluster state that repository configuration cannot prove."
+    },
+    {
+      "phase": 7,
+      "title": "Additional workload prerequisites are not yet documented upstream",
+      "where": {
+        "document": "docs/workload-cluster-deployment.md",
+        "heading": "Cluster Deployment and Configuration"
+      },
+      "why": "The upstream workload deployment guide lists observability (TBD) and ?? as open prerequisite items."
     }
   ],
   "overall_state": "CONFIGURATION IN PROGRESS",
@@ -1743,7 +1770,7 @@
     "workload": [
       {
         "guide": {
-          "document": "docs/infra-cluster-deployment.md",
+          "document": "docs/workload-cluster-deployment.md",
           "heading": "Infrastructure Configuration"
         },
         "phase": 1,
@@ -1751,35 +1778,51 @@
       },
       {
         "guide": {
-          "document": "docs/infra-cluster-deployment.md",
-          "heading": "Cluster Deployment"
+          "document": "docs/workload-cluster-deployment.md",
+          "heading": "Infrastructure Configuration"
         },
         "phase": 2,
-        "title": "Discovery image and agent inputs"
+        "title": "Obtain the agent discovery ISO from the hub's InfraEnv and publish it on the bastion"
       },
       {
         "guide": {
-          "document": "docs/infra-cluster-deployment.md",
-          "heading": "Cluster Configuration"
+          "document": "docs/workload-cluster-deployment.md",
+          "heading": "Infrastructure Configuration"
         },
         "phase": 3,
-        "title": "Hosted-cluster values"
+        "title": "Boot nodes with the agent discovery ISO"
       },
       {
         "guide": {
-          "document": "docs/infra-cluster-deployment.md",
-          "heading": "Cluster Configuration"
+          "document": "docs/workload-cluster-deployment.md",
+          "heading": "Infrastructure Configuration"
         },
         "phase": 4,
-        "title": "Workload component values"
+        "title": "Agents appear in the hub's hardware-inventory namespace"
       },
       {
         "guide": {
-          "document": "docs/infra-cluster-deployment.md",
-          "heading": "Cluster Configuration"
+          "document": "docs/workload-cluster-deployment.md",
+          "heading": "Infrastructure Configuration"
         },
         "phase": 5,
-        "title": "Merged GitOps changes"
+        "title": "Label and approve agents with update-agents.yaml"
+      },
+      {
+        "guide": {
+          "document": "docs/workload-cluster-deployment.md",
+          "heading": "Cluster Deployment and Configuration"
+        },
+        "phase": 6,
+        "title": "oac-apps values"
+      },
+      {
+        "guide": {
+          "document": "docs/workload-cluster-deployment.md",
+          "heading": "Cluster Deployment and Configuration"
+        },
+        "phase": 7,
+        "title": "Shared-service prerequisites"
       }
     ]
   },

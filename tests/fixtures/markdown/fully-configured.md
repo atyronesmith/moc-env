@@ -9,10 +9,12 @@ Generated 2026-11-16 12:34:56 UTC · Sources: [CCI-MOC/MOC-issues@1111111](https
 | Phase | HUB bu-ist-demo-infra | WORKLOAD bu-ist-demo-workload0 |
 |---|---:|---:|
 | 1 Host inventory entry in oac-infra | ✅ 1 hosts | ✅ 1 hosts |
-| 2 Hub-image inventory entry and group variables / Discovery image and agent inputs | ✅ 6/6 variables | ✅ 1/2 variables |
-| 3 Cluster discovery image published and referenced by the inventory / Hosted-cluster values | ✅ 1/1 checks | ✅ 1/1 variables |
-| 4 Keycloak OIDC client / Workload component values | ✅ 1/1 checks | ✅ 2/2 checks |
-| 5 GitOps values and applications in oac-apps / Merged GitOps changes | ✅ 1/1 variables | ✅ 3/3 checks |
+| 2 Hub-image inventory entry and group variables / Obtain the agent discovery ISO from the hub's InfraEnv and publish it on the bastion | ✅ 6/6 variables | ✅ 1/1 checks |
+| 3 Cluster discovery image published and referenced by the inventory / Boot nodes with the agent discovery ISO | ✅ 1/1 checks | – |
+| 4 Keycloak OIDC client / Agents appear in the hub's hardware-inventory namespace | ✅ 1/1 checks | – |
+| 5 GitOps values and applications in oac-apps / Label and approve agents with update-agents.yaml | ✅ 1/1 variables | ✅ 1/2 variables |
+| 6 oac-apps values | – | ✅ 1/1 variables |
+| 7 Shared-service prerequisites | – | ✅ 4/4 checks |
 
 ## Next actions
 
@@ -25,6 +27,9 @@ Nothing to do in the repositories this tool reads.
 - [ ] **Place the pull secret and SSH key under hub-images/credentials/bu-ist-demo-infra** (phase 2) — The documented credential directory is intentionally not committed, so repository state cannot prove that its files exist for bu-ist-demo-infra. Documented at [docs/infra-cluster-deployment.md → Cluster Deployment](docs/infra-cluster-deployment.md).
 - [ ] **Run create_agent_install_media and copy the bu-ist-demo-infra ISO to the bastion host** (phase 3) — Running the playbook and copying the generated discovery ISO leave no trace that this tool can verify in the four repositories it reads. Documented at [docs/infra-cluster-deployment.md → Cluster Deployment](docs/infra-cluster-deployment.md).
 - [ ] **Bootstrap Argo CD for bu-ist-demo-infra** (phase 5) — Running setup-gitops.sh and applying the bootstrap Helm template changes live cluster state, which this repository-only report cannot verify. Documented at [docs/infra-cluster-deployment.md → Cluster Configuration](docs/infra-cluster-deployment.md).
+- [ ] **Agents visible in hardware-inventory** (phase 4) — Agent visibility in the hub's hardware-inventory namespace requires live cluster state that repository configuration cannot prove. Documented at [docs/workload-cluster-deployment.md → Infrastructure Configuration](docs/workload-cluster-deployment.md).
+- [ ] **Agents labelled and approved** (phase 5) — Labelling and approving agents with update-agents.yaml changes live hub cluster state that repository configuration cannot prove. Documented at [docs/workload-cluster-deployment.md → Infrastructure Configuration](docs/workload-cluster-deployment.md).
+- [ ] **Additional workload prerequisites are not yet documented upstream** (phase 7) — The upstream workload deployment guide lists observability (TBD) and ?? as open prerequisite items. Documented at [docs/workload-cluster-deployment.md → Cluster Deployment and Configuration](docs/workload-cluster-deployment.md).
 
 ## Details
 
@@ -262,6 +267,21 @@ Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com
 </details>
 
 <details>
+<summary>✅ declared_in_main · info — bu-ist-demo-workload0 boot image</summary>
+
+Finding: The boot image URL identifies the workload or its parent hub bu-ist-demo-infra.
+
+Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml) @ 2222222
+
+Status rule: The workload boot-image filename may contain the workload name `bu-ist-demo-workload0`, its oac-shortened name, the parent hub name `bu-ist-demo-infra`, or the hub's oac-shortened name. Unrecognized names are advisory because naming is not consistent across environments; generic `discovery.iso` remains a gap.
+
+| Field | Expected | Observed |
+|---|---|---|
+| `value` | `Cluster-specific discovery image for bu-ist-demo-workload0` | `http://10.2.0.82/boot/bu-ist-demo-infra-agent-discovery.iso` |
+
+</details>
+
+<details>
 <summary>✅ declared_in_main · info — bu-ist-demo-workload0 update-agents inputs</summary>
 
 Finding: Every non-openstack host has the mac_addr and resource_class inputs required by infra/update-agents.yaml.
@@ -287,21 +307,6 @@ Source: CCI-MOC/oac-infra · [`infra/update-agents.yaml`](https://github.com/CCI
 </details>
 
 <details>
-<summary>✅ declared_in_main · info — bu-ist-demo-workload0 boot image</summary>
-
-Finding: The boot image URL identifies the workload or its parent hub bu-ist-demo-infra.
-
-Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml) @ 2222222
-
-Status rule: The workload boot-image filename may contain the workload name `bu-ist-demo-workload0`, its oac-shortened name, the parent hub name `bu-ist-demo-infra`, or the hub's oac-shortened name. Unrecognized names are advisory because naming is not consistent across environments; generic `discovery.iso` remains a gap.
-
-| Field | Expected | Observed |
-|---|---|---|
-| `value` | `Cluster-specific discovery image for bu-ist-demo-workload0` | `http://10.2.0.82/boot/bu-ist-demo-infra-agent-discovery.iso` |
-
-</details>
-
-<details>
 <summary>✅ declared_in_main · info — Workload hosted-cluster values</summary>
 
 Finding: All expected files for the hosted workload cluster definition are present in main.
@@ -311,6 +316,15 @@ Source: CCI-MOC/oac-apps · [`hosted-clusters/bu-ist-demo-infra/bu-ist-demo-work
 | Field | Expected | Observed |
 |---|---|---|
 | [`hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml) | `present` | `present` |
+
+</details>
+
+<details>
+<summary>✅ declared_in_main · info — Workload component values</summary>
+
+Finding: All expected files for component values scoped to the workload cluster are present in main.
+
+Source: CCI-MOC/oac-apps · [`values/bu-ist-demo-infra/bu-ist-demo-workload0`](https://github.com/CCI-MOC/oac-apps/blob/main/values/bu-ist-demo-infra/bu-ist-demo-workload0) @ 3333333
 
 </details>
 
@@ -401,30 +415,6 @@ Source: CCI-MOC/oac-apps · [`hosted-clusters/`](https://github.com/CCI-MOC/oac-
 </details>
 
 <details>
-<summary>✅ declared_in_main · info — Workload component values</summary>
-
-Finding: All expected files for component values scoped to the workload cluster are present in main.
-
-Source: CCI-MOC/oac-apps · [`values/bu-ist-demo-infra/bu-ist-demo-workload0`](https://github.com/CCI-MOC/oac-apps/blob/main/values/bu-ist-demo-infra/bu-ist-demo-workload0) @ 3333333
-
-</details>
-
-<details>
-<summary>✅ declared_in_main · info — Workload Keycloak OIDC client</summary>
-
-Finding: The Keycloak OIDC client for bu-ist-demo-workload0 matches.
-
-Source: CCI-MOC/moc-keycloak · [`main.tf`](https://github.com/CCI-MOC/moc-keycloak/blob/main/main.tf) @ 4444444
-
-| Field | Expected | Observed |
-|---|---|---|
-| `cluster_name` | `bu-ist-demo-workload0` | `bu-ist-demo-workload0` |
-| `openshift_redirect_uri` | `https://oauth-bu-ist-demo-workload0.hcp.bu-ist-demo.int.massopen.cloud:443/oauth2callback/mocsso` | `https://oauth-bu-ist-demo-workload0.hcp.bu-ist-demo.int.massopen.cloud:443/oauth2callback/mocsso` |
-| `client_secret_name` | `cluster/bu-ist-demo-infra/hostedcluster/bu-ist-demo-workload0/keycloak-oidc` | `cluster/bu-ist-demo-infra/hostedcluster/bu-ist-demo-workload0/keycloak-oidc` |
-
-</details>
-
-<details>
 <summary>✅ declared_in_main · info — Workload Pure storage realm</summary>
 
 Finding: The bu-ist-demo-workload0 Pure storage realm is complete.
@@ -461,6 +451,21 @@ Source: CCI-MOC/moc-aws · [`cert-manager-policies.tf`](https://github.com/CCI-M
 | Field | Expected | Observed |
 |---|---|---|
 | `cluster` | `bu-ist-demo-workload0` | `cert_manager_policy_bu_ist_demo_workload0` |
+
+</details>
+
+<details>
+<summary>✅ declared_in_main · info — Workload Keycloak OIDC client</summary>
+
+Finding: The Keycloak OIDC client for bu-ist-demo-workload0 matches.
+
+Source: CCI-MOC/moc-keycloak · [`main.tf`](https://github.com/CCI-MOC/moc-keycloak/blob/main/main.tf) @ 4444444
+
+| Field | Expected | Observed |
+|---|---|---|
+| `cluster_name` | `bu-ist-demo-workload0` | `bu-ist-demo-workload0` |
+| `openshift_redirect_uri` | `https://oauth-bu-ist-demo-workload0.hcp.bu-ist-demo.int.massopen.cloud:443/oauth2callback/mocsso` | `https://oauth-bu-ist-demo-workload0.hcp.bu-ist-demo.int.massopen.cloud:443/oauth2callback/mocsso` |
+| `client_secret_name` | `cluster/bu-ist-demo-infra/hostedcluster/bu-ist-demo-workload0/keycloak-oidc` | `cluster/bu-ist-demo-infra/hostedcluster/bu-ist-demo-workload0/keycloak-oidc` |
 
 </details>
 
