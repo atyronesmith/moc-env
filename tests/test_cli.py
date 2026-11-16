@@ -13,7 +13,7 @@ import yaml
 
 from moc_env import cli
 
-from fakes import FakeGitHubClient
+from fakes import FakeGitHubClient, MultiWorkloadFakeGitHubClient
 
 
 class CliDispatchTest(unittest.TestCase):
@@ -27,12 +27,16 @@ class CliDispatchTest(unittest.TestCase):
         environment.start()
         self.addCleanup(environment.stop)
 
-    def run_cli(self, arguments: list[str]) -> tuple[int, str, str]:
+    def run_cli(
+        self,
+        arguments: list[str],
+        client_class=FakeGitHubClient,
+    ) -> tuple[int, str, str]:
         stdout = io.StringIO()
         stderr = io.StringIO()
         with (
             patch.object(cli, "_resolve_github_token", return_value=None),
-            patch.object(cli, "GitHubClient", FakeGitHubClient),
+            patch.object(cli, "GitHubClient", client_class),
             contextlib.redirect_stdout(stdout),
             contextlib.redirect_stderr(stderr),
         ):
@@ -44,7 +48,10 @@ class CliDispatchTest(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertIn("bu-ist-demo", stdout)
         self.assertIn("moc-env status-hub bu-ist-demo", stdout)
-        self.assertIn("moc-env status-workload bu-ist-demo", stdout)
+        self.assertIn(
+            "moc-env status-workload bu-ist-demo --workload workload0",
+            stdout,
+        )
         self.assertEqual(stderr, "")
 
     def test_top_level_help_lists_every_command(self) -> None:
@@ -114,6 +121,19 @@ class CliDispatchTest(unittest.TestCase):
         self.assertEqual(clusters[1]["cluster"], "bu-ist-demo-workload0")
         self.assertEqual(clusters[1]["type"], "workload")
 
+    def test_list_workload_command_targets_exact_cluster(self) -> None:
+        exit_code, stdout, _ = self.run_cli(
+            ["list", "--format", "json"],
+            client_class=MultiWorkloadFakeGitHubClient,
+        )
+        self.assertEqual(exit_code, 0)
+        rows = json.loads(stdout)
+        row = next(item for item in rows if item["cluster"] == "oac-dev-workload1")
+        self.assertEqual(
+            row["status_command"],
+            "moc-env status-workload oac-dev --workload workload1",
+        )
+
     def test_status_json_dispatch(self) -> None:
         exit_code, stdout, _ = self.run_cli(
             ["status", "bu-ist-demo", "--format", "json", "--no-prs"]
@@ -155,6 +175,94 @@ class CliDispatchTest(unittest.TestCase):
         self.assertIn("bu-ist-demo-workload0 host inventory", stdout)
         self.assertNotIn("Hub image variables", stdout)
         self.assertIn("Step 1:", stderr)
+
+    def test_status_reports_every_discovered_workload(self) -> None:
+        exit_code, stdout, _ = self.run_cli(
+            [
+                "status",
+                "oac-dev",
+                "--issue",
+                "666",
+                "--format",
+                "json",
+                "--no-prs",
+            ],
+            client_class=MultiWorkloadFakeGitHubClient,
+        )
+        self.assertEqual(exit_code, 0)
+        report = json.loads(stdout)
+        self.assertEqual(
+            report["environment"]["workload_clusters"],
+            ["oac-dev-workload0", "oac-dev-workload1"],
+        )
+        checks = {check["check"] for check in report["checks"]}
+        self.assertIn("oac-dev-workload0 host inventory", checks)
+        self.assertIn("oac-dev-workload1 host inventory", checks)
+        self.assertIn("Workload hosted-cluster values", checks)
+
+    def test_hub_without_workload_reports_no_workload_checks(self) -> None:
+        exit_code, stdout, _ = self.run_cli(
+            ["status", "dizzy", "--format", "text", "--no-prs"],
+            client_class=MultiWorkloadFakeGitHubClient,
+        )
+        self.assertEqual(exit_code, 0)
+        self.assertIn("No workload cluster is declared for this hub.", stdout)
+        self.assertNotIn("workload0", stdout)
+
+    def test_status_workload_accepts_short_and_full_names(self) -> None:
+        for workload in ("workload1", "oac-dev-workload1"):
+            with self.subTest(workload=workload):
+                exit_code, stdout, _ = self.run_cli(
+                    [
+                        "status-workload",
+                        "oac-dev",
+                        "--workload",
+                        workload,
+                        "--format",
+                        "json",
+                        "--no-prs",
+                    ],
+                    client_class=MultiWorkloadFakeGitHubClient,
+                )
+                self.assertEqual(exit_code, 0)
+                report = json.loads(stdout)
+                self.assertEqual(
+                    report["environment"]["workload_clusters"],
+                    ["oac-dev-workload1"],
+                )
+                checks = {check["check"] for check in report["checks"]}
+                self.assertIn("oac-dev-workload1 host inventory", checks)
+                self.assertNotIn("oac-dev-workload0 host inventory", checks)
+
+    def test_unknown_environment_exits_with_suggestions(self) -> None:
+        exit_code, stdout, stderr = self.run_cli(
+            ["status", "bu-ist-dem", "--format", "json", "--no-prs"]
+        )
+        self.assertEqual(exit_code, 2)
+        self.assertEqual(stdout, "")
+        self.assertIn("unknown environment: bu-ist-dem", stderr)
+        self.assertIn("Did you mean: bu-ist-demo", stderr)
+        self.assertIn("Known environments:", stderr)
+        self.assertIn("bu-ist-demo", stderr)
+
+    def test_issue_overrides_unknown_inventory_environment(self) -> None:
+        exit_code, stdout, stderr = self.run_cli(
+            [
+                "status",
+                "new-environment",
+                "--issue",
+                "666",
+                "--format",
+                "json",
+                "--no-prs",
+            ],
+            client_class=MultiWorkloadFakeGitHubClient,
+        )
+        self.assertEqual(exit_code, 0)
+        self.assertIn("continuing with the supplied MOC issue", stderr)
+        report = json.loads(stdout)
+        self.assertEqual(report["environment"]["name"], "new-environment")
+        self.assertEqual(report["environment"]["workload_clusters"], [])
 
     def test_status_markdown_dispatch_and_output_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

@@ -13,6 +13,7 @@ class Environment:
     name: str
     issue_number: int | None = None
     domain_override: str | None = None
+    workload_clusters: tuple[str, ...] | None = None
 
     @property
     def base_name(self) -> str:
@@ -28,8 +29,13 @@ class Environment:
         return f"{self.base_name}-infra"
 
     @property
-    def workload_cluster(self) -> str:
-        return f"{self.base_name}-workload0"
+    def workload_cluster(self) -> str | None:
+        """Return the first workload, retained for old JSON consumers."""
+
+        # Deprecated: use workload_clusters for environments with multiple clusters.
+        if self.workload_clusters is None:
+            return f"{self.base_name}-workload0"
+        return self.workload_clusters[0] if self.workload_clusters else None
 
     @property
     def domain(self) -> str:
@@ -38,14 +44,22 @@ class Environment:
         return f"{self.base_name}.int.massopen.cloud"
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        data = {
             "name": self.name,
             "issue_number": self.issue_number,
             "infra_cluster": self.infra_cluster,
+            "workload_clusters": (
+                list(self.workload_clusters)
+                if self.workload_clusters is not None
+                else [self.workload_cluster]
+            ),
             "workload_cluster": self.workload_cluster,
             "domain": self.domain,
             "domain_source": "repository" if self.domain_override else "derived",
         }
+        if self.workload_clusters is not None and not self.workload_clusters:
+            data["workload_notice"] = "No workload cluster is declared for this hub."
+        return data
 
 
 @dataclass

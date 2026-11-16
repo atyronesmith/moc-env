@@ -168,12 +168,15 @@ def list_environments(client: GitHubClient) -> list[dict[str, Any]]:
             }
         )
         for workload_cluster in workload_clusters:
+            workload_name = workload_cluster.removeprefix(f"{base_name}-")
             clusters.append(
                 {
                     "environment": base_name,
                     "cluster": workload_cluster,
                     "type": "workload",
-                    "status_command": workload_status_command,
+                    "status_command": (
+                        f"{workload_status_command} --workload {workload_name}"
+                    ),
                     "source_repository": repository,
                     "source_path": inventory_path,
                 }
@@ -251,9 +254,22 @@ class StatusChecker:
             scope="hub",
         )
 
-    def run_workload(self, environment: Environment) -> StatusReport:
+    def run_workload(
+        self,
+        environment: Environment,
+        workload: str | None = None,
+    ) -> StatusReport:
         """Return the repository-status report scoped to the workload cluster."""
 
+        if workload is not None:
+            if environment.workload_clusters is None:
+                environment = replace(
+                    environment,
+                    workload_clusters=(environment.workload_cluster,),
+                )
+            if workload not in environment.workload_clusters:
+                raise ValueError(f"unknown workload cluster: {workload}")
+            environment = replace(environment, workload_clusters=(workload,))
         report = self.run(environment)
         checks = [
             check
@@ -408,9 +424,7 @@ class StatusChecker:
                 boot_present = {"boot_image_url": selected_url}
                 boot_missing = {
                     "cluster_specific_image": (
-                        f"an image name containing {environment.base_name}-workload0"
-                        if cluster == environment.workload_cluster
-                        else f"an image name containing {environment.infra_cluster}"
+                        f"an image name containing {cluster}"
                     )
                 }
             elif selected_url:
@@ -596,35 +610,78 @@ class StatusChecker:
             "secret_name": f"cluster/{environment.infra_cluster}/keycloak-oidc",
         }
         client = observation.client
-        if not observation.path_present.value:
-            present = {name: False for name in expected}
-        else:
-            present = {
-                "client": bool(client and client.cluster_name.value == expected["client"]),
-                "redirect_uri": bool(
-                    client and client.redirect_uri.value == expected["redirect_uri"]
-                ),
-                "secret_name": bool(
-                    client and client.secret_name.value == expected["secret_name"]
+        near_match = observation.near_match_client
+        selected_client = client or near_match
+        observed = {
+            "client": selected_client.cluster_name.value if selected_client else None,
+            "redirect_uri": (
+                selected_client.redirect_uri.value if selected_client else None
+            ),
+            "secret_name": (
+                selected_client.secret_name.value if selected_client else None
+            ),
+        }
+        fields = {
+            name: {
+                "expected": expected_value,
+                "observed": observed[name],
+                "status": (
+                    "match"
+                    if observed[name] == expected_value
+                    else ("mismatch" if observed[name] is not None else "absent")
                 ),
             }
-        present_keys = [name for name, found in present.items() if found]
-        missing_keys = [name for name, found in present.items() if not found]
-        if not missing_keys:
-            state = "declared_in_main"
-            reason = (
-                "The Keycloak OIDC client, redirect URI, and secret reference "
-                "are present."
-            )
-        elif present_keys:
-            state = "partial"
-            reason = (
-                "Some Keycloak OIDC declarations are present, but these are "
-                "missing: " + ", ".join(missing_keys) + "."
-            )
-        else:
+            for name, expected_value in expected.items()
+        }
+        nonmatching_fields = [
+            name for name, result in fields.items() if result["status"] != "match"
+        ]
+        if selected_client is None:
             state = "missing"
-            reason = "No expected Keycloak OIDC declarations were found."
+        elif nonmatching_fields:
+            state = "partial"
+        else:
+            state = "declared_in_main"
+
+        if state == "declared_in_main":
+            reason = "All expected Keycloak OIDC client fields match."
+        elif selected_client is not None:
+            reason = (
+                "A Keycloak OIDC client block exists, but these fields are "
+                "mismatched or absent: " + ", ".join(nonmatching_fields) + "."
+            )
+            if near_match is not None and client is None:
+                reason += (
+                    f" The near-match block `{near_match.block_name.value}` was "
+                    "found instead of an exact client declaration."
+                )
+        else:
+            reason = "No Keycloak OIDC client block exists for this hub."
+
+        next_action = _next_action("hub.oidc_client", state)
+        if next_action is not None:
+            next_action += (
+                " Set cluster_name = "
+                f"`{expected['client']}`, openshift_redirect_uri = "
+                f"`{expected['redirect_uri']}`, and client_secret_name = "
+                f"`{expected['secret_name']}`."
+            )
+
+        evidence: dict[str, Any] = {"fields": fields}
+        if client is not None:
+            evidence["client"] = {
+                "block_name": client.block_name.to_dict(),
+                "cluster_name": client.cluster_name.to_dict(),
+                "redirect_uri": client.redirect_uri.to_dict(),
+                "secret_name": client.secret_name.to_dict(),
+            }
+        if near_match is not None:
+            evidence["near_match_client"] = {
+                "block_name": near_match.block_name.to_dict(),
+                "cluster_name": near_match.cluster_name.to_dict(),
+                "redirect_uri": near_match.redirect_uri.to_dict(),
+                "secret_name": near_match.secret_name.to_dict(),
+            }
 
         return [
             CheckResult(
@@ -636,27 +693,23 @@ class StatusChecker:
                 path=path,
                 ref="main",
                 state=state,
-                expected=list(expected),
-                actual=present_keys,
+                expected={name: result["expected"] for name, result in fields.items()},
+                actual={name: result["observed"] for name, result in fields.items()},
                 reason=reason,
-                present={"declarations": present_keys},
-                missing={"declarations": missing_keys} if missing_keys else None,
-                evidence={
-                    "declarations": present,
-                    "client": {
-                        "block_name": client.block_name.to_dict(),
-                        "cluster_name": client.cluster_name.to_dict(),
-                        "redirect_uri": client.redirect_uri.to_dict(),
-                        "secret_name": client.secret_name.to_dict(),
-                    },
-                } if client else {"declarations": present},
+                present={
+                    "fields": {
+                        name: result["status"] for name, result in fields.items()
+                    }
+                },
+                missing={"fields": nonmatching_fields} if nonmatching_fields else None,
+                evidence=evidence,
                 source={
                     "repository": repository,
                     "path": path,
                     "ref": "main",
-                } if client else None,
+                } if selected_client is not None else None,
                 url=github_url(repository, path),
-                next_action=_next_action("hub.oidc_client", state),
+                next_action=next_action,
             )
         ]
 
@@ -671,13 +724,38 @@ class StatusChecker:
         hub_values_prefix = f"values/{environment.infra_cluster}/"
         local_prefix = f"values/{environment.infra_cluster}/local-cluster/"
         apps_prefix = f"apps/{environment.infra_cluster}/"
-        workload_values = (
-            f"hosted-clusters/{environment.infra_cluster}/"
-            f"{environment.workload_cluster}/values.yaml"
-        )
-        workload_prefix = (
-            f"values/{environment.infra_cluster}/{environment.workload_cluster}/"
-        )
+
+        workload_checks = []
+        for workload_cluster in environment.workload_clusters or ():
+            workload_values = (
+                f"hosted-clusters/{environment.infra_cluster}/"
+                f"{workload_cluster}/values.yaml"
+            )
+            workload_prefix = (
+                f"values/{environment.infra_cluster}/{workload_cluster}/"
+            )
+            workload_checks.extend(
+                [
+                    (
+                        "workload.hosted_cluster_values",
+                        "workload",
+                        "Workload hosted-cluster values",
+                        workload_values,
+                        None,
+                        [workload_values],
+                        "the hosted workload cluster definition",
+                    ),
+                    (
+                        "workload.component_values",
+                        "workload",
+                        "Workload component values",
+                        None,
+                        workload_prefix,
+                        [],
+                        "component values scoped to the workload cluster",
+                    ),
+                ]
+            )
 
         path_checks = [
             (
@@ -716,24 +794,7 @@ class StatusChecker:
                 [apps_prefix + "keycloak-oauth.yaml"],
                 "direct ArgoCD applications applied on the hub cluster",
             ),
-            (
-                "workload.hosted_cluster_values",
-                "workload",
-                "Workload hosted-cluster values",
-                workload_values,
-                None,
-                [workload_values],
-                "the hosted workload cluster definition",
-            ),
-            (
-                "workload.component_values",
-                "workload",
-                "Workload component values",
-                None,
-                workload_prefix,
-                [],
-                "component values scoped to the workload cluster",
-            ),
+            *workload_checks,
         ]
 
         results: list[CheckResult] = []
@@ -757,7 +818,13 @@ class StatusChecker:
                     path
                     for path in found
                     if not path.startswith(local_prefix)
-                    and not path.startswith(workload_prefix)
+                    and not any(
+                        path.startswith(
+                            f"values/{environment.infra_cluster}/"
+                            f"{workload_cluster}/"
+                        )
+                        for workload_cluster in environment.workload_clusters or ()
+                    )
                 ]
 
             required_found = [path for path in required_paths if path in tree]
