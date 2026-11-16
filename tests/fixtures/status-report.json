@@ -112,14 +112,14 @@
       "expected": "Cluster-specific discovery image for bu-ist-demo-infra",
       "gaps": [
         {
-          "expected": "an image name containing bu-ist-demo-infra",
+          "expected": "bu-ist-demo-infra-agent-discovery.iso",
           "name": "cluster_specific_image",
           "observed": null
         }
       ],
       "id": "hub.boot_image",
       "missing": {
-        "cluster_specific_image": "an image name containing bu-ist-demo-infra"
+        "cluster_specific_image": "bu-ist-demo-infra-agent-discovery.iso"
       },
       "next_action": "Generate and publish a hub-specific discovery ISO, then replace the generic boot_image_url for every host in the hub cluster group.",
       "observed": [
@@ -187,26 +187,80 @@
     },
     {
       "actual": [
+        {
+          "bm_management": "ipmi",
+          "host": "compute-0",
+          "mac_addr": "00:11:22:33:44:55",
+          "resource_class": "bu-ist-demo-worker"
+        }
+      ],
+      "check": "bu-ist-demo-workload0 update-agents inputs",
+      "evidence": {
+        "agent_label_hosts": [
+          {
+            "bm_management": "ipmi",
+            "host": "compute-0",
+            "mac_addr": "00:11:22:33:44:55",
+            "resource_class": "bu-ist-demo-worker"
+          }
+        ],
+        "missing_variables": {},
+        "openstack_hosts_skipped": 0
+      },
+      "expected": [
+        "mac_addr",
+        "resource_class"
+      ],
+      "gaps": [],
+      "id": "workload.agent_labels_inputs",
+      "next_action": null,
+      "observed": [
+        {
+          "name": "0",
+          "value": {
+            "bm_management": "ipmi",
+            "host": "compute-0",
+            "mac_addr": "00:11:22:33:44:55",
+            "resource_class": "bu-ist-demo-worker"
+          }
+        }
+      ],
+      "path": "infra/update-agents.yaml",
+      "present": {
+        "checked_host_count": 1,
+        "complete_host_count": 1
+      },
+      "reason": "Every non-openstack host has the mac_addr and resource_class inputs required by infra/update-agents.yaml.",
+      "ref": "main",
+      "repository": "CCI-MOC/oac-infra",
+      "scope": "workload",
+      "severity": "info",
+      "stage": "Hardware and inventory",
+      "state": "declared_in_main",
+      "url": "https://github.com/CCI-MOC/oac-infra/blob/main/infra/update-agents.yaml"
+    },
+    {
+      "actual": [
         "http://10.2.0.82/boot/discovery.iso"
       ],
       "check": "bu-ist-demo-workload0 boot image",
       "evidence": {
-        "check_rule": "The boot-image filename must contain the full cluster name `bu-ist-demo-workload0`; generic `discovery.iso` does not satisfy this rule.",
+        "check_rule": "The workload boot-image filename may contain the workload name `bu-ist-demo-workload0`, its oac-shortened name, the parent hub name `bu-ist-demo-infra`, or the hub's oac-shortened name. Unrecognized names are advisory because naming is not consistent across environments; generic `discovery.iso` remains a gap.",
         "generic_discovery_iso": true
       },
       "expected": "Cluster-specific discovery image for bu-ist-demo-workload0",
       "gaps": [
         {
-          "expected": "an image name containing bu-ist-demo-workload0",
+          "expected": "bu-ist-demo-infra-agent-discovery.iso",
           "name": "cluster_specific_image",
           "observed": null
         }
       ],
       "id": "workload.boot_image",
       "missing": {
-        "cluster_specific_image": "an image name containing bu-ist-demo-workload0"
+        "cluster_specific_image": "bu-ist-demo-infra-agent-discovery.iso"
       },
-      "next_action": "Generate and publish a workload-specific discovery ISO, then replace the generic boot_image_url for every host in the workload cluster group.",
+      "next_action": "Generate and publish the parent hub's agent discovery ISO, then replace the generic boot_image_url for every host in the workload cluster group.",
       "observed": [
         {
           "name": "0",
@@ -217,7 +271,7 @@
       "present": {
         "boot_image_url": "http://10.2.0.82/boot/discovery.iso"
       },
-      "reason": "A boot image URL is present, but it points to the generic discovery.iso rather than a cluster-specific image.",
+      "reason": "A boot image URL is present, but the workload is still on the generic discovery.iso rather than the expected `bu-ist-demo-infra-agent-discovery.iso`.",
       "ref": "main",
       "repository": "CCI-MOC/oac-infra",
       "scope": "workload",
@@ -888,10 +942,10 @@
   "scope": "environment",
   "summary": {
     "advisory_count": 0,
-    "check_count": 14,
+    "check_count": 15,
     "severity_counts": {
       "blocking": 8,
-      "info": 6
+      "info": 7
     },
     "stages": [
       {
@@ -902,10 +956,10 @@
         }
       },
       {
-        "check_count": 4,
+        "check_count": 5,
         "stage": "Hardware and inventory",
         "state_counts": {
-          "declared_in_main": 2,
+          "declared_in_main": 3,
           "partial": 2
         }
       },
@@ -932,7 +986,7 @@
       }
     ],
     "state_counts": {
-      "declared_in_main": 5,
+      "declared_in_main": 6,
       "missing": 6,
       "partial": 2,
       "requested": 1
