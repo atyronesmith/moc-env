@@ -213,6 +213,48 @@ class CliDispatchTest(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertIn("fix in open PR oac-apps#237", stdout)
 
+    def test_markdown_golden_files(self) -> None:
+        fixed_clock = lambda: datetime(
+            2026, 11, 16, 12, 34, 56, tzinfo=timezone.utc
+        )
+        cases = (
+            (
+                ["status", "bu-ist-demo", "--format", "markdown", "--no-prs"],
+                FakeGitHubClient,
+                "environment-gaps.md",
+            ),
+            (
+                ["status", "bu-ist-demo", "--format", "markdown", "--no-prs"],
+                FullyConfiguredFakeGitHubClient,
+                "fully-configured.md",
+            ),
+            (
+                ["status", "dizzy", "--format", "markdown", "--no-prs"],
+                MultiWorkloadFakeGitHubClient,
+                "hub-no-workload.md",
+            ),
+            (
+                ["status", "bu-ist-demo", "--format", "markdown", "--no-prs", "--details"],
+                FakeGitHubClient,
+                "details.md",
+            ),
+            (
+                ["status", "bu-ist-demo", "--format", "markdown", "--no-prs", "--ascii"],
+                FakeGitHubClient,
+                "ascii.md",
+            ),
+        )
+        for arguments, client_class, filename in cases:
+            with self.subTest(filename=filename):
+                exit_code, stdout, _ = self.run_cli(
+                    arguments,
+                    client_class=client_class,
+                    clock=fixed_clock,
+                )
+                golden = Path(__file__).parent / "fixtures" / "markdown" / filename
+                self.assertEqual(exit_code, 0)
+                self.assertEqual(stdout, golden.read_text(encoding="utf-8"))
+
     def test_hub_status_json_dispatch(self) -> None:
         exit_code, stdout, _ = self.run_cli(
             ["status-hub", "bu-ist-demo", "--format", "json", "--no-prs"]
@@ -250,6 +292,22 @@ class CliDispatchTest(unittest.TestCase):
         self.assertIn(("CCI-MOC/oac-apps", "pull/246/head"), calls)
         self.assertIn("NOT A REPORT ON MAIN", stdout)
         self.assertIn("oac-apps@3333333@pull/246/head", stdout)
+
+        exit_code, markdown, _ = self.run_cli(
+            [
+                "status",
+                "bu-ist-demo",
+                "--format",
+                "markdown",
+                "--no-prs",
+                "--ref",
+                "oac-apps=pull/246/head",
+            ],
+            client_class=RefTrackingClient,
+        )
+        self.assertEqual(exit_code, 0)
+        self.assertIn("This is not a report on main", markdown)
+        self.assertIn("CCI-MOC/oac-apps@3333333@pull/246/head", markdown)
 
     def test_work_status_text_dispatch(self) -> None:
         exit_code, stdout, stderr = self.run_cli(
@@ -495,7 +553,7 @@ class CliDispatchTest(unittest.TestCase):
             self.assertEqual(stdout, "")
             self.assertIn(f"wrote markdown report to {output}", stderr)
             report = output.read_text(encoding="utf-8")
-        self.assertIn("# Environment configuration status", report)
+        self.assertIn("# bu-ist-demo — environment configuration status", report)
 
     def test_export_infra_dispatch(self) -> None:
         exit_code, stdout, stderr = self.run_cli(["export-infra", "bu-ist-demo"])
