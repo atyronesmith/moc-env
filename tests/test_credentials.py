@@ -76,11 +76,14 @@ class CredentialResolverTest(unittest.TestCase):
             bws = Path(temporary_directory) / "bws"
             bws.write_text("#!/bin/sh\nexit 0\n")
             bws.chmod(bws.stat().st_mode | stat.S_IXUSR)
+            security = Path(temporary_directory) / "security"
+            security.write_text("#!/bin/sh\nexit 0\n")
+            security.chmod(security.stat().st_mode | stat.S_IXUSR)
             calls: list[tuple[list[str], dict[str, str]]] = []
 
             def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
                 calls.append((command, kwargs["env"]))  # type: ignore[arg-type]
-                if command[0] == "/usr/bin/security":
+                if command[0] == str(security):
                     self.assertEqual(
                         command[1:],
                         [
@@ -109,6 +112,7 @@ class CredentialResolverTest(unittest.TestCase):
                 platform="darwin",
                 environment={"PATH": temporary_directory},
                 run=run,
+                keychain_executable=str(security),
             )
             token = resolver.resolve(
                 CredentialOptions(
@@ -127,6 +131,9 @@ class CredentialResolverTest(unittest.TestCase):
             bws = Path(temporary_directory) / "bws"
             bws.write_text("#!/bin/sh\nexit 0\n")
             bws.chmod(bws.stat().st_mode | stat.S_IXUSR)
+            security = Path(temporary_directory) / "security"
+            security.write_text("#!/bin/sh\nexit 0\n")
+            security.chmod(security.stat().st_mode | stat.S_IXUSR)
             calls: list[list[str]] = []
 
             def run(
@@ -180,6 +187,7 @@ class CredentialResolverTest(unittest.TestCase):
                 platform="darwin",
                 environment={"PATH": temporary_directory},
                 run=run,
+                keychain_executable=str(security),
             )
             token = resolver.resolve(
                 CredentialOptions(
@@ -196,34 +204,52 @@ class CredentialResolverTest(unittest.TestCase):
         )
 
     def test_missing_default_keychain_item_is_reported(self) -> None:
-        def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
-            return subprocess.CompletedProcess(command, 44, stdout=b"", stderr=b"")
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            security = Path(temporary_directory) / "security"
+            security.write_text("#!/bin/sh\nexit 44\n")
+            security.chmod(security.stat().st_mode | stat.S_IXUSR)
 
-        resolver = CredentialResolver(
-            platform="darwin", environment={"PATH": "/usr/bin:/bin"}, run=run
-        )
-        with self.assertRaises(CredentialNotFoundError):
-            resolver.resolve(
-                CredentialOptions(bws_secret_id_keychain_account="fixture-user")
+            def run(
+                command: list[str], **kwargs: object
+            ) -> subprocess.CompletedProcess[bytes]:
+                return subprocess.CompletedProcess(command, 44, stdout=b"", stderr=b"")
+
+            resolver = CredentialResolver(
+                platform="darwin",
+                environment={"PATH": "/usr/bin:/bin"},
+                run=run,
+                keychain_executable=str(security),
             )
+            with self.assertRaises(CredentialNotFoundError):
+                resolver.resolve(
+                    CredentialOptions(bws_secret_id_keychain_account="fixture-user")
+                )
 
     def test_invalid_keychain_uuid_is_rejected(self) -> None:
-        def run(
-            command: list[str], **kwargs: object
-        ) -> subprocess.CompletedProcess[bytes]:
-            return subprocess.CompletedProcess(
-                command, 0, stdout=b"not-a-uuid\n", stderr=b""
-            )
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            security = Path(temporary_directory) / "security"
+            security.write_text("#!/bin/sh\nexit 0\n")
+            security.chmod(security.stat().st_mode | stat.S_IXUSR)
 
-        resolver = CredentialResolver(
-            platform="darwin", environment={"PATH": "/usr/bin:/bin"}, run=run
-        )
-        with self.assertRaisesRegex(
-            CredentialError, "Keychain item must contain a Bitwarden secret UUID"
-        ):
-            resolver.resolve(
-                CredentialOptions(bws_secret_id_keychain_account="fixture-user")
+            def run(
+                command: list[str], **kwargs: object
+            ) -> subprocess.CompletedProcess[bytes]:
+                return subprocess.CompletedProcess(
+                    command, 0, stdout=b"not-a-uuid\n", stderr=b""
+                )
+
+            resolver = CredentialResolver(
+                platform="darwin",
+                environment={"PATH": "/usr/bin:/bin"},
+                run=run,
+                keychain_executable=str(security),
             )
+            with self.assertRaisesRegex(
+                CredentialError, "Keychain item must contain a Bitwarden secret UUID"
+            ):
+                resolver.resolve(
+                    CredentialOptions(bws_secret_id_keychain_account="fixture-user")
+                )
 
     def test_invalid_secret_uuid_is_rejected(self) -> None:
         resolver = CredentialResolver(
