@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import base64
 import json
-import os
 import time
 from collections.abc import Iterator
+from collections.abc import Callable
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
@@ -30,12 +30,14 @@ class GitHubClient:
         timeout: float = 20.0,
         refs: dict[str, str] | None = None,
     ) -> None:
-        self.token = token or os.environ.get("GITHUB_TOKEN")
+        self.token = token
         self.timeout = timeout
         self.refs = refs or {}
         self.base_url = "https://api.github.com"
         self.source_snapshots: dict[tuple[str, str], str] = {}
         self.rate_limit_remaining: int | None = None
+        self.on_response: Callable[[int], None] | None = None
+        self._rate_limit_warning_sent = False
 
     @property
     def authenticated(self) -> bool:
@@ -60,6 +62,9 @@ class GitHubClient:
         remaining = headers.get("X-RateLimit-Remaining")
         if remaining is not None and remaining.isdigit():
             self.rate_limit_remaining = int(remaining)
+            if self.on_response and not self._rate_limit_warning_sent:
+                self._rate_limit_warning_sent = True
+                self.on_response(self.rate_limit_remaining)
 
     def _headers(self) -> dict[str, str]:
         headers = {
@@ -86,7 +91,8 @@ class GitHubClient:
                 reset = int(exc.headers.get("X-RateLimit-Reset", "0"))
                 reset_at = time.strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime(reset))
                 raise RateLimitError(
-                    f"GitHub API rate limit exhausted; resets around {reset_at}"
+                    f"GitHub API rate limit exhausted; resets around {reset_at}. "
+                    "Set GITHUB_TOKEN or run gh auth login."
                 ) from exc
             raise GitHubError(
                 f"GitHub API request failed ({exc.code}) for {url}: {body[:500]}"

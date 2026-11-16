@@ -475,7 +475,9 @@ uv run moc-env status bu-ist-demo --no-prs
 ## GitHub authentication
 
 The CLI works without authentication against public repositories, but GitHub's
-unauthenticated REST quota is small.
+unauthenticated REST quota is small. When it runs unauthenticated, it prints one
+warning with the remaining request quota after GitHub supplies that header.
+Pass `--no-auth` to force unauthenticated access.
 
 ### Local selector file
 
@@ -534,8 +536,8 @@ The UUID is not the GitHub token and is not the Bitwarden machine access token.
 
 ### macOS Keychain-stored Bitwarden UUID
 
-If no direct token or UUID environment variable is configured, the CLI reads the
-Bitwarden secret UUID from:
+If no direct token, explicit Bitwarden selector, or usable GitHub CLI login is
+configured, the CLI reads the default Bitwarden secret UUID from:
 
 ```text
 service: moc-env-github-token
@@ -596,16 +598,19 @@ service with `BWS_ACCESS_TOKEN_KEYCHAIN_ACCOUNT` or
 The complete resolution order is:
 
 1. `GITHUB_TOKEN`
-2. `GITHUB_BWS_SECRET_ID` / `MOC_ENV_BWS_SECRET_ID`
-3. Bitwarden secret UUID from `moc-env-github-token` in macOS Keychain
-4. `bws secret get <uuid>` using the Bitwarden machine access token
+2. An explicitly configured Bitwarden selector
+3. `gh auth token`, when GitHub CLI is installed and logged in
+4. The default Bitwarden secret UUID item in macOS Keychain
+5. Unauthenticated access
 
-The GitHub token itself is never stored in macOS Keychain. If the default UUID
-Keychain item is absent and no direct credential is configured, the CLI continues
-unauthenticated. If a direct token, UUID selector, or explicit Keychain selector
-is configured, lookup failures are terminal. The CLI does not silently try
-another credential source after a selected source fails. No token is accepted as
-a command-line argument or passed in command-line arguments to a subprocess.
+The GitHub token itself is never stored in macOS Keychain. Unavailable optional
+steps are skipped silently: non-macOS systems skip Keychain, a missing `gh`
+executable is skipped, and an absent default Keychain item is skipped. If a
+direct token or explicitly selected Bitwarden source fails, the command fails;
+the CLI does not silently try another credential source after that selection.
+No token is accepted as a command-line argument or passed in command-line
+arguments to a subprocess. GitHub CLI output is captured and subject to a
+timeout.
 
 Use a fine-grained personal access token with access to public repositories and
 these read-only permissions:
@@ -648,11 +653,6 @@ uv sync
 uv run python -m unittest discover -s tests -v
 make check
 ```
-
-Current hosted-CI caveat: the GitHub Actions `Check` workflow fails on Linux
-because four credential tests assume macOS `/usr/bin/security`. The full suite
-and `make check` pass on macOS; making those tests platform-independent is the
-next maintenance task.
 
 See [docs/user-guide.md](docs/user-guide.md) for detailed usage and
 [docs/roadmap.md](docs/roadmap.md) for milestone history and future work.
