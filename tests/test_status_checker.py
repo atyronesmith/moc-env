@@ -83,6 +83,37 @@ class StatusCheckerTest(unittest.TestCase):
         self.assertNotIn("Hub image variables", checks)
         self.assertNotIn("Infra OIDC client", checks)
 
+    def test_check_metadata_and_next_actions_are_machine_readable(self) -> None:
+        report = StatusChecker(FakeGitHubClient()).run(
+            Environment(name="bu-ist-demo", issue_number=666)
+        ).to_dict()
+        checks = report["checks"]
+
+        self.assertTrue(checks)
+        for check in checks:
+            with self.subTest(check=check["id"]):
+                self.assertIn("id", check)
+                self.assertIn(check["scope"], {"hub", "workload", "shared"})
+                self.assertIn("next_action", check)
+                if check["state"] in {"partial", "missing", "pr_open"}:
+                    self.assertIsInstance(check["next_action"], str)
+                    self.assertTrue(check["next_action"])
+                else:
+                    self.assertIsNone(check["next_action"])
+
+        component_values = next(
+            check for check in checks if check["id"] == "hub.component_values"
+        )
+        self.assertEqual(component_values["scope"], "hub")
+        self.assertIn(
+            "values/<hub>/hcp-config.yaml",
+            component_values["next_action"],
+        )
+        self.assertNotIn(
+            "Create the workload component-values directory",
+            component_values["next_action"],
+        )
+
     def test_environment_name_that_already_ends_in_infra_is_not_suffixed_again(self) -> None:
         environment = Environment(name="oac-prod-infra")
         self.assertEqual(environment.infra_cluster, "oac-prod-infra")

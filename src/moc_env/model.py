@@ -52,8 +52,10 @@ class Environment:
 class CheckResult:
     """One normalized configuration-state check."""
 
+    id: str
     stage: str
     check: str
+    scope: str
     repository: str
     path: str
     ref: str
@@ -66,10 +68,20 @@ class CheckResult:
     evidence: dict[str, Any] = field(default_factory=dict)
     source: dict[str, Any] | None = None
     url: str | None = None
+    next_action: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
-        return {key: value for key, value in data.items() if value is not None}
+        return {
+            "id": data["id"],
+            "scope": data["scope"],
+            "next_action": data["next_action"],
+            **{
+                key: value
+                for key, value in data.items()
+                if value is not None and key not in {"id", "scope", "next_action"}
+            },
+        }
 
 
 @dataclass
