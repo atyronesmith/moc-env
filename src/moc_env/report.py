@@ -433,40 +433,6 @@ def _followup_gap(check: dict[str, Any]) -> str:
     return _text_value(missing, 4)
 
 
-def _followup_action(check: dict[str, Any]) -> str:
-    name = check.get("check", "")
-    if "boot image" in name:
-        return (
-            "Generate and publish a cluster-specific discovery ISO, then replace "
-            "the generic boot_image_url for every host in the cluster group."
-        )
-    if "hosted-cluster values" in name:
-        return (
-            "Create the missing hosted-cluster values file from the closest "
-            "existing environment; set the cluster name, parent hub, networking, "
-            "and node pools before adding components."
-        )
-    if "component values" in name:
-        return (
-            "Create the workload component-values directory, starting with "
-            "hcp-config.yaml and only the shared components this workload needs."
-        )
-    if "applications" in name.lower():
-        return (
-            "Add Argo CD application manifests after the hosted-cluster and "
-            "component values are present, and reference the correct clusters."
-        )
-    if "local-cluster values" in name:
-        return (
-            "Copy the required local-cluster component files from an existing "
-            "hub environment and adjust cluster-specific names and addresses."
-        )
-    return (
-        "Create or complete the repository declaration at the source path, using "
-        "an equivalent configured environment as the template."
-    )
-
-
 def _scope_title(scope: str) -> str:
     titles = {
         "environment": "Environment configuration status",
@@ -548,7 +514,7 @@ def render_text(report: dict[str, Any]) -> str:
                     f"{priority}. [{_state(check['state'])}] "
                     f"{check['stage']} / {check['check']}",
                     f"   Gap: {_followup_gap(check)}",
-                    f"   Next: {_followup_action(check)}",
+                    f"   Next: {check['next_action']}",
                 ]
             )
 
@@ -790,7 +756,7 @@ def render_markdown(report: dict[str, Any]) -> str:
                 gap = "Merge or close the relevant open pull request."
             lines.append(
                 f"| {priority} | {check['stage']} / {check['check']} | {gap} "
-                f"| {_markdown_inline(_followup_action(check))} |"
+                f"| {_markdown_inline(check['next_action'])} |"
             )
 
     lines.extend(

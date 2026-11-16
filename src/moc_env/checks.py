@@ -40,7 +40,77 @@ LOCAL_CLUSTER_COMPONENTS = [
     "user-workload-monitoring.yaml",
 ]
 
-_SHARED_STATUS_CHECKS = {"MOC issue", "Relevant pull requests"}
+
+_NEXT_ACTIONS = {
+    "request.issue": (
+        "Open or reopen the environment request issue in CCI-MOC/MOC-issues."
+    ),
+    "hub.inventory": (
+        "Edit CCI-MOC/oac-infra at infra/inventory/00hosts.yaml and add or "
+        "correct the hub cluster group with vars.cluster set to the hub name."
+    ),
+    "workload.inventory": (
+        "Edit CCI-MOC/oac-infra at infra/inventory/00hosts.yaml and add or "
+        "correct the workload cluster group with vars.cluster set to the workload name."
+    ),
+    "hub.boot_image": (
+        "Generate and publish a hub-specific discovery ISO, then replace the "
+        "generic boot_image_url for every host in the hub cluster group."
+    ),
+    "workload.boot_image": (
+        "Generate and publish a workload-specific discovery ISO, then replace "
+        "the generic boot_image_url for every host in the workload cluster group."
+    ),
+    "hub.image_inventory": (
+        "Edit CCI-MOC/oac-infra at hub-images/inventory.yml and add the hub "
+        "entry under all.children."
+    ),
+    "hub.image_vars": (
+        "Edit CCI-MOC/oac-infra at hub-images/group_vars/<hub>/vars.yml and "
+        "provide cluster_domain_name, base_domain, machine_network, api_ip, "
+        "ingress_ip, and dns_ip."
+    ),
+    "hub.oidc_client": (
+        "Edit CCI-MOC/moc-keycloak at main.tf and add the hub's OIDC client, "
+        "redirect URI, and secret reference."
+    ),
+    "hub.hosted_cluster_defaults": (
+        "Create or complete the hub hosted-cluster defaults file at "
+        "hosted-clusters/<hub>/values.yaml in CCI-MOC/oac-infra."
+    ),
+    "hub.component_values": (
+        "Create or complete values/<hub>/hcp-config.yaml in CCI-MOC/oac-infra "
+        "for hub-wide HCP and secret-selector values."
+    ),
+    "hub.local_cluster_values": (
+        "Copy the required local-cluster component files from an existing hub "
+        "environment and adjust cluster-specific names and addresses."
+    ),
+    "hub.argocd_apps": (
+        "Add Argo CD application manifests for the hub after its hosted-cluster, "
+        "hub-wide component, and local-cluster values are present, and reference "
+        "the correct clusters."
+    ),
+    "workload.hosted_cluster_values": (
+        "Create the missing hosted-cluster values file from the closest "
+        "existing environment; set the cluster name, parent hub, networking, "
+        "and node pools before adding components."
+    ),
+    "workload.component_values": (
+        "Create the workload component-values directory, starting with "
+        "hcp-config.yaml and only the shared components this workload needs."
+    ),
+    "pull_requests": (
+        "Review the relevant pull requests; merge or close any open PR after "
+        "confirming it is the intended repository change."
+    ),
+}
+
+
+def _next_action(check_id: str, state: str) -> str | None:
+    if state in {"declared_in_main", "requested", "pr_merged"}:
+        return None
+    return _NEXT_ACTIONS[check_id]
 
 
 def list_environments(client: GitHubClient) -> list[dict[str, Any]]:
@@ -172,11 +242,7 @@ class StatusChecker:
         checks = [
             check
             for check in report.checks
-            if check.check in _SHARED_STATUS_CHECKS
-            or check.check.startswith(f"{environment.infra_cluster} ")
-            or check.check.startswith("Hub ")
-            or check.check.startswith("Hub-wide ")
-            or check.check.startswith("Infra ")
+            if check.scope in {"hub", "shared"}
         ]
         return replace(
             report,
@@ -192,9 +258,7 @@ class StatusChecker:
         checks = [
             check
             for check in report.checks
-            if check.check in _SHARED_STATUS_CHECKS
-            or check.check.startswith(f"{environment.workload_cluster} ")
-            or check.check.startswith("Workload ")
+            if check.scope in {"workload", "shared"}
         ]
         return replace(
             report,
@@ -225,8 +289,10 @@ class StatusChecker:
 
         return [
             CheckResult(
+                id="request.issue",
                 stage="Request",
                 check="MOC issue",
+                scope="shared",
                 repository=repository,
                 path=path,
                 ref="main",
@@ -242,6 +308,7 @@ class StatusChecker:
                     "url": observation.url.to_dict(),
                 },
                 url=observation.url.value,
+                next_action=_next_action("request.issue", state),
             )
         ]
 
@@ -258,6 +325,14 @@ class StatusChecker:
 
         for cluster_observation in observation.clusters.values():
             cluster = cluster_observation.cluster.value
+            inventory_id = (
+                "hub.inventory"
+                if cluster == environment.infra_cluster
+                else "workload.inventory"
+            )
+            inventory_scope = (
+                "hub" if cluster == environment.infra_cluster else "workload"
+            )
             group = cluster_observation.group_found.value
             hosts = cluster_observation.hosts.value
             boot_urls = cluster_observation.boot_image_urls
@@ -283,8 +358,10 @@ class StatusChecker:
 
             results.append(
                 CheckResult(
+                    id=inventory_id,
                     stage="Hardware and inventory",
                     check=f"{cluster} host inventory",
+                    scope=inventory_scope,
                     repository=repository,
                     path=inventory_path,
                     ref="main",
@@ -296,6 +373,7 @@ class StatusChecker:
                     missing=missing,
                     evidence={"hosts": cluster_observation.host_summaries()},
                     url=github_url(repository, inventory_path),
+                    next_action=_next_action(inventory_id, state),
                 )
             )
 
@@ -304,6 +382,12 @@ class StatusChecker:
 
             selected_url = boot_urls[0] if len(boot_urls) == 1 else None
             boot_state = _boot_image_state(selected_url, cluster)
+            boot_id = (
+                "hub.boot_image"
+                if cluster == environment.infra_cluster
+                else "workload.boot_image"
+            )
+            boot_scope = "hub" if cluster == environment.infra_cluster else "workload"
             if boot_state == "declared_in_main":
                 boot_reason = f"The boot image URL is specific to {cluster}."
                 boot_present = {"boot_image_url": selected_url}
@@ -350,8 +434,10 @@ class StatusChecker:
 
             results.append(
                 CheckResult(
+                    id=boot_id,
                     stage="Hardware and inventory",
                     check=f"{cluster} boot image",
+                    scope=boot_scope,
                     repository=repository,
                     path=inventory_path,
                     ref="main",
@@ -377,6 +463,7 @@ class StatusChecker:
                         ),
                     },
                     url=github_url(repository, inventory_path),
+                    next_action=_next_action(boot_id, boot_state),
                 )
             )
 
@@ -405,8 +492,10 @@ class StatusChecker:
 
         results.append(
             CheckResult(
+                id="hub.image_inventory",
                 stage="Cluster build",
                 check="Hub image inventory",
+                scope="hub",
                 repository=repository,
                 path=hub_inventory_path,
                 ref="main",
@@ -420,6 +509,7 @@ class StatusChecker:
                         "path_present": observation.hub_inventory.path_present.value
                     },
                 url=github_url(repository, hub_inventory_path),
+                next_action=_next_action("hub.image_inventory", hub_state),
             )
         )
 
@@ -460,8 +550,10 @@ class StatusChecker:
 
         results.append(
             CheckResult(
+                id="hub.image_vars",
                 stage="Cluster build",
                 check="Hub image variables",
+                scope="hub",
                 repository=repository,
                 path=vars_path,
                 ref="main",
@@ -483,6 +575,7 @@ class StatusChecker:
                     },
                 },
                 url=github_url(repository, vars_path),
+                next_action=_next_action("hub.image_vars", state),
             )
         )
         return results, environment
@@ -535,8 +628,10 @@ class StatusChecker:
 
         return [
             CheckResult(
+                id="hub.oidc_client",
                 stage="Identity",
                 check="Infra OIDC client",
+                scope="hub",
                 repository=repository,
                 path=path,
                 ref="main",
@@ -561,6 +656,7 @@ class StatusChecker:
                     "ref": "main",
                 } if client else None,
                 url=github_url(repository, path),
+                next_action=_next_action("hub.oidc_client", state),
             )
         ]
 
@@ -585,6 +681,8 @@ class StatusChecker:
 
         path_checks = [
             (
+                "hub.hosted_cluster_defaults",
+                "hub",
                 "Infra hosted-cluster defaults",
                 infra_defaults,
                 None,
@@ -592,6 +690,8 @@ class StatusChecker:
                 "the default values for hosted clusters on this hub cluster",
             ),
             (
+                "hub.component_values",
+                "hub",
                 "Hub-wide component values",
                 None,
                 hub_values_prefix,
@@ -599,6 +699,8 @@ class StatusChecker:
                 "hub-wide HCP and secret-selector values",
             ),
             (
+                "hub.local_cluster_values",
+                "hub",
                 "Infra local-cluster values",
                 None,
                 local_prefix,
@@ -606,6 +708,8 @@ class StatusChecker:
                 "the hub cluster's local operator and shared-service values",
             ),
             (
+                "hub.argocd_apps",
+                "hub",
                 "Infra ArgoCD applications",
                 None,
                 apps_prefix,
@@ -613,6 +717,8 @@ class StatusChecker:
                 "direct ArgoCD applications applied on the hub cluster",
             ),
             (
+                "workload.hosted_cluster_values",
+                "workload",
                 "Workload hosted-cluster values",
                 workload_values,
                 None,
@@ -620,6 +726,8 @@ class StatusChecker:
                 "the hosted workload cluster definition",
             ),
             (
+                "workload.component_values",
+                "workload",
                 "Workload component values",
                 None,
                 workload_prefix,
@@ -629,14 +737,22 @@ class StatusChecker:
         ]
 
         results: list[CheckResult] = []
-        for label, exact, prefix, required_paths, purpose in path_checks:
+        for (
+            check_id,
+            check_scope,
+            label,
+            exact,
+            prefix,
+            required_paths,
+            purpose,
+        ) in path_checks:
             search_path = exact or (prefix or "")
             found = sorted(
                 path
                 for path in tree
                 if path == search_path or (prefix and path.startswith(prefix))
             )
-            if label == "Hub-wide component values":
+            if check_id == "hub.component_values":
                 found = [
                     path
                     for path in found
@@ -688,8 +804,10 @@ class StatusChecker:
 
             results.append(
                 CheckResult(
+                    id=check_id,
                     stage="GitOps configuration",
                     check=label,
+                    scope=check_scope,
                     repository=repository,
                     path=exact or (prefix or "").rstrip("/"),
                     ref="main",
@@ -706,6 +824,7 @@ class StatusChecker:
                         "paths": found,
                     },
                     url=github_url(repository, exact or (prefix or "").rstrip("/")),
+                    next_action=_next_action(check_id, state),
                 )
             )
 
@@ -717,8 +836,10 @@ class StatusChecker:
         if not pull_requests:
             results.append(
                 CheckResult(
+                    id="pull_requests",
                     stage="GitOps configuration",
                     check="Relevant pull requests",
+                    scope="shared",
                     repository=repository,
                     path="pulls",
                     ref="all",
@@ -729,6 +850,7 @@ class StatusChecker:
                     present={"matching_pr_count": 0},
                     missing={"matching_pull_requests": 1},
                     evidence={},
+                    next_action=_next_action("pull_requests", "missing"),
                 )
             )
             return results
@@ -764,8 +886,10 @@ class StatusChecker:
 
         results.append(
             CheckResult(
+                id="pull_requests",
                 stage="GitOps configuration",
                 check="Relevant pull requests",
+                scope="shared",
                 repository=repository,
                 path="pulls",
                 ref="all",
@@ -783,6 +907,7 @@ class StatusChecker:
                 },
                 missing=missing,
                 evidence={"pull_requests": evidence},
+                next_action=_next_action("pull_requests", state),
             )
         )
         return results

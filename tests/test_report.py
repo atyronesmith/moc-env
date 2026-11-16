@@ -11,8 +11,10 @@ class ReportRenderingTest(unittest.TestCase):
         environment = Environment(name="fixture-env", issue_number=123)
         checks = [
             CheckResult(
+                id="hub.boot_image",
                 stage="Hardware and inventory",
                 check="fixture cluster boot image",
+                scope="hub",
                 repository="CCI-MOC/oac-infra",
                 path="infra/inventory/00hosts.yaml",
                 ref="main",
@@ -24,6 +26,11 @@ class ReportRenderingTest(unittest.TestCase):
                 missing={"cluster_specific_image": "fixture-env-agent-discovery.iso"},
                 evidence={"generic_discovery_iso": True},
                 url="https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml",
+                next_action=(
+                    "Generate and publish a hub-specific discovery ISO, then "
+                    "replace the generic boot_image_url for every host in the "
+                    "hub cluster group."
+                ),
             )
         ]
         self.report = StatusReport(
@@ -47,7 +54,7 @@ class ReportRenderingTest(unittest.TestCase):
         self.assertIn("Suggested next actions:", rendered)
         self.assertIn("cluster_specific_image", rendered.split("Suggested next actions:", 1)[1])
         self.assertIn("Next:", rendered)
-        self.assertIn("cluster-specific discovery ISO", rendered)
+        self.assertIn("hub-specific discovery ISO", rendered)
 
     def test_markdown_is_verbose_and_actionable(self) -> None:
         rendered = render_markdown(self.report)
@@ -66,7 +73,7 @@ class ReportRenderingTest(unittest.TestCase):
         self.assertIn("| Actual |", rendered)
         self.assertIn("## Suggested next actions", rendered)
         self.assertIn("Suggested action", rendered)
-        self.assertIn("Generate and publish a cluster-specific discovery ISO", rendered)
+        self.assertIn("Generate and publish a hub-specific discovery ISO", rendered)
         self.assertIn("fixture-env-agent-discovery.iso", rendered)
         self.assertNotIn("## Raw report data", rendered)
         self.assertNotIn("```json", rendered)
