@@ -24,9 +24,15 @@ class RateLimitError(GitHubError):
 class GitHubClient:
     """Minimal GitHub REST client with pagination and token support."""
 
-    def __init__(self, token: str | None = None, timeout: float = 20.0) -> None:
+    def __init__(
+        self,
+        token: str | None = None,
+        timeout: float = 20.0,
+        refs: dict[str, str] | None = None,
+    ) -> None:
         self.token = token or os.environ.get("GITHUB_TOKEN")
         self.timeout = timeout
+        self.refs = refs or {}
         self.base_url = "https://api.github.com"
         self.source_snapshots: dict[tuple[str, str], str] = {}
         self.rate_limit_remaining: int | None = None
@@ -46,6 +52,9 @@ class GitHubClient:
             {"repository": repository, "ref": ref, "sha": sha}
             for (repository, ref), sha in sorted(self.source_snapshots.items())
         ]
+
+    def ref_for(self, repository: str) -> str:
+        return self.refs.get(repository, "main")
 
     def _record_headers(self, headers: Any) -> None:
         remaining = headers.get("X-RateLimit-Remaining")
@@ -113,6 +122,7 @@ class GitHubClient:
             url = next_url
 
     def get_tree(self, repository: str, ref: str = "main") -> dict[str, dict[str, Any]]:
+        ref = self.refs.get(repository, ref)
         data = self.get_json(f"/repos/{repository}/git/trees/{ref}?recursive=1")
         if not isinstance(data, dict) or data.get("truncated") is True:
             raise GitHubError(f"GitHub tree response was truncated for {repository}@{ref}")
@@ -124,6 +134,7 @@ class GitHubClient:
         }
 
     def get_file(self, repository: str, path: str, ref: str = "main") -> str:
+        ref = self.refs.get(repository, ref)
         data = self.get_json(f"/repos/{repository}/contents/{path}?ref={ref}")
         if not isinstance(data, dict) or data.get("encoding") != "base64":
             raise GitHubError(f"Unexpected GitHub contents response for {repository}:{path}")

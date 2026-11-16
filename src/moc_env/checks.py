@@ -11,6 +11,7 @@ from typing import Any
 import yaml
 
 from .github import GitHubClient, github_url
+from .cross_repo import cross_repository_checks
 from .model import (
     CheckResult,
     Environment,
@@ -263,6 +264,15 @@ class StatusChecker:
         checks.extend(infra_checks)
         checks.extend(self._keycloak_checks(environment, observation.keycloak))
         checks.extend(self._apps_checks(environment, observation.apps))
+        checks.extend(
+            cross_repository_checks(
+                self.client,
+                environment,
+                observation.infra,
+                observation.apps,
+                self._emit_progress,
+            )
+        )
         self._apply_boot_image_severities(checks)
         checks = annotate_and_sort_checks(checks)
         return StatusReport(

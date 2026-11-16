@@ -101,7 +101,7 @@ class StatusCheckerTest(unittest.TestCase):
                 self.assertIn("id", check)
                 self.assertIn(check["scope"], {"hub", "workload", "shared"})
                 self.assertIn("next_action", check)
-                if check["state"] in {"partial", "missing", "pr_open"}:
+                if check["state"] in {"partial", "missing", "pr_open", "unknown"}:
                     self.assertIsInstance(check["next_action"], str)
                     self.assertTrue(check["next_action"])
                 else:
@@ -398,9 +398,9 @@ dizzy = {
             check["next_action"],
         )
 
-        text = render_text(report)
+        text = render_text(report, details=True)
         markdown = render_markdown(report)
-        self.assertIn("Keycloak OIDC fields:", text)
+        self.assertIn("Expected", text)
         self.assertIn("| Field | Expected | Observed |", markdown)
         self.assertIn("cluster/dizzy/keycloak-oidc", text)
         self.assertIn("cluster/dizzy/keycloak-oidc", markdown)
@@ -927,7 +927,7 @@ bu_ist_demo_infra:
             for item in check["evidence"]["pull_requests"]
         }
         self.assertEqual(evidence_repositories, set(expected_repository_counts))
-        text_report = render_text(report)
+        text_report = render_text(report, details=True)
         markdown_report = render_markdown(report)
         self.assertIn("Pull requests by repository:", text_report)
         self.assertIn("CCI-MOC/oac-infra: 1", text_report)
@@ -1308,11 +1308,9 @@ all:
         self.assertIn("resource_class", check["next_action"])
         self.assertIn("bu-ist-demo-worker", check["next_action"])
         self.assertIn("NodePool", check["next_action"])
-        text_report = render_text(report)
+        text_report = render_text(report, details=True)
         markdown_report = render_markdown(report)
-        self.assertIn("Agent label inputs:", text_report)
-        self.assertIn("bm_management", text_report)
-        self.assertIn("MISSING", text_report)
+        self.assertIn("Expected", text_report)
         self.assertIn("Agent label inputs", markdown_report)
         self.assertIn("| `compute-0` | `bmc` |", markdown_report)
 

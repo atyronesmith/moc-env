@@ -1,0 +1,25 @@
+bu-ist-demo · hub + workload · repo config as of 2026-11-16 12:34:56 UTC
+MOC-issues@1111111  ansible-switches@8888888  everpure-moc@5555555  moc-aws@6666666
+moc-dns@7777777  moc-keycloak@4444444  oac-apps@3333333  oac-infra@2222222  issue #666 (open)
+
+RESULT: 0 blocking gaps (workload 0) · 0 advisories · 30 of 30 checks pass
+
+PHASE                        HUB bu-ist-demo-infra           WORKLOAD bu-ist-demo-workload0  
+1 Host inventory entry in…   ✅ 1 hosts                       ✅ 1 hosts                       
+2 Hub-image inventory entry… ✅ 6/6 variables                 ✅ 1/2 variables                 
+3 Cluster discovery image…   ✅ 1/1 checks                    ✅ 1/1 variables                 
+4 Keycloak OIDC client /…    ✅ 1/1 checks                    ✅ 2/2 checks                    
+5 GitOps values and…         ✅ 1/1 variables                 ✅ 3/3 checks                    
+
+NEXT
+Nothing to do in the repositories this tool reads.
+
+NOT CHECKED — verify by hand:
+  Configure cluster and storage networks and firewalls for bu-ist-demo-infra; Store the
+  bu-ist-demo-infra SSH key and kubeadmin credentials in AWS Secrets Manager; Place the pull
+  secret and SSH key under hub-images/credentials/bu-ist-demo-infra; Run
+  create_agent_install_media and copy the bu-ist-demo-infra ISO to the bastion host; Bootstrap
+  Argo CD for bu-ist-demo-infra
+
+Details:  moc-env status bu-ist-demo --details
+Markdown: moc-env status bu-ist-demo --format markdown --output report.md

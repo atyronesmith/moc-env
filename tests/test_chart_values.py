@@ -198,8 +198,7 @@ class ChartValuesTest(unittest.TestCase):
 
         self.assertEqual(exit_code, 0)
         self.assertIn("# 📘 Chart Configuration Reference", stdout.getvalue())
-        self.assertIn("Step 1: Chart values", stderr.getvalue())
-        self.assertNotIn("Step 2:", stderr.getvalue())
+        self.assertEqual(stderr.getvalue(), "")
 
     def test_cli_document_values_output_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

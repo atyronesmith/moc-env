@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import textwrap
 from typing import Any
 
 from .github import github_url
@@ -16,6 +17,18 @@ STATE_SYMBOLS = {
     "partial": "🟡",
     "missing": "❌",
     "unknown": "❓",
+    "value_mismatch": "⚠️",
+}
+
+ASCII_STATE_SYMBOLS = {
+    "requested": "[req]",
+    "declared_in_main": "[ok]",
+    "pr_merged": "[merged]",
+    "pr_open": "[pr]",
+    "partial": "[warn]",
+    "missing": "[fail]",
+    "unknown": "[??]",
+    "value_mismatch": "[warn]",
 }
 
 
@@ -567,123 +580,385 @@ def _metadata_header_lines(report: dict[str, Any]) -> list[str]:
         f"{source['repository']}@{source['sha'][:7]}"
         for source in metadata.get("sources", [])
     )
-    return [
+    non_main_refs = [
+        f"{source['repository']}@{source['ref']}"
+        for source in metadata.get("sources", [])
+        if source.get("ref") != "main"
+    ]
+    lines = [
         f"Generated: {metadata['generated_at']}",
         f"Sources: {sources or '-'}",
     ]
+    if non_main_refs:
+        lines.append(f"Non-main refs: {', '.join(non_main_refs)}")
+    return lines
 
 
-def render_text(report: dict[str, Any]) -> str:
+def _symbol(state: str, ascii_mode: bool = False) -> str:
+    if ascii_mode:
+        return ASCII_STATE_SYMBOLS.get(state, "[?]")
+    return STATE_SYMBOLS.get(state, "•")
+
+
+def _wrap(text: str, indent: int = 0, width: int = 96) -> list[str]:
+    prefix = " " * indent
+    return textwrap.wrap(
+        text,
+        width=width,
+        initial_indent=prefix,
+        subsequent_indent=prefix,
+        break_long_words=True,
+        break_on_hyphens=False,
+    ) or [prefix]
+
+
+def _phase_rows(report: dict[str, Any], scope: str) -> list[tuple[int, str]]:
+    phases = report.get("phases", {})
+    if scope == "environment":
+        hub_definitions = phases.get("hub", []) if isinstance(phases, dict) else []
+        workload_definitions = phases.get("workload", []) if isinstance(phases, dict) else []
+    else:
+        hub_definitions = phases if isinstance(phases, list) else []
+        workload_definitions = []
+    by_phase: dict[int, str] = {}
+    for phase in hub_definitions:
+        by_phase[phase["phase"]] = phase["title"]
+    for phase in workload_definitions:
+        number = phase["phase"]
+        if number not in by_phase:
+            by_phase[number] = phase["title"]
+        elif by_phase[number] != phase["title"]:
+            by_phase[number] = f"{by_phase[number]} / {phase['title']}"
+    return sorted(by_phase.items())
+
+
+def _phase_cell(checks: list[dict[str, Any]], ascii_mode: bool) -> str:
+    if not checks:
+        return "[--]" if ascii_mode else "–"
+    if any(check["state"] == "unknown" for check in checks):
+        symbol = "[??]" if ascii_mode else "⚪"
+        return f"{symbol} unknown"
+    passing = all(check["state"] in {"declared_in_main", "requested", "pr_merged"} for check in checks)
+    if passing:
+        if any(check["id"].endswith(".inventory") for check in checks):
+            hosts = sum(len((check.get("evidence") or {}).get("hosts") or []) for check in checks)
+            detail = f"{hosts} hosts"
+        elif any(isinstance(check.get("expected"), list) for check in checks):
+            expected = sum(len(check["expected"]) for check in checks if isinstance(check.get("expected"), list))
+            observed = sum(
+                len(check.get("actual") or [])
+                for check in checks
+                if isinstance(check.get("expected"), list) and isinstance(check.get("actual"), list)
+            )
+            detail = f"{observed}/{expected} variables"
+        elif any((check.get("evidence") or {}).get("expected_path_count") for check in checks):
+            expected = sum((check.get("evidence") or {}).get("expected_path_count", 0) for check in checks)
+            found = sum((check.get("evidence") or {}).get("path_count", 0) for check in checks)
+            detail = f"{found}/{expected} files"
+        else:
+            detail = f"{len(checks)}/{len(checks)} checks"
+        return f"{'[ok]' if ascii_mode else '✅'} {detail}"
+
+    if any(check["state"] == "missing" for check in checks):
+        return f"{'[fail]' if ascii_mode else '❌'} none"
+    if any(check["state"] == "partial" for check in checks):
+        return f"{'[warn]' if ascii_mode else '🟡'} partial"
+    if any(check["state"] in {"value_mismatch", "pr_open"} for check in checks):
+        return f"{'[warn]' if ascii_mode else '🟡'} " + (
+            "open PR" if any(check["state"] == "pr_open" for check in checks) else "mismatch"
+        )
+    return f"{'[warn]' if ascii_mode else '🟡'} gap"
+
+
+def _guide(report: dict[str, Any], scope: str, phase: int) -> str:
+    phases = report.get("phases", {})
+    definitions = phases.get(scope, []) if isinstance(phases, dict) and scope != "environment" else (
+        phases.get("hub", []) + phases.get("workload", [])
+        if isinstance(phases, dict)
+        else []
+    )
+    match = next((item for item in definitions if item["phase"] == phase), None)
+    if not match:
+        return ""
+    guide = match["guide"]
+    return f"{guide['document']} → {guide['heading']}"
+
+
+def _open_pr_fix(
+    check: dict[str, Any], pulls: list[dict[str, Any]]
+) -> str | None:
+    if not isinstance(pulls, list):
+        return None
+    fixes = []
+    for pull in pulls:
+        if not isinstance(pull, dict) or pull.get("classification", {}).get("value") != "open":
+            continue
+        repository_value = pull.get("repository", "")
+        repository = (
+            repository_value.get("value", "")
+            if isinstance(repository_value, dict)
+            else repository_value
+        )
+        if repository != check.get("repository"):
+            continue
+        changed = pull.get("changed_files", [])
+        if any(
+            path == check.get("path") or path.startswith(f"{check.get('path')}/")
+            for path in changed
+        ):
+            number = pull.get("number")
+            short_repo = repository.removeprefix("CCI-MOC/")
+            fixes.append(f"{short_repo}#{number}")
+    if fixes:
+        return "fix in open PR " + ", ".join(sorted(fixes))
+    return None
+
+
+def _status_command(report: dict[str, Any], suffix: str) -> str:
+    name = report["environment"]["name"]
+    if report.get("scope") == "workload":
+        workload = (report["environment"].get("workload_clusters") or ["workload0"])[0]
+        short = workload.removeprefix(f"{name}-")
+        return f"moc-env status-workload {name} --workload {short} {suffix}".strip()
+    return f"moc-env status {name} {suffix}".strip()
+
+
+def _source_line(report: dict[str, Any]) -> str:
+    metadata = report.get("metadata") or {}
+    parts = []
+    for source in metadata.get("sources", []):
+        label = f"{source['repository'].removeprefix('CCI-MOC/')}@{source['sha'][:7]}"
+        if source.get("ref") != "main":
+            label += f"@{source['ref']}"
+        parts.append(label)
+    sources = "  ".join(parts)
+    issue = next((check for check in report["checks"] if check["id"] == "request.issue"), None)
+    if issue:
+        number = report["environment"].get("issue_number")
+        state = issue.get("actual")
+        sources += f"  issue #{number} ({state})"
+    return sources or "-"
+
+
+def _detail_url(check: dict[str, Any]) -> str | None:
+    if check.get("state") not in {"missing", "unknown"} or "/" not in check["path"]:
+        return check.get("url")
+    parent = check["path"].rsplit("/", 1)[0]
+    return f"https://github.com/{check['repository']}/tree/{check['ref']}/{parent}"
+
+
+def _plain_rows(value: Any) -> list[tuple[str, str]]:
+    if isinstance(value, dict):
+        return [(str(key), _value(item)) for key, item in value.items()]
+    if isinstance(value, list):
+        return [(f"[{index}]", _value(item)) for index, item in enumerate(value)]
+    return [("value", _value(value))]
+
+
+def _plain_value(value: Any) -> str:
+    if value is None:
+        return "-"
+    if isinstance(value, dict):
+        return ", ".join(f"{key}={_plain_value(item)}" for key, item in value.items())
+    if isinstance(value, list):
+        return ", ".join(_plain_value(item) for item in value)
+    return str(value)
+
+
+def _detail_section(check: dict[str, Any], ascii_mode: bool) -> list[str]:
+    expected = check.get("expected")
+    observed = check.get("actual")
+    if isinstance(expected, dict) and isinstance(observed, dict):
+        keys = list(dict.fromkeys((*expected, *observed)))
+        rows = [(key, expected.get(key), observed.get(key)) for key in keys]
+    elif isinstance(expected, list) and isinstance(observed, list):
+        rows = [
+            (f"[{index}]", value, observed[index] if index < len(observed) else None)
+            for index, value in enumerate(expected)
+        ]
+    else:
+        rows = [("value", expected, observed)]
+    width = max([len("Expected")] + [len(name) for name, _, _ in rows]) + 2
+    source = next(
+        (
+            item for item in check.get("_sources", [])
+            if item.get("repository") == check["repository"] and item.get("ref") == check["ref"]
+        ),
+        {},
+    )
+    short_sha = source.get("sha", "")[:7] or "-"
+    lines = [
+        "-" * 100,
+        *_wrap(
+            f"{_symbol(check['state'], ascii_mode)} "
+            f"{check.get('phase_title', 'Check')} / {check['check']}",
+            2,
+        ),
+        *_wrap(f"Finding: {check['reason']}", 2),
+        *_wrap(
+            f"Source: {check['repository']} · {check['path']} @ {short_sha}",
+            2,
+        ),
+        f"  {'Field':<{width}} Expected                       Observed",
+    ]
+    if check.get("id") == "pull_requests":
+        pulls = (check.get("evidence") or {}).get("pull_requests", [])
+        by_repository: dict[str, int] = {}
+        for pull in pulls:
+            repository_value = pull.get("repository", "")
+            repository = (
+                repository_value.get("value", "")
+                if isinstance(repository_value, dict)
+                else repository_value
+            )
+            by_repository[repository] = by_repository.get(repository, 0) + 1
+        lines.append("  Pull requests by repository:")
+        for repository, count in sorted(by_repository.items()):
+            lines.append(f"    {repository}: {count}")
+    for name, expected_value, observed_value in rows:
+        lines.extend(
+            _wrap(
+                f"{name:<{width}} {_plain_value(expected_value):<30} {_plain_value(observed_value)}",
+                2,
+            )
+        )
+    url = _detail_url(check)
+    if url:
+        lines.extend(_wrap(f"URL: {url}", 2))
+    return lines
+
+
+def render_text(
+    report: dict[str, Any],
+    details: bool = False,
+    ascii_mode: bool = False,
+) -> str:
     environment = report["environment"]
     scope = report.get("scope", "environment")
-    workload_clusters = environment.get("workload_clusters", [])
-    workload_summary = (
-        ", ".join(workload_clusters)
-        if workload_clusters
-        else environment.get(
-            "workload_notice",
-            "No workload cluster is declared for this hub.",
-        )
+    dash = "[--]" if ascii_mode else "–"
+    generated = (report.get("metadata") or {}).get("generated_at", "")
+    generated_text = generated.replace("T", " ").replace("Z", " UTC")
+    non_main = [
+        source for source in (report.get("metadata") or {}).get("sources", [])
+        if source.get("ref") != "main"
+    ]
+    title_scope = (
+        "hub + workload"
+        if scope == "environment" and environment.get("workload_clusters")
+        else ("hub" if scope == "environment" else scope)
     )
-    lines = [
-        "=" * 78,
-        f"{_scope_title(scope)}: {environment['name']}",
-        "=" * 78,
-        *_metadata_header_lines(report),
-        f"Hub cluster:      {environment['infra_cluster']}",
-        f"Workload clusters: {workload_summary}",
-        f"Domain:           {environment['domain']}",
-        f"Overall:          {report['overall_state']}",
-        f"Advisory gaps:    {report['summary']['advisory_count']}",
-        "",
-        "State summary:",
+    first = (
+        f"{environment['name']} · {title_scope} · repo config as of {generated_text}"
+    )
+    if non_main:
+        first += " · NOT A REPORT ON MAIN"
+    lines = [first, *_wrap(_source_line(report)), ""]
+
+    checks = report["checks"]
+    pass_states = {"declared_in_main", "requested", "pr_merged"}
+    passing = sum(check["state"] in pass_states for check in checks)
+    blocking = [
+        check for check in checks
+        if check["severity"] == "blocking"
+        and check["state"] not in pass_states
+        and check["state"] != "unknown"
     ]
-    for state, count in report["summary"]["state_counts"].items():
-        lines.append(f"  {_state(state)}  {count}")
-
-    lines.extend(["", "Stage summary:"])
-    for stage in report["summary"]["stages"]:
-        states = ", ".join(
-            f"{state}={count}"
-            for state, count in stage["state_counts"].items()
-        )
-        lines.append(f"  {stage['stage']} ({stage['check_count']} checks): {states}")
-
-    lines.extend(["", "Detailed checks:"])
-    for check in report["checks"]:
-        summary_lines = _structured_summary(check)
-        lines.extend(
-            [
-                "-" * 78,
-                f"[{_state(check['state'])}; {check['severity']}] "
-                f"{check['stage']} / {check['check']}",
-                f"  Why checked:  {check['reason']}",
-                f"  Repository:   {check['repository']}",
-                f"  Path:         {check['path']} @ {check['ref']}",
-            ]
-        )
-        if summary_lines is not None:
-            lines.extend(summary_lines)
-        else:
-            lines.extend(
-                [
-                    f"  Expected:     {_text_value(check['expected'], 16)}",
-                    f"  Present:      {_text_value(check.get('present'), 16)}",
-                    f"  Missing:      {_text_value(check.get('missing'), 16)}",
-                    f"  Actual:       {_text_value(check['actual'], 16)}",
-                ]
-            )
-        if check.get("url"):
-            lines.append(f"  URL:          {check['url']}")
-        check_rule = (check.get("evidence") or {}).get("check_rule")
-        if check_rule:
-            lines.append(f"  Check rule:   {check_rule}")
-        lines.append("")
-
-    followups = [
-        check
-        for check in report["checks"]
-        if check["state"] in {"partial", "missing", "pr_open"}
+    advisories = [
+        check for check in checks
+        if check["severity"] == "advisory"
+        and check["state"] not in pass_states
+        and check["state"] != "unknown"
     ]
-    lines.extend(["Suggested next actions:", ""])
-    if not followups:
-        lines.append("No configuration gaps were detected by the current repository-state checks.")
+    unknown = [check for check in checks if check["state"] == "unknown"]
+    scope_blocking = {
+        cluster: sum(check["scope"] == "workload" for check in blocking)
+        for cluster in environment.get("workload_clusters", [])
+    }
+    scope_text = (
+        f" (workload {sum(scope_blocking.values())})"
+        if scope_blocking and scope == "environment"
+        else ""
+    )
+    result = (
+        f"RESULT: {len(blocking)} blocking gaps{scope_text} · "
+        f"{len(advisories)} advisories · {passing} of {len(checks)} checks pass"
+    )
+    lines.extend(_wrap(result))
+    if unknown:
+        reasons = "; ".join(f"{check['check']}: {check['reason']}" for check in unknown)
+        lines.append(f"UNKNOWN: {textwrap.shorten(reasons, width=92, placeholder='…')}")
+    lines.append("")
+
+    columns: list[tuple[str, list[dict[str, Any]]]] = []
+    if scope in {"environment", "hub"}:
+        columns.append((f"HUB {environment['infra_cluster']}", [c for c in checks if c["scope"] == "hub"]))
+    if scope in {"environment", "workload"}:
+        for workload in environment.get("workload_clusters", []):
+            columns.append((f"WORKLOAD {workload}", [c for c in checks if c["scope"] == "workload"]))
+    phase_rows = _phase_rows(report, scope)
+    labels = [f"{phase} {title}" for phase, title in phase_rows]
+    phase_width = min(max([len("PHASE")] + [len(label) for label in labels]) + 2, 29)
+    cell_width = min(max([len(header) for header, _ in columns] + [14]) + 2, 32)
+    lines.append(f"{'PHASE':<{phase_width}}" + "".join(f"{header:<{cell_width}}" for header, _ in columns))
+    for phase, title in phase_rows:
+        label = f"{phase} {title}"
+        label = textwrap.shorten(label, width=phase_width, placeholder="…")
+        cells = []
+        for _header, scope_checks in columns:
+            phase_checks = [check for check in scope_checks if check.get("phase") == phase]
+            cell = _phase_cell(phase_checks, ascii_mode)
+            cells.append(textwrap.shorten(cell, width=cell_width, placeholder="…"))
+        lines.append(f"{label:<{phase_width}}" + "".join(f"{cell:<{cell_width}}" for cell in cells))
+    lines.append("")
+
+    lines.append("NEXT")
+    gaps = [*blocking, *advisories]
+    gaps.sort(key=lambda check: (check["severity"] != "blocking", check.get("phase", 0)))
+    if not gaps:
+        lines.append("Nothing to do in the repositories this tool reads.")
     else:
-        lines.append("These actions are derived directly from the missing or partial checks above.")
-        lines.append("")
-        for priority, check in enumerate(followups, start=1):
-            lines.extend(
-                [
-                    f"{priority}. [{_state(check['state'])}] "
-                    f"{check['stage']} / {check['check']}",
-                    f"   Gap: {_followup_gap(check)}",
-                    f"   Next: {check['next_action']}",
-                ]
-            )
+        open_pulls = [
+            pull
+            for check in checks
+            for pull in (check.get("evidence") or {}).get("pull_requests", [])
+            if isinstance(pull, dict)
+            and pull.get("classification", {}).get("value") == "open"
+        ]
+        action_numbers: dict[str, int] = {}
+        for number, check in enumerate(gaps, start=1):
+            action_numbers.setdefault(check["id"], number)
+        for number, check in enumerate(gaps, start=1):
+            action = check.get("next_action") or f"Resolve {check['check']}."
+            repository = check["repository"].removeprefix("CCI-MOC/")
+            after = [str(action_numbers[item]) for item in check.get("blocked_by", []) if item in action_numbers]
+            suffix = f" (after {', '.join(after)})" if after else ""
+            pr_fix = _open_pr_fix(check, open_pulls)
+            if pr_fix:
+                suffix += f" · {pr_fix}"
+            lines.extend(_wrap(f"{number}. [{repository}] {action}{suffix}", 2))
+            guide = _guide(report, check["scope"], check.get("phase", 0))
+            if guide:
+                lines.extend(_wrap(f"guide: {guide}", 7))
 
-    lines.extend(["", "Not checked — verify by hand:", ""])
-    manual_checks = report.get("not_checked", [])
-    if not manual_checks:
+    lines.extend(["", "NOT CHECKED — verify by hand:"])
+    titles = [entry["title"] for entry in report.get("not_checked", [])]
+    if titles:
+        lines.extend(_wrap("; ".join(titles), 2))
+    else:
         lines.append("None.")
-    else:
-        for priority, entry in enumerate(manual_checks, start=1):
-            where = entry["where"]
-            lines.extend(
-                [
-                    f"{priority}. [Phase {entry['phase']}] {entry['title']}",
-                    f"   Why: {entry['why']}",
-                    f"   Documented at: {where['document']} — {where['heading']}",
-                ]
-            )
 
     lines.extend(
         [
-            "=" * 78,
-            "Scope: repository configuration state only; this report does not",
-            "claim live OpenShift or Argo CD health.",
-            "=" * 78,
+            "",
+            *_wrap(f"Details:  {_status_command(report, '--details')}"),
+            *_wrap(f"Markdown: {_status_command(report, '--format markdown --output report.md')}"),
         ]
     )
+
+    if details:
+        lines.extend(["", "DETAILED CHECKS", ""])
+        for check in checks:
+            lines.extend(_detail_section({**check, "_sources": (report.get("metadata") or {}).get("sources", [])}, ascii_mode))
     return "\n".join(lines).rstrip() + "\n"
 
 

@@ -142,6 +142,31 @@ def _add_status_arguments(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help="Do not inspect pull requests",
     )
+    parser.add_argument(
+        "--ref",
+        action="append",
+        default=[],
+        metavar="REPO=REF",
+        help=(
+            "Read a repository at a branch or pull-request head, for example "
+            "--ref oac-apps=pull/246/head (repeatable)"
+        ),
+    )
+    parser.add_argument(
+        "--details",
+        action="store_true",
+        help="Append full per-check findings after the one-screen summary",
+    )
+    parser.add_argument(
+        "--ascii",
+        action="store_true",
+        help="Replace emoji with ASCII markers such as [ok] and [fail]",
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Show progress on stderr even when stderr is not a terminal",
+    )
     _add_credential_arguments(parser)
     parser.add_argument(
         "--output",
@@ -229,7 +254,11 @@ def _render_status_report(args: argparse.Namespace, report: dict[str, Any]) -> i
     elif args.format == "markdown":
         rendered = render_markdown(report)
     else:
-        rendered = render_text(report)
+        rendered = render_text(
+            report,
+            details=args.details,
+            ascii_mode=args.ascii,
+        )
 
     if args.output:
         output_path = Path(args.output)
@@ -249,6 +278,21 @@ def _render_status_report(args: argparse.Namespace, report: dict[str, Any]) -> i
     else:
         print(rendered, end="")
     return 0
+
+
+def _print_progress_line(
+    step: int,
+    stage: str,
+    action: str,
+    repository: str,
+    path: str,
+    verbose: bool = False,
+) -> None:
+    if verbose or sys.stderr.isatty():
+        print(
+            f"▶ Step {step}: {stage} — {action} ({repository}/{path})",
+            file=sys.stderr,
+        )
 
 
 _CREDENTIAL_VALUE_OPTIONS = {
@@ -804,13 +848,7 @@ def main(
         ) -> None:
             nonlocal stage_step
             stage_step += 1
-            print(
-                f"▶ Step {stage_step}: {stage}\n"
-                f"    Action:     {action}\n"
-                f"    Repository: {repository}\n"
-                f"    Source:     {path}",
-                file=sys.stderr,
-            )
+            _print_progress_line(stage_step, stage, action, repository, path)
 
         try:
             observation = read_chart_values_reference_observation(
@@ -853,13 +891,7 @@ def main(
         ) -> None:
             nonlocal stage_step
             stage_step += 1
-            print(
-                f"▶ Step {stage_step}: {stage}\n"
-                f"    Action:     {action}\n"
-                f"    Repository: {repository}\n"
-                f"    Source:     {path}",
-                file=sys.stderr,
-            )
+            _print_progress_line(stage_step, stage, action, repository, path)
 
         try:
             observation = read_infra_observation(
@@ -905,13 +937,7 @@ def main(
         ) -> None:
             nonlocal stage_step
             stage_step += 1
-            print(
-                f"▶ Step {stage_step}: {stage}\n"
-                f"    Action:     {action}\n"
-                f"    Repository: {repository}\n"
-                f"    Source:     {path}",
-                file=sys.stderr,
-            )
+            _print_progress_line(stage_step, stage, action, repository, path)
 
         try:
             infra_observation = read_infra_observation(
@@ -981,13 +1007,7 @@ def main(
         ) -> None:
             nonlocal stage_step
             stage_step += 1
-            print(
-                f"▶ Step {stage_step}: {stage}\n"
-                f"    Action:     {action}\n"
-                f"    Repository: {repository}\n"
-                f"    Source:     {path}",
-                file=sys.stderr,
-            )
+            _print_progress_line(stage_step, stage, action, repository, path)
 
         try:
             issue = read_issue_observation(
@@ -1085,13 +1105,7 @@ def main(
         ) -> None:
             nonlocal stage_step
             stage_step += 1
-            print(
-                f"▶ Step {stage_step}: {stage}\n"
-                f"    Action:     {action}\n"
-                f"    Repository: {repository}\n"
-                f"    Source:     {path}",
-                file=sys.stderr,
-            )
+            _print_progress_line(stage_step, stage, action, repository, path)
 
         try:
             infra_observation = read_infra_observation(
@@ -1176,13 +1190,7 @@ def main(
         ) -> None:
             nonlocal stage_step
             stage_step += 1
-            print(
-                f"▶ Step {stage_step}: {stage}\n"
-                f"    Action:     {action}\n"
-                f"    Repository: {repository}\n"
-                f"    Source:     {path}",
-                file=sys.stderr,
-            )
+            _print_progress_line(stage_step, stage, action, repository, path)
 
         try:
             infra_observation = read_infra_observation(
@@ -1267,13 +1275,7 @@ def main(
         ) -> None:
             nonlocal stage_step
             stage_step += 1
-            print(
-                f"▶ Step {stage_step}: {stage}\n"
-                f"    Action:     {action}\n"
-                f"    Repository: {repository}\n"
-                f"    Source:     {path}",
-                file=sys.stderr,
-            )
+            _print_progress_line(stage_step, stage, action, repository, path)
 
         try:
             infra_observation = read_infra_observation(
@@ -1355,13 +1357,7 @@ def main(
         ) -> None:
             nonlocal stage_step
             stage_step += 1
-            print(
-                f"▶ Step {stage_step}: {stage}\n"
-                f"    Action:     {action}\n"
-                f"    Repository: {repository}\n"
-                f"    Source:     {path}",
-                file=sys.stderr,
-            )
+            _print_progress_line(stage_step, stage, action, repository, path)
 
         try:
             issue = read_issue_observation(
@@ -1441,7 +1437,17 @@ def main(
 
         environment = Environment(name=args.environment, issue_number=issue_number)
         github_token = _resolve_github_token(args)
-        client = GitHubClient(token=github_token, timeout=args.timeout)
+        repository_refs = {}
+        for repository_ref in args.ref:
+            repository, separator, ref = repository_ref.partition("=")
+            if not separator or not repository or not ref:
+                parser.error("--ref must have the form REPO=REF")
+            repository_refs[f"CCI-MOC/{repository}"] = ref
+        client = GitHubClient(
+            token=github_token,
+            timeout=args.timeout,
+            refs=repository_refs,
+        )
         try:
             environment_rows = list_environments(client)
             known_names = sorted(
@@ -1498,12 +1504,13 @@ def main(
         ) -> None:
             nonlocal stage_step
             stage_step += 1
-            print(
-                f"▶ Step {stage_step}: {stage}\n"
-                f"    Action:     {action}\n"
-                f"    Repository: {repository}\n"
-                f"    Source:     {path}",
-                file=sys.stderr,
+            _print_progress_line(
+                stage_step,
+                stage,
+                action,
+                repository,
+                path,
+                verbose=args.verbose,
             )
 
         checker = StatusChecker(

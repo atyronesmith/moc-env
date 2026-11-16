@@ -14,7 +14,12 @@ import yaml
 
 from moc_env import cli
 
-from fakes import FakeGitHubClient, MultiWorkloadFakeGitHubClient
+from fakes import (
+    CrossRepoFakeGitHubClient,
+    FakeGitHubClient,
+    FullyConfiguredFakeGitHubClient,
+    MultiWorkloadFakeGitHubClient,
+)
 
 
 class CliDispatchTest(unittest.TestCase):
@@ -147,13 +152,66 @@ class CliDispatchTest(unittest.TestCase):
 
     def test_status_text_dispatch(self) -> None:
         exit_code, stdout, stderr = self.run_cli(
-            ["status", "bu-ist-demo", "--format", "text", "--no-prs"]
+            ["status", "bu-ist-demo", "--format", "text", "--no-prs", "--verbose"]
         )
         self.assertEqual(exit_code, 0)
-        self.assertIn("Environment configuration status: bu-ist-demo", stdout)
+        self.assertIn("bu-ist-demo · hub + workload ·", stdout)
         self.assertIn("Step 1:", stderr)
-        self.assertIn("Step 8:", stderr)
-        self.assertNotIn("Step 9:", stderr)
+        self.assertIn("Step 14:", stderr)
+        self.assertNotIn("Step 15:", stderr)
+        self.assertNotIn("Action:", stderr)
+        self.assertLessEqual(len(stdout.splitlines()), 60)
+
+    def test_text_golden_files(self) -> None:
+        fixed_clock = lambda: datetime(
+            2026, 11, 16, 12, 34, 56, tzinfo=timezone.utc
+        )
+        cases = (
+            (
+                ["status", "bu-ist-demo", "--format", "text", "--no-prs"],
+                FakeGitHubClient,
+                "environment-gaps.txt",
+            ),
+            (
+                ["status", "bu-ist-demo", "--format", "text", "--no-prs"],
+                FullyConfiguredFakeGitHubClient,
+                "fully-configured.txt",
+            ),
+            (
+                ["status", "dizzy", "--format", "text", "--no-prs"],
+                MultiWorkloadFakeGitHubClient,
+                "hub-no-workload.txt",
+            ),
+            (
+                ["status", "bu-ist-demo", "--format", "text", "--no-prs", "--details"],
+                FakeGitHubClient,
+                "details.txt",
+            ),
+            (
+                ["status", "bu-ist-demo", "--format", "text", "--no-prs", "--ascii"],
+                FakeGitHubClient,
+                "ascii.txt",
+            ),
+        )
+        for arguments, client_class, filename in cases:
+            with self.subTest(filename=filename):
+                exit_code, stdout, _ = self.run_cli(
+                    arguments,
+                    client_class=client_class,
+                    clock=fixed_clock,
+                )
+                golden = Path(__file__).parent / "fixtures" / "text" / filename
+                self.assertEqual(exit_code, 0)
+                self.assertEqual(stdout, golden.read_text(encoding="utf-8"))
+
+    def test_open_pull_request_fix_is_shown_with_action(self) -> None:
+        exit_code, stdout, _ = self.run_cli(
+            ["status", "bu-ist-demo", "--format", "text"],
+            client_class=CrossRepoFakeGitHubClient,
+        )
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("fix in open PR oac-apps#237", stdout)
 
     def test_hub_status_json_dispatch(self) -> None:
         exit_code, stdout, _ = self.run_cli(
@@ -166,16 +224,48 @@ class CliDispatchTest(unittest.TestCase):
         self.assertIn("Hub image variables", checks)
         self.assertNotIn("Workload hosted-cluster values", checks)
 
+    def test_status_ref_selection_and_header(self) -> None:
+        calls = []
+
+        class RefTrackingClient(CrossRepoFakeGitHubClient):
+            def get_tree(self, repository: str, ref: str = "main"):
+                ref = self.ref_for(repository)
+                calls.append((repository, ref))
+                return super().get_tree(repository, ref)
+
+        exit_code, stdout, _ = self.run_cli(
+            [
+                "status",
+                "bu-ist-demo",
+                "--format",
+                "text",
+                "--no-prs",
+                "--ref",
+                "oac-apps=pull/246/head",
+            ],
+            client_class=RefTrackingClient,
+        )
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn(("CCI-MOC/oac-apps", "pull/246/head"), calls)
+        self.assertIn("NOT A REPORT ON MAIN", stdout)
+        self.assertIn("oac-apps@3333333@pull/246/head", stdout)
+
     def test_work_status_text_dispatch(self) -> None:
         exit_code, stdout, stderr = self.run_cli(
-            ["status-workload", "bu-ist-demo", "--format", "text", "--no-prs"]
+            [
+                "status-workload",
+                "bu-ist-demo",
+                "--format",
+                "text",
+                "--no-prs",
+                "--verbose",
+            ]
         )
         self.assertEqual(exit_code, 0)
-        self.assertIn(
-            "Workload environment configuration status: bu-ist-demo", stdout
-        )
-        self.assertIn("bu-ist-demo-workload0 host inventory", stdout)
-        self.assertNotIn("Hub image variables", stdout)
+        self.assertIn("bu-ist-demo · workload ·", stdout)
+        self.assertIn("WORKLOAD bu-ist-demo-workload0", stdout)
+        self.assertNotIn("HUB bu-ist-demo-infra", stdout)
         self.assertIn("Step 1:", stderr)
 
     def test_status_reports_every_discovered_workload(self) -> None:
@@ -208,8 +298,8 @@ class CliDispatchTest(unittest.TestCase):
             client_class=MultiWorkloadFakeGitHubClient,
         )
         self.assertEqual(exit_code, 0)
-        self.assertIn("No workload cluster is declared for this hub.", stdout)
-        self.assertNotIn("workload0", stdout)
+        self.assertIn("dizzy · hub ·", stdout)
+        self.assertNotIn("WORKLOAD", stdout)
 
     def test_status_workload_accepts_short_and_full_names(self) -> None:
         for workload in ("workload1", "oac-dev-workload1"):
@@ -413,11 +503,7 @@ class CliDispatchTest(unittest.TestCase):
         document = yaml.safe_load(stdout)
         self.assertEqual(document["kind"], "InfraCluster")
         self.assertEqual(document["metadata"]["name"]["value"], "bu-ist-demo-infra")
-        self.assertIn("Step 1:", stderr)
-        self.assertIn("Step 3:", stderr)
-        self.assertIn("Step 4:", stderr)
-        self.assertIn("Step 5:", stderr)
-        self.assertNotIn("Step 6:", stderr)
+        self.assertEqual(stderr, "")
 
     def test_export_infra_dispatch_and_output_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -442,11 +528,7 @@ class CliDispatchTest(unittest.TestCase):
             document["metadata"]["name"]["value"],
             "bu-ist-demo-workload0",
         )
-        self.assertIn("Step 1:", stderr)
-        self.assertIn("Step 4:", stderr)
-        self.assertIn("Step 5:", stderr)
-        self.assertIn("Step 6:", stderr)
-        self.assertNotIn("Step 7:", stderr)
+        self.assertEqual(stderr, "")
 
     def test_export_workload_dispatch_and_output_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
