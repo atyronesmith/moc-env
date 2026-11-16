@@ -661,6 +661,21 @@ def render_text(report: dict[str, Any]) -> str:
                 ]
             )
 
+    lines.extend(["", "Not checked — verify by hand:", ""])
+    manual_checks = report.get("not_checked", [])
+    if not manual_checks:
+        lines.append("None.")
+    else:
+        for priority, entry in enumerate(manual_checks, start=1):
+            where = entry["where"]
+            lines.extend(
+                [
+                    f"{priority}. [Phase {entry['phase']}] {entry['title']}",
+                    f"   Why: {entry['why']}",
+                    f"   Documented at: {where['document']} — {where['heading']}",
+                ]
+            )
+
     lines.extend(
         [
             "=" * 78,
@@ -968,6 +983,21 @@ def render_markdown(report: dict[str, Any]) -> str:
             lines.append(
                 f"| {priority} | {check['stage']} / {check['check']} | {gap} "
                 f"| {_markdown_inline(check['next_action'])} |"
+            )
+
+    lines.extend(["", "## Not checked — verify by hand", ""])
+    manual_checks = report.get("not_checked", [])
+    if not manual_checks:
+        lines.append("None.")
+    else:
+        for entry in manual_checks:
+            where = entry["where"]
+            lines.extend(
+                [
+                    f"- **{entry['title']}** (phase {entry['phase']})",
+                    f"  - Why: {entry['why']}",
+                    f"  - Documented at: `{where['document']}` — `{where['heading']}`",
+                ]
             )
 
     lines.extend(

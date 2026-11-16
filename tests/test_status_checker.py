@@ -175,6 +175,30 @@ class StatusCheckerTest(unittest.TestCase):
         for field in ("phase", "phase_title", "blocked_by", "current_phase"):
             self.assertIn(field, rendered)
 
+    def test_not_checked_entries_are_scoped_and_cluster_specific(self) -> None:
+        checker = StatusChecker(FakeGitHubClient(), include_prs=False)
+        environment = Environment(name="bu-ist-demo", issue_number=666)
+
+        hub = checker.run_hub(environment).to_dict()
+        workload = checker.run_workload(environment).to_dict()
+
+        self.assertTrue(hub["not_checked"])
+        self.assertEqual(workload["not_checked"], [])
+        for entry in hub["not_checked"]:
+            with self.subTest(entry=entry["title"]):
+                self.assertIn("bu-ist-demo-infra", entry["title"])
+                self.assertNotIn("<cluster>", entry["title"])
+                self.assertNotIn("<cluster>", entry["why"])
+                self.assertEqual(
+                    entry["where"]["document"],
+                    "docs/infra-cluster-deployment.md",
+                )
+                self.assertIn(entry["where"]["heading"], {
+                    "Infrastructure Configuration",
+                    "Cluster Deployment",
+                    "Cluster Configuration",
+                })
+
     def test_environment_name_that_already_ends_in_infra_is_not_suffixed_again(self) -> None:
         environment = Environment(name="oac-prod-infra")
         self.assertEqual(environment.infra_cluster, "oac-prod-infra")

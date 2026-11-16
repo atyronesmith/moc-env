@@ -48,6 +48,25 @@ class CheckPhase:
     blocked_by: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class NotChecked:
+    """A documented deployment step that repository state cannot prove."""
+
+    scope: str
+    phase: int
+    title: str
+    why: str
+    where: PhaseGuide
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "title": self.title,
+            "why": self.why,
+            "where": self.where.to_dict(),
+            "phase": self.phase,
+        }
+
+
 _INFRASTRUCTURE_CONFIGURATION = PhaseGuide(
     DEPLOYMENT_GUIDE_PATH, "Infrastructure Configuration"
 )
@@ -107,6 +126,75 @@ WORKLOAD_PHASES: tuple[DeploymentPhase, ...] = (
     DeploymentPhase(
         5,
         "Merged GitOps changes",
+        _CLUSTER_CONFIGURATION,
+    ),
+)
+
+NOT_CHECKED: tuple[NotChecked, ...] = (
+    NotChecked(
+        "hub",
+        1,
+        "Configure cluster and storage networks and firewalls for <cluster>",
+        "The four repositories read by this tool do not describe the switch, "
+        "network, or firewall state required for <cluster>.",
+        _INFRASTRUCTURE_CONFIGURATION,
+    ),
+    NotChecked(
+        "hub",
+        2,
+        "Create internal DNS records for <cluster> api, api-int, and *.apps",
+        "The tool does not query the DNS service or read moc-dns, so it cannot "
+        "prove that the records for <cluster> exist.",
+        _CLUSTER_DEPLOYMENT,
+    ),
+    NotChecked(
+        "hub",
+        2,
+        "Store the <cluster> SSH key and kubeadmin credentials in AWS Secrets Manager",
+        "Secrets Manager is outside the public repositories read by this tool, "
+        "so it cannot verify cluster/<cluster>/sshkey or "
+        "cluster/<cluster>/kubeadmin.",
+        _CLUSTER_DEPLOYMENT,
+    ),
+    NotChecked(
+        "hub",
+        2,
+        "Place the pull secret and SSH key under hub-images/credentials/<cluster>",
+        "The documented credential directory is intentionally not committed, "
+        "so repository state cannot prove that its files exist for <cluster>.",
+        _CLUSTER_DEPLOYMENT,
+    ),
+    NotChecked(
+        "hub",
+        3,
+        "Run create_agent_install_media and copy the <cluster> ISO to the bastion host",
+        "Running the playbook and copying the generated discovery ISO leave no "
+        "trace that this tool can verify in the four repositories it reads.",
+        _CLUSTER_DEPLOYMENT,
+    ),
+    NotChecked(
+        "hub",
+        5,
+        "Bootstrap Argo CD for <cluster>",
+        "Running setup-gitops.sh and applying the bootstrap Helm template "
+        "changes live cluster state, which this repository-only report cannot "
+        "verify.",
+        _CLUSTER_CONFIGURATION,
+    ),
+    NotChecked(
+        "hub",
+        5,
+        "Complete Pure storage configuration for <cluster>",
+        "Pure storage configuration is documented separately and is not among "
+        "the repositories read by this tool.",
+        _CLUSTER_CONFIGURATION,
+    ),
+    NotChecked(
+        "hub",
+        5,
+        "Complete cluster certificates and external DNS for <cluster>",
+        "The relevant IAM roles and policies are documented separately and are "
+        "not among the repositories read by this tool.",
         _CLUSTER_CONFIGURATION,
     ),
 )
@@ -198,6 +286,20 @@ def phase_definitions(scope: str) -> tuple[DeploymentPhase, ...]:
     if scope == "environment":
         return (*HUB_PHASES, *WORKLOAD_PHASES)
     return ()
+
+
+def not_checked_entries(scope: str, cluster: str) -> list[NotChecked]:
+    """Return manually verifiable steps for one scope and cluster."""
+
+    return [
+        replace(
+            entry,
+            title=entry.title.replace("<cluster>", cluster),
+            why=entry.why.replace("<cluster>", cluster),
+        )
+        for entry in NOT_CHECKED
+        if entry.scope == scope
+    ]
 
 
 def annotate_and_sort_checks(checks: list["CheckResult"]) -> list["CheckResult"]:
