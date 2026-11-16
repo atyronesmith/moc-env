@@ -128,7 +128,7 @@ class CliDispatchTest(unittest.TestCase):
             ["status", "bu-ist-demo", "--format", "text", "--no-prs"]
         )
         self.assertEqual(exit_code, 0)
-        self.assertIn("MOC environment status: bu-ist-demo", stdout)
+        self.assertIn("Environment configuration status: bu-ist-demo", stdout)
         self.assertIn("Step 1:", stderr)
         self.assertIn("Step 6:", stderr)
         self.assertNotIn("Step 7:", stderr)
@@ -149,7 +149,9 @@ class CliDispatchTest(unittest.TestCase):
             ["status-workload", "bu-ist-demo", "--format", "text", "--no-prs"]
         )
         self.assertEqual(exit_code, 0)
-        self.assertIn("MOC workload status: bu-ist-demo", stdout)
+        self.assertIn(
+            "Workload environment configuration status: bu-ist-demo", stdout
+        )
         self.assertIn("bu-ist-demo-workload0 host inventory", stdout)
         self.assertNotIn("Hub image variables", stdout)
         self.assertIn("Step 1:", stderr)
@@ -172,7 +174,7 @@ class CliDispatchTest(unittest.TestCase):
             self.assertEqual(stdout, "")
             self.assertIn(f"wrote markdown report to {output}", stderr)
             report = output.read_text(encoding="utf-8")
-            self.assertIn("# 🛰️ MOC Environment Configuration Status", report)
+        self.assertIn("# Environment configuration status", report)
 
     def test_export_infra_dispatch(self) -> None:
         exit_code, stdout, stderr = self.run_cli(["export-infra", "bu-ist-demo"])

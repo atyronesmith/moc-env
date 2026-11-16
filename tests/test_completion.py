@@ -70,6 +70,22 @@ class CompletionTest(unittest.TestCase):
         self.assertEqual(exit_code, 2)
         self.assertIn("unknown completion mode", stderr)
 
+    def test_hidden_completion_refreshes_an_empty_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            with (
+                patch.dict(os.environ, {"MOC_ENV_CACHE_DIR": temporary_directory}),
+                patch.object(cli, "GitHubClient", FakeGitHubClient),
+            ):
+                cache_path = environment_cache_path()
+                exit_code, stdout, stderr = self.run_cli(
+                    ["__complete-environment", "bu-ist-", "environment"]
+                )
+                self.assertTrue(cache_path.is_file())
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stdout, "bu-ist-demo\n")
+        self.assertEqual(stderr, "")
+
     def test_completion_scripts_are_printed(self) -> None:
         for shell in ("bash", "zsh"):
             with self.subTest(shell=shell):

@@ -107,7 +107,8 @@ The target detects Bash or Zsh from `SHELL`, appends an idempotent completion
 block to the matching startup file, and adds this checkout's `.venv/bin` to
 `PATH`. After sourcing the startup file, run `moc-env` directly; shell
 completion attaches to that first word, which avoids the `uv run` prefix
-problem. Run `moc-env list` once to populate the cache. Run `moc-env` or
+problem. The first environment-name completion refreshes the local cache
+automatically; later Tab presses use that cache. Run `moc-env` or
 `moc-env --help` for a complete command catalog.
 
 Run a hub-scoped repository-status report:
