@@ -1,4 +1,4 @@
-"""Deployment-phase metadata derived from the oac-apps deployment guide."""
+"""Deployment-phase metadata derived from the upstream deployment guides."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ if TYPE_CHECKING:
 
 
 DEPLOYMENT_GUIDE_PATH = "docs/infra-cluster-deployment.md"
+WORKLOAD_DEPLOYMENT_GUIDE_PATH = "docs/workload-cluster-deployment.md"
 
 
 @dataclass(frozen=True)
@@ -74,6 +75,12 @@ _CLUSTER_DEPLOYMENT = PhaseGuide(DEPLOYMENT_GUIDE_PATH, "Cluster Deployment")
 _CLUSTER_CONFIGURATION = PhaseGuide(
     DEPLOYMENT_GUIDE_PATH, "Cluster Configuration"
 )
+_WORKLOAD_INFRASTRUCTURE_CONFIGURATION = PhaseGuide(
+    WORKLOAD_DEPLOYMENT_GUIDE_PATH, "Infrastructure Configuration"
+)
+_WORKLOAD_CLUSTER_CONFIGURATION = PhaseGuide(
+    WORKLOAD_DEPLOYMENT_GUIDE_PATH, "Cluster Deployment and Configuration"
+)
 HUB_PHASES: tuple[DeploymentPhase, ...] = (
     DeploymentPhase(
         1,
@@ -106,27 +113,37 @@ WORKLOAD_PHASES: tuple[DeploymentPhase, ...] = (
     DeploymentPhase(
         1,
         "Host inventory entry in oac-infra",
-        _INFRASTRUCTURE_CONFIGURATION,
+        _WORKLOAD_INFRASTRUCTURE_CONFIGURATION,
     ),
     DeploymentPhase(
         2,
-        "Discovery image and agent inputs",
-        _CLUSTER_DEPLOYMENT,
+        "Obtain the agent discovery ISO from the hub's InfraEnv and publish it on the bastion",
+        _WORKLOAD_INFRASTRUCTURE_CONFIGURATION,
     ),
     DeploymentPhase(
         3,
-        "Hosted-cluster values",
-        _CLUSTER_CONFIGURATION,
+        "Boot nodes with the agent discovery ISO",
+        _WORKLOAD_INFRASTRUCTURE_CONFIGURATION,
     ),
     DeploymentPhase(
         4,
-        "Workload component values",
-        _CLUSTER_CONFIGURATION,
+        "Agents appear in the hub's hardware-inventory namespace",
+        _WORKLOAD_INFRASTRUCTURE_CONFIGURATION,
     ),
     DeploymentPhase(
         5,
-        "Merged GitOps changes",
-        _CLUSTER_CONFIGURATION,
+        "Label and approve agents with update-agents.yaml",
+        _WORKLOAD_INFRASTRUCTURE_CONFIGURATION,
+    ),
+    DeploymentPhase(
+        6,
+        "oac-apps values",
+        _WORKLOAD_CLUSTER_CONFIGURATION,
+    ),
+    DeploymentPhase(
+        7,
+        "Shared-service prerequisites",
+        _WORKLOAD_CLUSTER_CONFIGURATION,
     ),
 )
 
@@ -173,6 +190,30 @@ NOT_CHECKED: tuple[NotChecked, ...] = (
         "verify.",
         _CLUSTER_CONFIGURATION,
     ),
+    NotChecked(
+        "workload",
+        4,
+        "Agents visible in hardware-inventory",
+        "Agent visibility in the hub's hardware-inventory namespace requires "
+        "live cluster state that repository configuration cannot prove.",
+        _WORKLOAD_INFRASTRUCTURE_CONFIGURATION,
+    ),
+    NotChecked(
+        "workload",
+        5,
+        "Agents labelled and approved",
+        "Labelling and approving agents with update-agents.yaml changes live "
+        "hub cluster state that repository configuration cannot prove.",
+        _WORKLOAD_INFRASTRUCTURE_CONFIGURATION,
+    ),
+    NotChecked(
+        "workload",
+        7,
+        "Additional workload prerequisites are not yet documented upstream",
+        "The upstream workload deployment guide lists observability (TBD) and "
+        "?? as open prerequisite items.",
+        _WORKLOAD_CLUSTER_CONFIGURATION,
+    ),
 )
 
 CHECK_PHASES: dict[str, CheckPhase] = {
@@ -203,12 +244,12 @@ CHECK_PHASES: dict[str, CheckPhase] = {
     ),
     "workload.boot_image": CheckPhase(
         2,
-        "Discovery image and agent inputs",
+        "Obtain the agent discovery ISO from the hub's InfraEnv and publish it on the bastion",
         ("workload.inventory", "hub.boot_image"),
     ),
     "workload.agent_labels_inputs": CheckPhase(
-        2,
-        "Discovery image and agent inputs",
+        5,
+        "Label and approve agents with update-agents.yaml",
         ("workload.inventory",),
     ),
     "hub.oidc_client": CheckPhase(
@@ -240,30 +281,30 @@ CHECK_PHASES: dict[str, CheckPhase] = {
         ),
     ),
     "workload.hosted_cluster_values": CheckPhase(
-        3,
-        "Hosted-cluster values",
+        6,
+        "oac-apps values",
         ("hub.hosted_cluster_defaults",),
     ),
     "workload.component_values": CheckPhase(
-        4,
-        "Workload component values",
+        6,
+        "oac-apps values",
         ("workload.hosted_cluster_values",),
     ),
     "hub.pure_storage_realm": CheckPhase(5, "GitOps values and applications in oac-apps", ("hub.hosted_cluster_defaults",)),
-    "workload.pure_storage_realm": CheckPhase(5, "Merged GitOps changes", ("workload.component_values",)),
+    "workload.pure_storage_realm": CheckPhase(7, "Shared-service prerequisites", ("workload.component_values",)),
     "hub.moc_aws_oidc_cluster": CheckPhase(5, "GitOps values and applications in oac-apps", ("hub.hosted_cluster_defaults",)),
-    "workload.moc_aws_oidc_cluster": CheckPhase(5, "Merged GitOps changes", ("workload.component_values",)),
+    "workload.moc_aws_oidc_cluster": CheckPhase(7, "Shared-service prerequisites", ("workload.component_values",)),
     "hub.moc_aws_cert_manager_policy": CheckPhase(5, "GitOps values and applications in oac-apps", ("hub.hosted_cluster_defaults",)),
-    "workload.moc_aws_cert_manager_policy": CheckPhase(5, "Merged GitOps changes", ("workload.component_values",)),
+    "workload.moc_aws_cert_manager_policy": CheckPhase(7, "Shared-service prerequisites", ("workload.component_values",)),
     "hub.moc_aws_hosted_secret_prefix": CheckPhase(5, "GitOps values and applications in oac-apps", ("hub.moc_aws_oidc_cluster",)),
-    "workload.keycloak_oidc_client": CheckPhase(4, "Keycloak OIDC client", ("workload.hosted_cluster_values",)),
+    "workload.keycloak_oidc_client": CheckPhase(7, "Shared-service prerequisites", ("workload.hosted_cluster_values",)),
     "hub.moc_dns_records": CheckPhase(2, "Hub-image inventory entry and group variables", ("hub.image_vars",)),
-    "workload.api_address_network": CheckPhase(3, "Hosted-cluster values", ("workload.hosted_cluster_values",)),
-    "workload.ingress_address_network": CheckPhase(3, "Hosted-cluster values", ("workload.hosted_cluster_values",)),
-    "workload.address_uniqueness": CheckPhase(3, "Hosted-cluster values", ("workload.hosted_cluster_values",)),
-    "workload.dns_base_domain": CheckPhase(3, "Hosted-cluster values", ("workload.hosted_cluster_values",)),
-    "workload.node_pool_hosts": CheckPhase(3, "Hosted-cluster values", ("workload.hosted_cluster_values",)),
-    "workload.gpu_without_hosts": CheckPhase(3, "Hosted-cluster values", ("workload.hosted_cluster_values",)),
+    "workload.api_address_network": CheckPhase(6, "oac-apps values", ("workload.hosted_cluster_values",)),
+    "workload.ingress_address_network": CheckPhase(6, "oac-apps values", ("workload.hosted_cluster_values",)),
+    "workload.address_uniqueness": CheckPhase(6, "oac-apps values", ("workload.hosted_cluster_values",)),
+    "workload.dns_base_domain": CheckPhase(6, "oac-apps values", ("workload.hosted_cluster_values",)),
+    "workload.node_pool_hosts": CheckPhase(6, "oac-apps values", ("workload.hosted_cluster_values",)),
+    "workload.gpu_without_hosts": CheckPhase(6, "oac-apps values", ("workload.hosted_cluster_values",)),
 }
 
 _SCOPE_ORDER = {"hub": 0, "workload": 1, "shared": 2}

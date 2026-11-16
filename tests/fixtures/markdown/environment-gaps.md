@@ -9,29 +9,31 @@ Generated 2026-11-16 12:34:56 UTC · Sources: [CCI-MOC/MOC-issues@1111111](https
 | Phase | HUB bu-ist-demo-infra | WORKLOAD bu-ist-demo-workload0 |
 |---|---:|---:|
 | 1 Host inventory entry in oac-infra | ✅ 1 hosts | ✅ 1 hosts |
-| 2 Hub-image inventory entry and group variables / Discovery image and agent inputs | ✅ 6/6 variables | 🟡 partial |
-| 3 Cluster discovery image published and referenced by the inventory / Hosted-cluster values | 🟡 partial | ⚪ unknown |
-| 4 Keycloak OIDC client / Workload component values | ✅ 1/1 checks | ❌ none |
-| 5 GitOps values and applications in oac-apps / Merged GitOps changes | ❌ none | ✅ 3/3 checks |
+| 2 Hub-image inventory entry and group variables / Obtain the agent discovery ISO from the hub's InfraEnv and publish it on the bastion | ✅ 6/6 variables | 🟡 partial |
+| 3 Cluster discovery image published and referenced by the inventory / Boot nodes with the agent discovery ISO | 🟡 partial | – |
+| 4 Keycloak OIDC client / Agents appear in the hub's hardware-inventory namespace | ✅ 1/1 checks | – |
+| 5 GitOps values and applications in oac-apps / Label and approve agents with update-agents.yaml | ❌ none | ✅ 1/2 variables |
+| 6 oac-apps values | – | ⚪ unknown |
+| 7 Shared-service prerequisites | – | ✅ 3/3 checks |
 
 ## Next actions
 
 1. **oac-infra** — [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml): Generate and publish the parent hub's agent discovery ISO, then replace the generic boot_image_url for every host in the workload cluster group. (after 2)
-   Guide: [docs/infra-cluster-deployment.md → Cluster Deployment](docs/infra-cluster-deployment.md)
+   Guide: [docs/workload-cluster-deployment.md → Infrastructure Configuration](docs/workload-cluster-deployment.md)
 2. **oac-infra** — [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml): Generate and publish a hub-specific discovery ISO, then replace the generic boot_image_url for every host in the hub cluster group.
    Guide: [docs/infra-cluster-deployment.md → Cluster Deployment](docs/infra-cluster-deployment.md)
-3. **oac-apps** — [`hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/tree/main): Create the missing hosted-cluster values file from the closest existing environment; set the cluster name, parent hub, networking, and node pools before adding components. (after 5)
+3. **oac-apps** — [`hosted-clusters/bu-ist-demo-infra/values.yaml`](https://github.com/CCI-MOC/oac-apps/tree/main): Create or complete the hub hosted-cluster defaults file at hosted-clusters/&lt;hub&gt;/values.yaml in CCI-MOC/oac-infra. (after 2)
    Guide: [docs/infra-cluster-deployment.md → Cluster Configuration](docs/infra-cluster-deployment.md)
-4. **oac-apps** — [`values/bu-ist-demo-infra/bu-ist-demo-workload0`](https://github.com/CCI-MOC/oac-apps/tree/main): Create the workload component-values directory, starting with hcp-config.yaml and only the shared components this workload needs. (after 3)
+4. **oac-apps** — [`values/bu-ist-demo-infra`](https://github.com/CCI-MOC/oac-apps/tree/main): Create or complete values/&lt;hub&gt;/hcp-config.yaml in CCI-MOC/oac-infra for hub-wide HCP and secret-selector values. (after 3)
    Guide: [docs/infra-cluster-deployment.md → Cluster Configuration](docs/infra-cluster-deployment.md)
-5. **oac-apps** — [`hosted-clusters/bu-ist-demo-infra/values.yaml`](https://github.com/CCI-MOC/oac-apps/tree/main): Create or complete the hub hosted-cluster defaults file at hosted-clusters/&lt;hub&gt;/values.yaml in CCI-MOC/oac-infra. (after 2)
+5. **oac-apps** — [`values/bu-ist-demo-infra/local-cluster`](https://github.com/CCI-MOC/oac-apps/tree/main): Copy the required local-cluster component files from an existing hub environment and adjust cluster-specific names and addresses. (after 3)
    Guide: [docs/infra-cluster-deployment.md → Cluster Configuration](docs/infra-cluster-deployment.md)
-6. **oac-apps** — [`values/bu-ist-demo-infra`](https://github.com/CCI-MOC/oac-apps/tree/main): Create or complete values/&lt;hub&gt;/hcp-config.yaml in CCI-MOC/oac-infra for hub-wide HCP and secret-selector values. (after 5)
+6. **oac-apps** — [`apps/bu-ist-demo-infra`](https://github.com/CCI-MOC/oac-apps/tree/main): Add Argo CD application manifests for the hub after its hosted-cluster, hub-wide component, and local-cluster values are present, and reference the correct clusters. (after 3, 4, 5)
    Guide: [docs/infra-cluster-deployment.md → Cluster Configuration](docs/infra-cluster-deployment.md)
-7. **oac-apps** — [`values/bu-ist-demo-infra/local-cluster`](https://github.com/CCI-MOC/oac-apps/tree/main): Copy the required local-cluster component files from an existing hub environment and adjust cluster-specific names and addresses. (after 5)
-   Guide: [docs/infra-cluster-deployment.md → Cluster Configuration](docs/infra-cluster-deployment.md)
-8. **oac-apps** — [`apps/bu-ist-demo-infra`](https://github.com/CCI-MOC/oac-apps/tree/main): Add Argo CD application manifests for the hub after its hosted-cluster, hub-wide component, and local-cluster values are present, and reference the correct clusters. (after 5, 6, 7)
-   Guide: [docs/infra-cluster-deployment.md → Cluster Configuration](docs/infra-cluster-deployment.md)
+7. **oac-apps** — [`hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/tree/main): Create the missing hosted-cluster values file from the closest existing environment; set the cluster name, parent hub, networking, and node pools before adding components. (after 3)
+   Guide: [docs/workload-cluster-deployment.md → Cluster Deployment and Configuration](docs/workload-cluster-deployment.md)
+8. **oac-apps** — [`values/bu-ist-demo-infra/bu-ist-demo-workload0`](https://github.com/CCI-MOC/oac-apps/tree/main): Create the workload component-values directory, starting with hcp-config.yaml and only the shared components this workload needs. (after 7)
+   Guide: [docs/workload-cluster-deployment.md → Cluster Deployment and Configuration](docs/workload-cluster-deployment.md)
 
 ## Not checked — verify by hand
 
@@ -40,6 +42,9 @@ Generated 2026-11-16 12:34:56 UTC · Sources: [CCI-MOC/MOC-issues@1111111](https
 - [ ] **Place the pull secret and SSH key under hub-images/credentials/bu-ist-demo-infra** (phase 2) — The documented credential directory is intentionally not committed, so repository state cannot prove that its files exist for bu-ist-demo-infra. Documented at [docs/infra-cluster-deployment.md → Cluster Deployment](docs/infra-cluster-deployment.md).
 - [ ] **Run create_agent_install_media and copy the bu-ist-demo-infra ISO to the bastion host** (phase 3) — Running the playbook and copying the generated discovery ISO leave no trace that this tool can verify in the four repositories it reads. Documented at [docs/infra-cluster-deployment.md → Cluster Deployment](docs/infra-cluster-deployment.md).
 - [ ] **Bootstrap Argo CD for bu-ist-demo-infra** (phase 5) — Running setup-gitops.sh and applying the bootstrap Helm template changes live cluster state, which this repository-only report cannot verify. Documented at [docs/infra-cluster-deployment.md → Cluster Configuration](docs/infra-cluster-deployment.md).
+- [ ] **Agents visible in hardware-inventory** (phase 4) — Agent visibility in the hub's hardware-inventory namespace requires live cluster state that repository configuration cannot prove. Documented at [docs/workload-cluster-deployment.md → Infrastructure Configuration](docs/workload-cluster-deployment.md).
+- [ ] **Agents labelled and approved** (phase 5) — Labelling and approving agents with update-agents.yaml changes live hub cluster state that repository configuration cannot prove. Documented at [docs/workload-cluster-deployment.md → Infrastructure Configuration](docs/workload-cluster-deployment.md).
+- [ ] **Additional workload prerequisites are not yet documented upstream** (phase 7) — The upstream workload deployment guide lists observability (TBD) and ?? as open prerequisite items. Documented at [docs/workload-cluster-deployment.md → Cluster Deployment and Configuration](docs/workload-cluster-deployment.md).
 
 ## Details
 
@@ -276,6 +281,21 @@ Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com
 
 </details>
 
+<details open>
+<summary>🟡 partial · blocking — bu-ist-demo-workload0 boot image</summary>
+
+Finding: A boot image URL is present, but the workload is still on the generic discovery.iso rather than the expected `bu-ist-demo-infra-agent-discovery.iso`.
+
+Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml) @ 2222222
+
+Status rule: The workload boot-image filename may contain the workload name `bu-ist-demo-workload0`, its oac-shortened name, the parent hub name `bu-ist-demo-infra`, or the hub's oac-shortened name. Unrecognized names are advisory because naming is not consistent across environments; generic `discovery.iso` remains a gap.
+
+| Field | Expected | Observed |
+|---|---|---|
+| `value` | `Cluster-specific discovery image for bu-ist-demo-workload0` | `http://10.2.0.82/boot/discovery.iso` |
+
+</details>
+
 <details>
 <summary>✅ declared_in_main · info — bu-ist-demo-workload0 update-agents inputs</summary>
 
@@ -302,21 +322,6 @@ Source: CCI-MOC/oac-infra · [`infra/update-agents.yaml`](https://github.com/CCI
 </details>
 
 <details open>
-<summary>🟡 partial · blocking — bu-ist-demo-workload0 boot image</summary>
-
-Finding: A boot image URL is present, but the workload is still on the generic discovery.iso rather than the expected `bu-ist-demo-infra-agent-discovery.iso`.
-
-Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml) @ 2222222
-
-Status rule: The workload boot-image filename may contain the workload name `bu-ist-demo-workload0`, its oac-shortened name, the parent hub name `bu-ist-demo-infra`, or the hub's oac-shortened name. Unrecognized names are advisory because naming is not consistent across environments; generic `discovery.iso` remains a gap.
-
-| Field | Expected | Observed |
-|---|---|---|
-| `value` | `Cluster-specific discovery image for bu-ist-demo-workload0` | `http://10.2.0.82/boot/discovery.iso` |
-
-</details>
-
-<details open>
 <summary>❌ missing · blocking — Workload hosted-cluster values</summary>
 
 Finding: No merged main paths were found for the hosted workload cluster definition.
@@ -326,6 +331,15 @@ Source: CCI-MOC/oac-apps · [`hosted-clusters/bu-ist-demo-infra/bu-ist-demo-work
 | Field | Expected | Observed |
 |---|---|---|
 | [`hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/tree/main) | `present` | `missing` |
+
+</details>
+
+<details open>
+<summary>❌ missing · blocking — Workload component values</summary>
+
+Finding: No merged main paths were found for component values scoped to the workload cluster.
+
+Source: CCI-MOC/oac-apps · [`values/bu-ist-demo-infra/bu-ist-demo-workload0`](https://github.com/CCI-MOC/oac-apps/tree/main) @ 3333333
 
 </details>
 
@@ -380,15 +394,6 @@ Source: CCI-MOC/oac-apps · [`hosted-clusters/bu-ist-demo-infra/bu-ist-demo-work
 Finding: No workload address is used by another cluster.
 
 Source: CCI-MOC/oac-apps · [`hosted-clusters/`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/) @ 3333333
-
-</details>
-
-<details open>
-<summary>❌ missing · blocking — Workload component values</summary>
-
-Finding: No merged main paths were found for component values scoped to the workload cluster.
-
-Source: CCI-MOC/oac-apps · [`values/bu-ist-demo-infra/bu-ist-demo-workload0`](https://github.com/CCI-MOC/oac-apps/tree/main) @ 3333333
 
 </details>
 

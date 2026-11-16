@@ -5,12 +5,14 @@ oac-apps@3333333  oac-infra@2222222
 RESULT: 10 blocking gaps · 0 advisories · 3 of 14 checks pass
 UNKNOWN: Hub moc-dns records: Hub-image variables required for DNS validation are unavailable.
 
-PHASE                        HUB dizzy-infra  
-1 Host inventory entry in…   ✅ 1 hosts        
-2 Hub-image inventory entry… ⚪ unknown        
-3 Cluster discovery image…   ❌ none           
-4 Keycloak OIDC client /…    ❌ none           
-5 GitOps values and…         ❌ none           
+PHASE                        HUB dizzy-infra
+1 Host inventory entry in…   ✅ 1 hosts
+2 Hub-image inventory entry… ⚪ unknown
+3 Cluster discovery image…   ❌ none
+4 Keycloak OIDC client /…    ❌ none
+5 GitOps values and…         ❌ none
+6 oac-apps values            –
+7 Shared-service…            –
 
 NEXT
   1. [oac-infra] Edit CCI-MOC/oac-infra at hub-images/group_vars/<hub>/vars.yml and provide
@@ -48,7 +50,9 @@ NOT CHECKED — verify by hand:
   Configure cluster and storage networks and firewalls for dizzy-infra; Store the dizzy-infra
   SSH key and kubeadmin credentials in AWS Secrets Manager; Place the pull secret and SSH key
   under hub-images/credentials/dizzy-infra; Run create_agent_install_media and copy the
-  dizzy-infra ISO to the bastion host; Bootstrap Argo CD for dizzy-infra
+  dizzy-infra ISO to the bastion host; Bootstrap Argo CD for dizzy-infra; Agents visible in
+  hardware-inventory; Agents labelled and approved; Additional workload prerequisites are not
+  yet documented upstream
 
 Details:  moc-env status dizzy --details
 Markdown: moc-env status dizzy --format markdown --output report.md

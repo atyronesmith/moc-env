@@ -9,10 +9,12 @@ Generated 2026-11-16 12:34:56 UTC · Sources: [CCI-MOC/ansible-switches@8888888]
 | Phase | HUB dizzy-infra |
 |---|---:|
 | 1 Host inventory entry in oac-infra | ✅ 1 hosts |
-| 2 Hub-image inventory entry and group variables / Discovery image and agent inputs | ⚪ unknown |
-| 3 Cluster discovery image published and referenced by the inventory / Hosted-cluster values | ❌ none |
-| 4 Keycloak OIDC client / Workload component values | ❌ none |
-| 5 GitOps values and applications in oac-apps / Merged GitOps changes | ❌ none |
+| 2 Hub-image inventory entry and group variables / Obtain the agent discovery ISO from the hub's InfraEnv and publish it on the bastion | ⚪ unknown |
+| 3 Cluster discovery image published and referenced by the inventory / Boot nodes with the agent discovery ISO | ❌ none |
+| 4 Keycloak OIDC client / Agents appear in the hub's hardware-inventory namespace | ❌ none |
+| 5 GitOps values and applications in oac-apps / Label and approve agents with update-agents.yaml | ❌ none |
+| 6 oac-apps values | – |
+| 7 Shared-service prerequisites | – |
 
 ## Next actions
 
@@ -44,6 +46,9 @@ Generated 2026-11-16 12:34:56 UTC · Sources: [CCI-MOC/ansible-switches@8888888]
 - [ ] **Place the pull secret and SSH key under hub-images/credentials/dizzy-infra** (phase 2) — The documented credential directory is intentionally not committed, so repository state cannot prove that its files exist for dizzy-infra. Documented at [docs/infra-cluster-deployment.md → Cluster Deployment](docs/infra-cluster-deployment.md).
 - [ ] **Run create_agent_install_media and copy the dizzy-infra ISO to the bastion host** (phase 3) — Running the playbook and copying the generated discovery ISO leave no trace that this tool can verify in the four repositories it reads. Documented at [docs/infra-cluster-deployment.md → Cluster Deployment](docs/infra-cluster-deployment.md).
 - [ ] **Bootstrap Argo CD for dizzy-infra** (phase 5) — Running setup-gitops.sh and applying the bootstrap Helm template changes live cluster state, which this repository-only report cannot verify. Documented at [docs/infra-cluster-deployment.md → Cluster Configuration](docs/infra-cluster-deployment.md).
+- [ ] **Agents visible in hardware-inventory** (phase 4) — Agent visibility in the hub's hardware-inventory namespace requires live cluster state that repository configuration cannot prove. Documented at [docs/workload-cluster-deployment.md → Infrastructure Configuration](docs/workload-cluster-deployment.md).
+- [ ] **Agents labelled and approved** (phase 5) — Labelling and approving agents with update-agents.yaml changes live hub cluster state that repository configuration cannot prove. Documented at [docs/workload-cluster-deployment.md → Infrastructure Configuration](docs/workload-cluster-deployment.md).
+- [ ] **Additional workload prerequisites are not yet documented upstream** (phase 7) — The upstream workload deployment guide lists observability (TBD) and ?? as open prerequisite items. Documented at [docs/workload-cluster-deployment.md → Cluster Deployment and Configuration](docs/workload-cluster-deployment.md).
 
 ## Details
 

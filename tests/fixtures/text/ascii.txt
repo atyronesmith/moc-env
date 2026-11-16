@@ -5,47 +5,50 @@ moc-dns@7777777  moc-keycloak@4444444  oac-apps@3333333  oac-infra@2222222  issu
 RESULT: 8 blocking gaps (workload 3) · 0 advisories · 16 of 29 checks pass
 UNKNOWN: Workload API address network: hosted-clusters/bu-ist-demo-infra/bu-ist-demo-…
 
-PHASE                        HUB bu-ist-demo-infra           WORKLOAD bu-ist-demo-workload0  
-1 Host inventory entry in…   [ok] 1 hosts                    [ok] 1 hosts                    
-2 Hub-image inventory entry… [ok] 6/6 variables              [warn] partial                  
-3 Cluster discovery image…   [warn] partial                  [??] unknown                    
-4 Keycloak OIDC client /…    [ok] 1/1 checks                 [fail] none                     
-5 GitOps values and…         [fail] none                     [ok] 3/3 checks                 
+PHASE                        HUB bu-ist-demo-infra           WORKLOAD bu-ist-demo-workload0
+1 Host inventory entry in…   [ok] 1 hosts                    [ok] 1 hosts
+2 Hub-image inventory entry… [ok] 6/6 variables              [warn] partial
+3 Cluster discovery image…   [warn] partial                  [--]
+4 Keycloak OIDC client /…    [ok] 1/1 checks                 [--]
+5 GitOps values and…         [fail] none                     [ok] 1/2 variables
+6 oac-apps values            [--]                            [??] unknown
+7 Shared-service…            [--]                            [ok] 3/3 checks
 
 NEXT
   1. [oac-infra] Generate and publish the parent hub's agent discovery ISO, then replace the
   generic boot_image_url for every host in the workload cluster group. (after 2)
-       guide: docs/infra-cluster-deployment.md → Cluster Deployment
+       guide: docs/workload-cluster-deployment.md → Infrastructure Configuration
   2. [oac-infra] Generate and publish a hub-specific discovery ISO, then replace the generic
   boot_image_url for every host in the hub cluster group.
        guide: docs/infra-cluster-deployment.md → Cluster Deployment
-  3. [oac-apps] Create the missing hosted-cluster values file from the closest existing
-  environment; set the cluster name, parent hub, networking, and node pools before adding
-  components. (after 5)
-       guide: docs/infra-cluster-deployment.md → Cluster Configuration
-  4. [oac-apps] Create the workload component-values directory, starting with hcp-config.yaml
-  and only the shared components this workload needs. (after 3)
-       guide: docs/infra-cluster-deployment.md → Cluster Configuration
-  5. [oac-apps] Create or complete the hub hosted-cluster defaults file at
+  3. [oac-apps] Create or complete the hub hosted-cluster defaults file at
   hosted-clusters/<hub>/values.yaml in CCI-MOC/oac-infra. (after 2)
        guide: docs/infra-cluster-deployment.md → Cluster Configuration
-  6. [oac-apps] Create or complete values/<hub>/hcp-config.yaml in CCI-MOC/oac-infra for
-  hub-wide HCP and secret-selector values. (after 5)
+  4. [oac-apps] Create or complete values/<hub>/hcp-config.yaml in CCI-MOC/oac-infra for
+  hub-wide HCP and secret-selector values. (after 3)
        guide: docs/infra-cluster-deployment.md → Cluster Configuration
-  7. [oac-apps] Copy the required local-cluster component files from an existing hub environment
-  and adjust cluster-specific names and addresses. (after 5)
+  5. [oac-apps] Copy the required local-cluster component files from an existing hub environment
+  and adjust cluster-specific names and addresses. (after 3)
        guide: docs/infra-cluster-deployment.md → Cluster Configuration
-  8. [oac-apps] Add Argo CD application manifests for the hub after its hosted-cluster, hub-wide
-  component, and local-cluster values are present, and reference the correct clusters. (after 5,
-  6, 7)
+  6. [oac-apps] Add Argo CD application manifests for the hub after its hosted-cluster, hub-wide
+  component, and local-cluster values are present, and reference the correct clusters. (after 3,
+  4, 5)
        guide: docs/infra-cluster-deployment.md → Cluster Configuration
+  7. [oac-apps] Create the missing hosted-cluster values file from the closest existing
+  environment; set the cluster name, parent hub, networking, and node pools before adding
+  components. (after 3)
+       guide: docs/workload-cluster-deployment.md → Cluster Deployment and Configuration
+  8. [oac-apps] Create the workload component-values directory, starting with hcp-config.yaml
+  and only the shared components this workload needs. (after 7)
+       guide: docs/workload-cluster-deployment.md → Cluster Deployment and Configuration
 
 NOT CHECKED — verify by hand:
   Configure cluster and storage networks and firewalls for bu-ist-demo-infra; Store the
   bu-ist-demo-infra SSH key and kubeadmin credentials in AWS Secrets Manager; Place the pull
   secret and SSH key under hub-images/credentials/bu-ist-demo-infra; Run
   create_agent_install_media and copy the bu-ist-demo-infra ISO to the bastion host; Bootstrap
-  Argo CD for bu-ist-demo-infra
+  Argo CD for bu-ist-demo-infra; Agents visible in hardware-inventory; Agents labelled and
+  approved; Additional workload prerequisites are not yet documented upstream
 
 Details:  moc-env status bu-ist-demo --details
 Markdown: moc-env status bu-ist-demo --format markdown --output report.md

@@ -1001,7 +1001,7 @@ def render_text(
         lines.extend(["", "DETAILED CHECKS", ""])
         for check in checks:
             lines.extend(_detail_section({**check, "_sources": (report.get("metadata") or {}).get("sources", [])}, ascii_mode))
-    return "\n".join(lines).rstrip() + "\n"
+    return "\n".join(line.rstrip() for line in lines).rstrip() + "\n"
 
 
 def _oidc_markdown_table(check: dict[str, Any]) -> list[str] | None:

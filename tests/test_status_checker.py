@@ -183,7 +183,19 @@ class StatusCheckerTest(unittest.TestCase):
         workload = checker.run_workload(environment).to_dict()
 
         self.assertTrue(hub["not_checked"])
-        self.assertEqual(workload["not_checked"], [])
+        workload_titles = [entry["title"] for entry in workload["not_checked"]]
+        self.assertIn("Agents visible in hardware-inventory", workload_titles)
+        self.assertIn("Agents labelled and approved", workload_titles)
+        self.assertIn(
+            "Additional workload prerequisites are not yet documented upstream",
+            workload_titles,
+        )
+        for entry in workload["not_checked"]:
+            with self.subTest(workload_entry=entry["title"]):
+                self.assertEqual(
+                    entry["where"]["document"],
+                    "docs/workload-cluster-deployment.md",
+                )
         for entry in hub["not_checked"]:
             with self.subTest(entry=entry["title"]):
                 self.assertIn("bu-ist-demo-infra", entry["title"])
@@ -198,6 +210,38 @@ class StatusCheckerTest(unittest.TestCase):
                     "Cluster Deployment",
                     "Cluster Configuration",
                 })
+
+    def test_workload_sequence_uses_oac_apps_deployment_guide(self) -> None:
+        report = StatusChecker(FakeGitHubClient(), include_prs=False).run_workload(
+            Environment(name="bu-ist-demo", issue_number=666)
+        ).to_dict()
+
+        phases = report["phases"]
+        self.assertEqual(
+            [phase["title"] for phase in phases],
+            [
+                "Host inventory entry in oac-infra",
+                "Obtain the agent discovery ISO from the hub's InfraEnv and publish it on the bastion",
+                "Boot nodes with the agent discovery ISO",
+                "Agents appear in the hub's hardware-inventory namespace",
+                "Label and approve agents with update-agents.yaml",
+                "oac-apps values",
+                "Shared-service prerequisites",
+            ],
+        )
+        for phase in phases:
+            with self.subTest(phase=phase["title"]):
+                self.assertEqual(
+                    phase["guide"]["document"],
+                    "docs/workload-cluster-deployment.md",
+                )
+
+        checks = {check["id"]: check for check in report["checks"]}
+        self.assertEqual(checks["workload.inventory"]["phase"], 1)
+        self.assertEqual(checks["workload.boot_image"]["phase"], 2)
+        self.assertEqual(checks["workload.agent_labels_inputs"]["phase"], 5)
+        self.assertEqual(checks["workload.hosted_cluster_values"]["phase"], 6)
+        self.assertEqual(checks["workload.pure_storage_realm"]["phase"], 7)
 
     def test_environment_name_that_already_ends_in_infra_is_not_suffixed_again(self) -> None:
         environment = Environment(name="oac-prod-infra")
