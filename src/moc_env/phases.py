@@ -1,0 +1,224 @@
+"""Deployment-phase metadata derived from the oac-apps deployment guide."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, replace
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .model import CheckResult
+
+
+DEPLOYMENT_GUIDE_PATH = "docs/infra-cluster-deployment.md"
+
+
+@dataclass(frozen=True)
+class PhaseGuide:
+    """A section in the documented deployment sequence."""
+
+    document: str
+    heading: str
+
+    def to_dict(self) -> dict[str, str]:
+        return {"document": self.document, "heading": self.heading}
+
+
+@dataclass(frozen=True)
+class DeploymentPhase:
+    """One ordered phase in a hub or workload deployment."""
+
+    phase: int
+    title: str
+    guide: PhaseGuide
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "phase": self.phase,
+            "title": self.title,
+            "guide": self.guide.to_dict(),
+        }
+
+
+@dataclass(frozen=True)
+class CheckPhase:
+    """Deployment metadata for one check id."""
+
+    phase: int
+    phase_title: str
+    blocked_by: tuple[str, ...] = ()
+
+
+_INFRASTRUCTURE_CONFIGURATION = PhaseGuide(
+    DEPLOYMENT_GUIDE_PATH, "Infrastructure Configuration"
+)
+_CLUSTER_DEPLOYMENT = PhaseGuide(DEPLOYMENT_GUIDE_PATH, "Cluster Deployment")
+_CLUSTER_CONFIGURATION = PhaseGuide(
+    DEPLOYMENT_GUIDE_PATH, "Cluster Configuration"
+)
+HUB_PHASES: tuple[DeploymentPhase, ...] = (
+    DeploymentPhase(
+        1,
+        "Host inventory entry in oac-infra",
+        _INFRASTRUCTURE_CONFIGURATION,
+    ),
+    DeploymentPhase(
+        2,
+        "Hub-image inventory entry and group variables",
+        _CLUSTER_DEPLOYMENT,
+    ),
+    DeploymentPhase(
+        3,
+        "Cluster discovery image published and referenced by the inventory",
+        _CLUSTER_DEPLOYMENT,
+    ),
+    DeploymentPhase(
+        4,
+        "Keycloak OIDC client",
+        _CLUSTER_CONFIGURATION,
+    ),
+    DeploymentPhase(
+        5,
+        "GitOps values and applications in oac-apps",
+        _CLUSTER_CONFIGURATION,
+    ),
+)
+
+WORKLOAD_PHASES: tuple[DeploymentPhase, ...] = (
+    DeploymentPhase(
+        1,
+        "Host inventory entry in oac-infra",
+        _INFRASTRUCTURE_CONFIGURATION,
+    ),
+    DeploymentPhase(
+        2,
+        "Discovery image and agent inputs",
+        _CLUSTER_DEPLOYMENT,
+    ),
+    DeploymentPhase(
+        3,
+        "Hosted-cluster values",
+        _CLUSTER_CONFIGURATION,
+    ),
+    DeploymentPhase(
+        4,
+        "Workload component values",
+        _CLUSTER_CONFIGURATION,
+    ),
+    DeploymentPhase(
+        5,
+        "Merged GitOps changes",
+        _CLUSTER_CONFIGURATION,
+    ),
+)
+
+CHECK_PHASES: dict[str, CheckPhase] = {
+    "request.issue": CheckPhase(0, "Environment request"),
+    "pull_requests": CheckPhase(
+        5, "GitOps values and applications in oac-apps"
+    ),
+    "hub.inventory": CheckPhase(
+        1, "Host inventory entry in oac-infra"
+    ),
+    "workload.inventory": CheckPhase(
+        1, "Host inventory entry in oac-infra"
+    ),
+    "hub.image_inventory": CheckPhase(
+        2,
+        "Hub-image inventory entry and group variables",
+        ("hub.inventory",),
+    ),
+    "hub.image_vars": CheckPhase(
+        2,
+        "Hub-image inventory entry and group variables",
+        ("hub.image_inventory",),
+    ),
+    "hub.boot_image": CheckPhase(
+        3,
+        "Cluster discovery image published and referenced by the inventory",
+        ("hub.image_inventory", "hub.image_vars"),
+    ),
+    "workload.boot_image": CheckPhase(
+        2,
+        "Discovery image and agent inputs",
+        ("workload.inventory", "hub.boot_image"),
+    ),
+    "workload.agent_labels_inputs": CheckPhase(
+        2,
+        "Discovery image and agent inputs",
+        ("workload.inventory",),
+    ),
+    "hub.oidc_client": CheckPhase(
+        4, "Keycloak OIDC client", ("hub.boot_image",)
+    ),
+    "hub.hosted_cluster_defaults": CheckPhase(
+        5,
+        "GitOps values and applications in oac-apps",
+        ("hub.boot_image",),
+    ),
+    "hub.component_values": CheckPhase(
+        5,
+        "GitOps values and applications in oac-apps",
+        ("hub.hosted_cluster_defaults",),
+    ),
+    "hub.local_cluster_values": CheckPhase(
+        5,
+        "GitOps values and applications in oac-apps",
+        ("hub.hosted_cluster_defaults",),
+    ),
+    "hub.argocd_apps": CheckPhase(
+        5,
+        "GitOps values and applications in oac-apps",
+        (
+            "hub.hosted_cluster_defaults",
+            "hub.component_values",
+            "hub.local_cluster_values",
+            "hub.oidc_client",
+        ),
+    ),
+    "workload.hosted_cluster_values": CheckPhase(
+        3,
+        "Hosted-cluster values",
+        ("hub.hosted_cluster_defaults",),
+    ),
+    "workload.component_values": CheckPhase(
+        4,
+        "Workload component values",
+        ("workload.hosted_cluster_values",),
+    ),
+}
+
+_SCOPE_ORDER = {"hub": 0, "workload": 1, "shared": 2}
+
+
+def phase_definitions(scope: str) -> tuple[DeploymentPhase, ...]:
+    if scope == "hub":
+        return HUB_PHASES
+    if scope == "workload":
+        return WORKLOAD_PHASES
+    if scope == "environment":
+        return (*HUB_PHASES, *WORKLOAD_PHASES)
+    return ()
+
+
+def annotate_and_sort_checks(checks: list["CheckResult"]) -> list["CheckResult"]:
+    """Assign deployment metadata and order checks by scope and phase."""
+
+    annotated = []
+    for position, check in enumerate(checks):
+        phase = CHECK_PHASES[check.id]
+        annotated.append(
+            replace(
+                check,
+                phase=phase.phase,
+                phase_title=phase.phase_title,
+                blocked_by=list(phase.blocked_by),
+            )
+        )
+    return sorted(
+        annotated,
+        key=lambda check: (
+            _SCOPE_ORDER.get(check.scope, len(_SCOPE_ORDER)),
+            check.phase if check.phase is not None else 0,
+            position,
+        ),
+    )
