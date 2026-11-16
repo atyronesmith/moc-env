@@ -18,9 +18,9 @@ compliant. It reports repository configuration evidence.
 | `moc-env list` | Discover hub and workload clusters | Yes | User cache | No |
 | `moc-env completion bash` | Print a Bash completion script | No | No | No |
 | `moc-env completion zsh` | Print a Zsh completion script | No | No | No |
-| `moc-env ENV` | Inspect one environment's current configuration state | Yes | With `--output` | No |
-| `moc-env hub-status ENV` | Inspect one environment's hub-cluster state | Yes | With `--output` | No |
-| `moc-env work-status ENV` | Inspect one environment's workload-cluster state | Yes | With `--output` | No |
+| `moc-env status ENV` | Inspect one environment's current configuration state | Yes | With `--output` | No |
+| `moc-env status-hub ENV` | Inspect one environment's hub-cluster state | Yes | With `--output` | No |
+| `moc-env status-workload ENV` | Inspect one environment's workload-cluster state | Yes | With `--output` | No |
 | `moc-env export-infra ENV` | Create a draft hub-cluster desired-state snapshot | Yes | With `--output` | No |
 | `moc-env export-workload ENV WORKLOAD` | Create a draft workload-cluster snapshot | Yes | With `--output` | No |
 | `moc-env export-environment ENV` | Create a draft Environment bundle | Yes | With `--output` | No |
@@ -57,6 +57,8 @@ Install and verify:
 uv sync
 uv run moc-env --help
 ```
+
+Running `moc-env` with no arguments prints the same command catalog.
 
 Or use Make:
 
@@ -104,7 +106,7 @@ than silently trying another source.
 
 ```sh
 export GITHUB_TOKEN="github-token"
-uv run moc-env bu-ist-demo
+uv run moc-env status bu-ist-demo
 ```
 
 Never put the token in a command-line argument or commit it to the repository.
@@ -130,7 +132,7 @@ variables override `.env`.
 Use another selector file:
 
 ```sh
-uv run moc-env bu-ist-demo --env-file /path/to/selectors.env
+uv run moc-env status bu-ist-demo --env-file /path/to/selectors.env
 ```
 
 ### Bitwarden Secrets Manager
@@ -140,13 +142,13 @@ Store a GitHub token in Bitwarden Secrets Manager as a secret whose key is
 
 ```sh
 export GITHUB_BWS_SECRET_ID="00000000-0000-0000-0000-000000000000"
-uv run moc-env bu-ist-demo
+uv run moc-env status bu-ist-demo
 ```
 
 Or:
 
 ```sh
-uv run moc-env bu-ist-demo \
+uv run moc-env status bu-ist-demo \
   --bws-secret-id 00000000-0000-0000-0000-000000000000
 ```
 
@@ -196,36 +198,36 @@ path, and environment-level status command.
 
 Use the environment base name from the `environment` field, such as
 `bu-ist-demo`. Each row's `status_command` selects the matching scoped command:
-`moc-env hub-status ENV` for a hub row and `moc-env work-status ENV` for a
-workload row. The original `moc-env ENV` command remains an environment-level
-report that includes both scopes.
+`moc-env status-hub ENV` for a hub row and `moc-env status-workload ENV` for a
+workload row. Use `moc-env status ENV` for the environment-level report that
+includes both scopes.
 
 ### 2. Inspect current repository state
 
 ```sh
-uv run moc-env bu-ist-demo
+uv run moc-env status bu-ist-demo
 ```
 
 Useful variants:
 
 ```sh
-uv run moc-env bu-ist-demo --format json
-uv run moc-env bu-ist-demo --format markdown \
+uv run moc-env status bu-ist-demo --format json
+uv run moc-env status bu-ist-demo --format markdown \
   --output reports/bu-ist-demo.md
-uv run moc-env bu-ist-demo --issue 666
-uv run moc-env bu-ist-demo --no-prs
+uv run moc-env status bu-ist-demo --issue 666
+uv run moc-env status bu-ist-demo --no-prs
 ```
 
 Run a hub-scoped report:
 
 ```sh
-uv run moc-env hub-status bu-ist-demo
+uv run moc-env status-hub bu-ist-demo
 ```
 
 Run a workload-scoped report:
 
 ```sh
-uv run moc-env work-status bu-ist-demo
+uv run moc-env status-workload bu-ist-demo
 ```
 
 `--no-prs` avoids pull-request API calls. Progress steps are printed to stderr;
@@ -248,31 +250,33 @@ Set `MOC_ENV_CACHE_DIR` to use a different cache directory.
 Bash:
 
 ```sh
-eval "$(uv run moc-env completion bash)"
+make completion-init
 ```
 
 Zsh:
 
 ```sh
-eval "$(uv run moc-env completion zsh)"
+make completion-init
 ```
 
-If `moc-env` is not on `PATH` outside `uv run`, set the executable used by the
-generated completion script:
+`completion-init` detects the shell from `SHELL`, appends an idempotent
+completion block to `~/.bashrc` or `~/.zshrc`, adds this checkout's `.venv/bin`
+to `PATH`, and registers completion for `moc-env`. Run `source ~/.bashrc` or
+`source ~/.zshrc` (or start a new shell) after initialization.
 
-```sh
-export MOC_ENV_COMPLETION_COMMAND="uv run moc-env"
-```
+For a non-default startup file, run
+`make completion-init COMPLETION_RC=/path/to/rc-file`. The managed block sets
+`MOC_ENV_COMPLETION_COMMAND` and `PATH` to this checkout's virtual environment,
+so both the command and completion work outside the repository directory. If
+completion returns nothing, run `moc-env list` once to populate the cache.
 
-Without that override, generated completion scripts use `moc-env` when it is on
-`PATH` and fall back to `uv run moc-env`. If completion returns nothing, run
-`moc-env list` once to populate the cache. In Zsh, completion also requires the
-standard `compinit` setup; the generated script initializes it when `compdef`
-is not already available.
+Use `moc-env` rather than `uv run moc-env` after initialization. Shell
+completion is attached to the command name `moc-env`; with
+`uv run moc-env`, the shell asks `uv` for completion instead.
 
-Completion supplies environment names for the main, hub-status, and
-work-status commands and `export-infra`, `export-workload`, and
-`export-environment`. For
+Completion supplies top-level command names such as `status`, `status-hub`, and
+`status-workload`. It also supplies environment names for those status commands
+and `export-infra`, `export-workload`, and `export-environment`. For
 `export-workload`, it also supplies full workload-cluster names.
 
 ### 4. Export draft desired-state documents

@@ -58,7 +58,7 @@ Using `uv`:
 
 ```sh
 uv sync
-uv run moc-env bu-ist-demo
+uv run moc-env status bu-ist-demo
 ```
 
 Using the Makefile:
@@ -100,27 +100,30 @@ uv run moc-env list --format json
 Bash or Zsh completion with:
 
 ```sh
-eval "$(uv run moc-env completion bash)"
-eval "$(uv run moc-env completion zsh)"
+make completion-init
 ```
 
-If completion returns nothing, run `uv run moc-env list` once to populate the
-cache. Run `uv run moc-env --help` for a complete command catalog.
+The target detects Bash or Zsh from `SHELL`, appends an idempotent completion
+block to the matching startup file, and adds this checkout's `.venv/bin` to
+`PATH`. After sourcing the startup file, run `moc-env` directly; shell
+completion attaches to that first word, which avoids the `uv run` prefix
+problem. Run `moc-env list` once to populate the cache. Run `moc-env` or
+`moc-env --help` for a complete command catalog.
 
 Run a hub-scoped repository-status report:
 
 ```sh
-uv run moc-env hub-status bu-ist-demo
+uv run moc-env status-hub bu-ist-demo
 ```
 
 Run a workload-scoped repository-status report:
 
 ```sh
-uv run moc-env work-status bu-ist-demo
+uv run moc-env status-workload bu-ist-demo
 ```
 
-The original `moc-env bu-ist-demo` command remains an environment-level report
-that includes both hub and workload checks.
+Use `moc-env status bu-ist-demo` for the environment-level report that includes
+both hub and workload checks.
 
 Export a deterministic draft hub-cluster snapshot from merged `main`. The
 command name remains `export-infra` for compatibility:
@@ -430,31 +433,31 @@ missing values.
 Produce JSON:
 
 ```sh
-uv run moc-env bu-ist-demo --format json
+uv run moc-env status bu-ist-demo --format json
 ```
 
 Produce Markdown:
 
 ```sh
-uv run moc-env bu-ist-demo --format markdown
+uv run moc-env status bu-ist-demo --format markdown
 ```
 
 Write Markdown directly to a file:
 
 ```sh
-uv run moc-env bu-ist-demo --format markdown --output reports/bu-ist-demo.md
+uv run moc-env status bu-ist-demo --format markdown --output reports/bu-ist-demo.md
 ```
 
 Override the associated MOC issue:
 
 ```sh
-uv run moc-env bu-ist-demo --issue 666
+uv run moc-env status bu-ist-demo --issue 666
 ```
 
 Skip pull-request discovery:
 
 ```sh
-uv run moc-env bu-ist-demo --no-prs
+uv run moc-env status bu-ist-demo --no-prs
 ```
 
 ## GitHub authentication
@@ -484,7 +487,7 @@ Keychain service/account names. It must not contain `GITHUB_TOKEN` or
 Use another file with:
 
 ```sh
-uv run moc-env bu-ist-demo --env-file /path/to/selectors.env
+uv run moc-env status bu-ist-demo --env-file /path/to/selectors.env
 ```
 
 ### Direct token
@@ -493,7 +496,7 @@ To use a token directly:
 
 ```sh
 export GITHUB_TOKEN="..."
-uv run moc-env bu-ist-demo
+uv run moc-env status bu-ist-demo
 ```
 
 ### Bitwarden Secrets Manager
@@ -505,13 +508,13 @@ Provide the UUID directly:
 
 ```sh
 export GITHUB_BWS_SECRET_ID="00000000-0000-0000-0000-000000000000"
-uv run moc-env bu-ist-demo
+uv run moc-env status bu-ist-demo
 ```
 
 Or pass it as a selector:
 
 ```sh
-uv run moc-env bu-ist-demo \
+uv run moc-env status bu-ist-demo \
   --bws-secret-id 00000000-0000-0000-0000-000000000000
 ```
 

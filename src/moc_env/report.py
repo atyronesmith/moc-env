@@ -386,6 +386,15 @@ def _structured_summary(check: dict[str, Any]) -> list[str] | None:
     )
 
 
+def _followup_gap(check: dict[str, Any]) -> str:
+    if check["state"] == "pr_open":
+        return "Merge or close the relevant open pull request."
+    missing = check.get("missing")
+    if missing is None:
+        return "Resolve the missing or partial configuration."
+    return _text_value(missing, 4)
+
+
 def render_text(report: dict[str, Any]) -> str:
     environment = report["environment"]
     scope = report.get("scope", "environment")
@@ -437,6 +446,26 @@ def render_text(report: dict[str, Any]) -> str:
         if check.get("url"):
             lines.append(f"  URL:          {check['url']}")
         lines.append("")
+
+    followups = [
+        check
+        for check in report["checks"]
+        if check["state"] in {"partial", "missing", "pr_open"}
+    ]
+    lines.extend(["Suggested next actions:", ""])
+    if not followups:
+        lines.append("No configuration gaps were detected by the current repository-state checks.")
+    else:
+        lines.append("These actions are derived directly from the missing or partial checks above.")
+        lines.append("")
+        for priority, check in enumerate(followups, start=1):
+            lines.extend(
+                [
+                    f"{priority}. [{_state(check['state'])}] "
+                    f"{check['stage']} / {check['check']}",
+                    f"   Gap: {_followup_gap(check)}",
+                ]
+            )
 
     lines.extend(
         [

@@ -12,19 +12,20 @@ COMMANDS = (
     "export-environment",
     "export-infra",
     "export-workload",
-    "hub-status",
     "list",
     "plan-infra",
     "refresh-doc-catalog",
+    "status",
+    "status-hub",
+    "status-workload",
     "validate",
-    "work-status",
 )
 
 COMMAND_DESCRIPTIONS = {
-    "ENV": "report combined hub and workload repository status",
-    "hub-status": "report hub-cluster repository status",
-    "work-status": "report workload-cluster repository status",
     "list": "list hub and workload clusters",
+    "status": "report combined hub and workload repository status",
+    "status-hub": "report hub-cluster repository status",
+    "status-workload": "report workload-cluster repository status",
     "export-infra": "export a draft hub-cluster desired-state document",
     "export-workload": "export a draft workload-cluster desired-state document",
     "export-environment": "export a draft Environment bundle",
@@ -85,13 +86,12 @@ _moc_env_complete() {{
       COMPREPLY+=("$completion")
     done < <(
       compgen -W "{commands}" -- "$cur"
-      "${{executable_command[@]}}" __complete-environment "$cur" environment
     )
     return
   fi
 
   case "$subcommand" in
-    export-infra|export-environment|hub-status|work-status)
+    status|status-hub|status-workload|export-infra|export-environment)
       [[ $COMP_CWORD -eq 2 ]] && mode=environment
       ;;
     export-workload)
@@ -131,18 +131,14 @@ _moc-env() {{
   subcommand="${{words[2]}}"
 
   if (( CURRENT == 2 )); then
-    local completion_output
-    local -a commands environments
+    local -a commands
     commands=({commands})
-    completion_output="$("${{executable_command[@]}}" __complete-environment "${{words[CURRENT]}}" environment)"
-    environments=(${{(f)completion_output}})
     _describe -t commands 'command' commands
-    _describe -t environments 'environment' environments
     return
   fi
 
   case "$subcommand" in
-    export-infra|export-environment|hub-status|work-status)
+    status|status-hub|status-workload|export-infra|export-environment)
       if (( CURRENT == 3 )); then
         local environment_output
         environment_output="$("${{executable_command[@]}}" __complete-environment "${{words[CURRENT]}}" environment)"

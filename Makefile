@@ -4,6 +4,8 @@ SHELL := /bin/sh
 
 UV ?= uv
 ENV ?= bu-ist-demo
+COMPLETION_SHELL ?= $(shell basename "$${SHELL:-/bin/bash}")
+COMPLETION_RC ?= $(if $(filter zsh,$(COMPLETION_SHELL)),$(HOME)/.zshrc,$(HOME)/.bashrc)
 WORKLOAD ?= workload0
 FORMAT ?= text
 ARGS ?=
@@ -22,9 +24,9 @@ else
 PRS_FLAG :=
 endif
 
-RUN_ARGS := $(ENV) --format $(FORMAT) $(PRS_FLAG) $(ARGS)
+RUN_ARGS := status $(ENV) --format $(FORMAT) $(PRS_FLAG) $(ARGS)
 
-.PHONY: help setup sync test list export-infra export-infra-file \
+.PHONY: help setup completion-init sync test list export-infra export-infra-file \
         export-workload export-workload-file validate validate-markdown \
         check-infra check-infra-markdown plan-infra \
         plan-infra-markdown check-workload \
@@ -55,6 +57,30 @@ help: ## Show available targets and common variables
 
 setup: ## Install the locked virtual environment
 	$(UV) sync
+
+completion-init: setup ## Initialize tab completion in the current shell's startup file
+	@set -eu; \
+	case "$(COMPLETION_SHELL)" in \
+	  bash|zsh) ;; \
+	  *) printf 'Unsupported shell: %s\n' "$(COMPLETION_SHELL)" >&2; exit 2; ;; \
+	esac; \
+	rc="$(COMPLETION_RC)"; \
+	command="$(CURDIR)/.venv/bin/moc-env"; \
+	project_bin="$(CURDIR)/.venv/bin"; \
+	marker="# moc-env completion v2 (managed by make completion-init)"; \
+	mkdir -p "$$(dirname "$$rc")"; \
+	if [ ! -f "$$rc" ] || ! grep -Fq "$$marker" "$$rc"; then \
+	  { \
+	    printf '%s\n' "$$marker"; \
+	    printf "MOC_ENV_COMPLETION_COMMAND='%s'\n" "$$command"; \
+	    printf '%s\n' "export MOC_ENV_COMPLETION_COMMAND"; \
+	    printf 'case ":$$PATH:" in *":%s:"*) ;; *) PATH="%s:$$PATH";; esac\n' "$$project_bin" "$$project_bin"; \
+	    printf '%s\n' "export PATH"; \
+	    printf 'eval "$$(%s completion $(COMPLETION_SHELL))"\n' "$$command"; \
+	  } >> "$$rc"; \
+	fi; \
+	printf 'Added moc-env completion to %s\n' "$$rc"; \
+	printf 'Run "source %s" or start a new shell, then run "moc-env list" once.\n' "$$rc"
 
 sync: setup ## Alias for setup
 
@@ -107,20 +133,20 @@ check-workload-markdown: ## Write a Markdown workload comparison
 
 run: run-text ## Run the CLI (default ENV and text format)
 
-run-text: ## Run the CLI with text output
+run-text: ## Run the environment status command with text output
 	$(UV) run --locked moc-env $(RUN_ARGS)
 
-run-json: ## Run the CLI with JSON output
-	$(UV) run --locked moc-env $(ENV) --format json $(PRS_FLAG) $(ARGS)
+run-json: ## Run the environment status command with JSON output
+	$(UV) run --locked moc-env status $(ENV) --format json $(PRS_FLAG) $(ARGS)
 
-run-markdown: ## Run the CLI with Markdown output
-	$(UV) run --locked moc-env $(ENV) --format markdown $(PRS_FLAG) $(ARGS)
+run-markdown: ## Run the environment status command with Markdown output
+	$(UV) run --locked moc-env status $(ENV) --format markdown $(PRS_FLAG) $(ARGS)
 
-run-no-prs: ## Run the CLI without pull-request discovery
-	$(UV) run --locked moc-env $(ENV) --format $(FORMAT) --no-prs $(ARGS)
+run-no-prs: ## Run the environment status command without pull-request discovery
+	$(UV) run --locked moc-env status $(ENV) --format $(FORMAT) --no-prs $(ARGS)
 
 report-markdown: ## Write a verbose Markdown report to OUTPUT
-	$(UV) run --locked moc-env $(ENV) --format markdown --output $(OUTPUT)
+	$(UV) run --locked moc-env status $(ENV) --format markdown --output $(OUTPUT)
 
 report-gist-secret: report-markdown ## Create a secret GitHub gist from OUTPUT
 	gh gist create $(OUTPUT)

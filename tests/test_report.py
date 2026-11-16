@@ -43,6 +43,8 @@ class ReportRenderingTest(unittest.TestCase):
         self.assertIn("cluster_specific_image", rendered)
         self.assertIn("MISSING", rendered)
         self.assertIn("Stage summary:", rendered)
+        self.assertIn("Suggested next actions:", rendered)
+        self.assertIn("cluster_specific_image", rendered.split("Suggested next actions:", 1)[1])
 
     def test_markdown_is_verbose_and_actionable(self) -> None:
         rendered = render_markdown(self.report)
