@@ -346,7 +346,6 @@ class CliDispatchTest(unittest.TestCase):
                     "bu-ist-demo",
                     "--format",
                     "json",
-                    "--no-prs",
                 ],
                 clock=fixed_clock,
             )

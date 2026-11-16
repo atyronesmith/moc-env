@@ -204,6 +204,7 @@ class PullRequestObservation:
     head_ref: SourceValue
     head_sha: SourceValue
     url: SourceValue
+    repository: SourceValue
     changed_files: SourceValue
     classification: SourceValue
 
@@ -597,6 +598,43 @@ def read_keycloak_observation(
     )
 
 
+def _pull_text(pull: dict[str, Any]) -> str:
+    return " ".join(
+        str(value)
+        for value in (
+            pull.get("title"),
+            pull.get("body"),
+            pull.get("head", {}).get("ref"),
+        )
+        if value
+    )
+
+
+def _changed_lines(files: tuple[dict[str, Any], ...]) -> str:
+    lines: list[str] = []
+    for file in files:
+        patch = file.get("patch")
+        if not isinstance(patch, str):
+            continue
+        lines.extend(
+            line
+            for line in patch.splitlines()
+            if line.startswith(("+", "-"))
+        )
+    return "\n".join(lines)
+
+
+def _body_links_issue(pull: dict[str, Any], environment: Environment) -> bool:
+    if environment.issue_number is None:
+        return False
+    issue_url = (
+        f"https://github.com/CCI-MOC/MOC-issues/issues/"
+        f"{environment.issue_number}"
+    )
+    body = pull.get("body")
+    return isinstance(body, str) and issue_url in body
+
+
 def read_apps_observation(
     client: GitHubClient,
     environment: Environment,
@@ -640,68 +678,141 @@ def read_apps_observation(
 
     pull_requests: list[PullRequestObservation] = []
     if include_pull_requests:
-        if progress is not None:
-            progress(
-                "GitOps configuration",
-                "inspect pull-request file lists for changes under environment paths",
-                repository,
-                "pulls?state=all",
-            )
-        all_pulls = list(client.pulls(repository))
-        closed_pulls = sorted(
-            (pull for pull in all_pulls if pull.get("state") == "closed"),
-            key=lambda pull: str(pull.get("updated_at") or ""),
-            reverse=True,
-        )[:PR_FILE_FETCH_LIMIT]
-        closed_numbers = {
-            pull.get("number") for pull in closed_pulls if pull.get("number") is not None
-        }
-        candidates = [
-            pull
-            for pull in all_pulls
-            if pull.get("state") == "open" or pull.get("number") in closed_numbers
-        ]
-        for pull in candidates:
-            files = tuple(
-                file.get("filename")
-                for file in client.pr_files(repository, pull["number"])
-                if file.get("filename") is not None
-            )
-            environment_files = tuple(
-                path for path in files if changes_environment_path(path)
-            )
-            if not environment_files:
-                continue
-            pull_state = pull.get("state")
-            merged = bool(pull.get("merged_at"))
-            classification = (
-                "open"
-                if pull_state == "open"
-                else ("merged" if merged else "closed_unmerged")
-            )
-            source = (repository, f"pulls/{pull['number']}", "all")
-            files_source = (
-                repository,
-                f"pulls/{pull['number']}/files",
-                "all",
-            )
-            pull_requests.append(
-                PullRequestObservation(
-                    number=SourceValue(pull["number"], *source),
-                    title=SourceValue(pull.get("title"), *source),
-                    state=SourceValue(pull.get("state"), *source),
-                    merged=SourceValue(bool(pull.get("merged_at")), *source),
-                    head_ref=SourceValue(
-                        pull.get("head", {}).get("ref"), *source
-                    ),
-                    head_sha=SourceValue(
-                        pull.get("head", {}).get("sha"), *source
-                    ),
-                    url=SourceValue(pull.get("html_url"), *source),
-                    changed_files=SourceValue(environment_files, *files_source),
-                    classification=SourceValue(classification, *source),
+        pull_repositories = (
+            OAC_APPS_REPOSITORY,
+            OAC_INFRA_REPOSITORY,
+            MOC_KEYCLOAK_REPOSITORY,
+        )
+        for pull_repository in pull_repositories:
+            if progress is not None:
+                progress(
+                    "GitOps configuration",
+                    "inspect pull-request file lists for environment-relevant changes",
+                    pull_repository,
+                    "pulls?state=all",
                 )
-            )
+            all_pulls = list(client.pulls(pull_repository))
+            closed_pulls = sorted(
+                (pull for pull in all_pulls if pull.get("state") == "closed"),
+                key=lambda pull: str(pull.get("updated_at") or ""),
+                reverse=True,
+            )[:PR_FILE_FETCH_LIMIT]
+            closed_numbers = {
+                pull.get("number")
+                for pull in closed_pulls
+                if pull.get("number") is not None
+            }
+            candidates = [
+                pull
+                for pull in all_pulls
+                if pull.get("state") == "open"
+                or pull.get("number") in closed_numbers
+            ]
+            for pull in candidates:
+                file_observations = tuple(
+                    file
+                    for file in client.pr_files(pull_repository, pull["number"])
+                    if file.get("filename") is not None
+                )
+                files = tuple(
+                    str(file["filename"]) for file in file_observations
+                )
+                issue_linked = _body_links_issue(pull, environment)
+                matching_files: tuple[str, ...] = ()
+
+                if issue_linked:
+                    matching_files = files
+                elif pull_repository == OAC_APPS_REPOSITORY:
+                    matching_files = tuple(
+                        path for path in files if changes_environment_path(path)
+                    )
+                elif pull_repository == OAC_INFRA_REPOSITORY:
+                    infra_paths = tuple(
+                        path
+                        for path in files
+                        if path == INVENTORY_PATH
+                        or path == HUB_INVENTORY_PATH
+                        or path.startswith(f"hub-images/group_vars/{hub}/")
+                    )
+                    if not infra_paths:
+                        continue
+                    if path_scope == "hub":
+                        cluster_names = (hub,)
+                    elif path_scope == "workload":
+                        cluster_names = tuple(environment.workload_clusters or ())
+                    else:
+                        cluster_names = (
+                            hub,
+                            *(environment.workload_clusters or ()),
+                        )
+                    changed_lines = _changed_lines(
+                        tuple(
+                            file
+                            for file in file_observations
+                            if file.get("filename") in infra_paths
+                        )
+                    )
+                    metadata_text = _pull_text(pull)
+                    if not any(
+                        cluster_name in changed_lines
+                        or cluster_name in metadata_text
+                        for cluster_name in cluster_names
+                    ):
+                        continue
+                    matching_files = infra_paths
+                elif pull_repository == MOC_KEYCLOAK_REPOSITORY:
+                    if path_scope == "workload":
+                        continue
+                    keycloak_paths = tuple(
+                        path for path in files if path == KEYCLOAK_PATH
+                    )
+                    if not keycloak_paths:
+                        continue
+                    changed_lines = _changed_lines(
+                        tuple(
+                            file
+                            for file in file_observations
+                            if file.get("filename") == KEYCLOAK_PATH
+                        )
+                    )
+                    metadata_text = _pull_text(pull)
+                    if hub not in changed_lines and hub not in metadata_text:
+                        continue
+                    matching_files = keycloak_paths
+
+                if not matching_files:
+                    continue
+                pull_state = pull.get("state")
+                merged = bool(pull.get("merged_at"))
+                classification = (
+                    "open"
+                    if pull_state == "open"
+                    else ("merged" if merged else "closed_unmerged")
+                )
+                source = (pull_repository, f"pulls/{pull['number']}", "all")
+                files_source = (
+                    pull_repository,
+                    f"pulls/{pull['number']}/files",
+                    "all",
+                )
+                pull_requests.append(
+                    PullRequestObservation(
+                        number=SourceValue(pull["number"], *source),
+                        title=SourceValue(pull.get("title"), *source),
+                        state=SourceValue(pull.get("state"), *source),
+                        merged=SourceValue(bool(pull.get("merged_at")), *source),
+                        head_ref=SourceValue(
+                            pull.get("head", {}).get("ref"), *source
+                        ),
+                        head_sha=SourceValue(
+                            pull.get("head", {}).get("sha"), *source
+                        ),
+                        url=SourceValue(pull.get("html_url"), *source),
+                        repository=SourceValue(pull_repository, *source),
+                        changed_files=SourceValue(matching_files, *files_source),
+                        classification=SourceValue(classification, *source),
+                    )
+                )
     return AppsObservation(
         paths=SourceValue(
             tuple(sorted(tree)),

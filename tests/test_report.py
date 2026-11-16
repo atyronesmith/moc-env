@@ -235,13 +235,16 @@ class ReportRenderingTest(unittest.TestCase):
                         "classification": {"value": "open"},
                         "head_ref": {"value": "fixture-buildout"},
                         "html_url": {"value": "https://github.com/CCI-MOC/oac-apps/pull/237"},
+                        "repository": {"value": "CCI-MOC/oac-apps"},
                         "changed_files": ["values/fixture/hcp-config.yaml"],
                     }
                 ]
             },
         }
         rendered = render_markdown({**self.report, "checks": [check]})
-        self.assertIn("**Relevant pull requests**", rendered)
+        self.assertIn(
+            "**Relevant pull requests — CCI-MOC/oac-apps**", rendered
+        )
         self.assertIn(
             "| PR | Title | State | Merged | Classification | Head branch | Link | Changed files |",
             rendered,

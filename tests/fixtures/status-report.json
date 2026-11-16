@@ -889,6 +889,154 @@
       "stage": "GitOps configuration",
       "state": "missing",
       "url": "https://github.com/CCI-MOC/oac-apps/blob/main/values/bu-ist-demo-infra/bu-ist-demo-workload0"
+    },
+    {
+      "actual": {
+        "closed_unmerged_count": 0,
+        "matching_pr_count": 1,
+        "merged_count": 0,
+        "open_count": 1,
+        "repository_counts": {
+          "CCI-MOC/oac-apps": 1
+        }
+      },
+      "check": "Relevant pull requests",
+      "evidence": {
+        "pull_requests": [
+          {
+            "changed_files": [
+              "values/bu-ist-demo-infra/hcp-config.yaml"
+            ],
+            "classification": {
+              "confidence": "exact",
+              "provenance": {
+                "path": "pulls/237",
+                "ref": "all",
+                "repository": "CCI-MOC/oac-apps"
+              },
+              "value": "open"
+            },
+            "head_ref": {
+              "confidence": "exact",
+              "provenance": {
+                "path": "pulls/237",
+                "ref": "all",
+                "repository": "CCI-MOC/oac-apps"
+              },
+              "value": "bu-ist-demo-buildout"
+            },
+            "head_sha": {
+              "confidence": "exact",
+              "provenance": {
+                "path": "pulls/237",
+                "ref": "all",
+                "repository": "CCI-MOC/oac-apps"
+              },
+              "value": "7b528394600996dae5c1e5d497236050d8810edc"
+            },
+            "html_url": {
+              "confidence": "exact",
+              "provenance": {
+                "path": "pulls/237",
+                "ref": "all",
+                "repository": "CCI-MOC/oac-apps"
+              },
+              "value": "https://github.com/CCI-MOC/oac-apps/pull/237"
+            },
+            "merged": {
+              "confidence": "exact",
+              "provenance": {
+                "path": "pulls/237",
+                "ref": "all",
+                "repository": "CCI-MOC/oac-apps"
+              },
+              "value": false
+            },
+            "number": 237,
+            "repository": {
+              "confidence": "exact",
+              "provenance": {
+                "path": "pulls/237",
+                "ref": "all",
+                "repository": "CCI-MOC/oac-apps"
+              },
+              "value": "CCI-MOC/oac-apps"
+            },
+            "state": {
+              "confidence": "exact",
+              "provenance": {
+                "path": "pulls/237",
+                "ref": "all",
+                "repository": "CCI-MOC/oac-apps"
+              },
+              "value": "open"
+            },
+            "title": {
+              "confidence": "exact",
+              "provenance": {
+                "path": "pulls/237",
+                "ref": "all",
+                "repository": "CCI-MOC/oac-apps"
+              },
+              "value": "Added initial values for bu-ist-demo infra cluster"
+            }
+          }
+        ]
+      },
+      "expected": "No open PR changing an environment-owned path",
+      "gaps": [
+        {
+          "expected": 1,
+          "name": "open_prs_to_merge",
+          "observed": null
+        }
+      ],
+      "id": "pull_requests",
+      "missing": {
+        "open_prs_to_merge": 1
+      },
+      "next_action": "Review the relevant pull requests; merge or close any open PR after confirming it is the intended repository change.",
+      "observed": [
+        {
+          "name": "matching_pr_count",
+          "value": 1
+        },
+        {
+          "name": "open_count",
+          "value": 1
+        },
+        {
+          "name": "merged_count",
+          "value": 0
+        },
+        {
+          "name": "closed_unmerged_count",
+          "value": 0
+        },
+        {
+          "name": "repository_counts",
+          "value": {
+            "CCI-MOC/oac-apps": 1
+          }
+        }
+      ],
+      "path": "pulls",
+      "present": {
+        "closed_unmerged_pr_count": 0,
+        "matching_pr_count": 1,
+        "merged_pr_count": 0,
+        "open_pr_count": 1,
+        "repository_counts": {
+          "CCI-MOC/oac-apps": 1
+        }
+      },
+      "reason": "1 relevant PRs are still open; their changes are not declared in main.",
+      "ref": "all",
+      "repository": "CCI-MOC/oac-apps",
+      "scope": "shared",
+      "severity": "blocking",
+      "stage": "GitOps configuration",
+      "state": "pr_open"
     }
   ],
   "environment": {
@@ -908,8 +1056,7 @@
       "status",
       "bu-ist-demo",
       "--format",
-      "json",
-      "--no-prs"
+      "json"
     ],
     "generated_at": "2026-11-16T12:34:56Z",
     "rate_limit_remaining": 4999,
@@ -942,9 +1089,9 @@
   "scope": "environment",
   "summary": {
     "advisory_count": 0,
-    "check_count": 15,
+    "check_count": 16,
     "severity_counts": {
-      "blocking": 8,
+      "blocking": 9,
       "info": 7
     },
     "stages": [
@@ -978,10 +1125,11 @@
         }
       },
       {
-        "check_count": 6,
+        "check_count": 7,
         "stage": "GitOps configuration",
         "state_counts": {
-          "missing": 6
+          "missing": 6,
+          "pr_open": 1
         }
       }
     ],
@@ -989,6 +1137,7 @@
       "declared_in_main": 6,
       "missing": 6,
       "partial": 2,
+      "pr_open": 1,
       "requested": 1
     }
   }
