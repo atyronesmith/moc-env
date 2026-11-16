@@ -85,8 +85,8 @@ def list_environments(client: GitHubClient) -> list[dict[str, Any]]:
             for cluster in all_clusters
             if cluster.startswith(f"{base_name}-") and cluster != infra_cluster
         )
-        hub_status_command = f"moc-env hub-status {base_name}"
-        workload_status_command = f"moc-env work-status {base_name}"
+        hub_status_command = f"moc-env status-hub {base_name}"
+        workload_status_command = f"moc-env status-workload {base_name}"
         clusters.append(
             {
                 "environment": base_name,

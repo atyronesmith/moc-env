@@ -43,8 +43,8 @@ class CliDispatchTest(unittest.TestCase):
         exit_code, stdout, stderr = self.run_cli(["list"])
         self.assertEqual(exit_code, 0)
         self.assertIn("bu-ist-demo", stdout)
-        self.assertIn("moc-env hub-status bu-ist-demo", stdout)
-        self.assertIn("moc-env work-status bu-ist-demo", stdout)
+        self.assertIn("moc-env status-hub bu-ist-demo", stdout)
+        self.assertIn("moc-env status-workload bu-ist-demo", stdout)
         self.assertEqual(stderr, "")
 
     def test_top_level_help_lists_every_command(self) -> None:
@@ -52,9 +52,9 @@ class CliDispatchTest(unittest.TestCase):
 
         self.assertIn("Commands:", rendered)
         for command in (
-            "ENV",
-            "hub-status",
-            "work-status",
+            "status",
+            "status-hub",
+            "status-workload",
             "list",
             "export-infra",
             "export-workload",
@@ -72,6 +72,37 @@ class CliDispatchTest(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertIn(command, rendered)
 
+    def test_no_arguments_prints_command_help(self) -> None:
+        for arguments in ([], ["--help"], ["-h"]):
+            with self.subTest(arguments=arguments):
+                exit_code, stdout, stderr = self.run_cli(arguments)
+
+                self.assertEqual(exit_code, 0)
+                self.assertIn("Commands:", stdout)
+                self.assertIn("status", stdout)
+                self.assertIn("status-hub", stdout)
+                self.assertIn("status-workload", stdout)
+                self.assertEqual(stderr, "")
+
+    def test_environment_without_command_is_rejected(self) -> None:
+        exit_code, _, stderr = self.run_cli(
+            ["bu-ist-demo", "--format", "json", "--no-prs"]
+        )
+
+        self.assertEqual(exit_code, 2)
+        self.assertIn("unknown command: bu-ist-demo", stderr)
+        self.assertIn("Commands:", stderr)
+
+    def test_old_status_command_names_are_rejected(self) -> None:
+        for command in ("hub-status", "work-status"):
+            with self.subTest(command=command):
+                exit_code, _, stderr = self.run_cli(
+                    [command, "bu-ist-demo", "--format", "json", "--no-prs"]
+                )
+
+                self.assertEqual(exit_code, 2)
+                self.assertIn(f"unknown command: {command}", stderr)
+
     def test_list_json_dispatch(self) -> None:
         exit_code, stdout, _ = self.run_cli(["list", "--format", "json"])
         self.assertEqual(exit_code, 0)
@@ -85,7 +116,7 @@ class CliDispatchTest(unittest.TestCase):
 
     def test_status_json_dispatch(self) -> None:
         exit_code, stdout, _ = self.run_cli(
-            ["bu-ist-demo", "--format", "json", "--no-prs"]
+            ["status", "bu-ist-demo", "--format", "json", "--no-prs"]
         )
         self.assertEqual(exit_code, 0)
         report = json.loads(stdout)
@@ -94,7 +125,7 @@ class CliDispatchTest(unittest.TestCase):
 
     def test_status_text_dispatch(self) -> None:
         exit_code, stdout, stderr = self.run_cli(
-            ["bu-ist-demo", "--format", "text", "--no-prs"]
+            ["status", "bu-ist-demo", "--format", "text", "--no-prs"]
         )
         self.assertEqual(exit_code, 0)
         self.assertIn("MOC environment status: bu-ist-demo", stdout)
@@ -104,7 +135,7 @@ class CliDispatchTest(unittest.TestCase):
 
     def test_hub_status_json_dispatch(self) -> None:
         exit_code, stdout, _ = self.run_cli(
-            ["hub-status", "bu-ist-demo", "--format", "json", "--no-prs"]
+            ["status-hub", "bu-ist-demo", "--format", "json", "--no-prs"]
         )
         self.assertEqual(exit_code, 0)
         report = json.loads(stdout)
@@ -115,7 +146,7 @@ class CliDispatchTest(unittest.TestCase):
 
     def test_work_status_text_dispatch(self) -> None:
         exit_code, stdout, stderr = self.run_cli(
-            ["work-status", "bu-ist-demo", "--format", "text", "--no-prs"]
+            ["status-workload", "bu-ist-demo", "--format", "text", "--no-prs"]
         )
         self.assertEqual(exit_code, 0)
         self.assertIn("MOC workload status: bu-ist-demo", stdout)
@@ -128,6 +159,7 @@ class CliDispatchTest(unittest.TestCase):
             output = Path(temporary_directory) / "report.md"
             exit_code, stdout, stderr = self.run_cli(
                 [
+                    "status",
                     "bu-ist-demo",
                     "--format",
                     "markdown",

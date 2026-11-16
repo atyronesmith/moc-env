@@ -4,6 +4,8 @@ import contextlib
 import io
 import json
 import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -75,11 +77,45 @@ class CompletionTest(unittest.TestCase):
                 self.assertEqual(exit_code, 0)
                 self.assertIn("__complete-environment", stdout)
                 self.assertIn("export-workload", stdout)
-                self.assertIn("hub-status", stdout)
-                self.assertIn("work-status", stdout)
+                self.assertIn("status", stdout)
+                self.assertIn("status-hub", stdout)
+                self.assertIn("status-workload", stdout)
                 self.assertIn("uv run moc-env", stdout)
                 self.assertIn("MOC_ENV_COMPLETION_COMMAND", stdout)
                 if shell == "bash":
                     self.assertIn("complete -o default", stdout)
                 else:
                     self.assertIn("compdef _moc-env moc-env", stdout)
+
+    def test_bash_completion_offers_commands_and_environments(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            with patch.dict(
+                os.environ,
+                {
+                    "MOC_ENV_CACHE_DIR": temporary_directory,
+                    "MOC_ENV_COMPLETION_COMMAND": f"{sys.executable} -m moc_env.cli",
+                },
+            ):
+                exit_code, _, _ = self.run_cli(["list", "--format", "json"])
+                self.assertEqual(exit_code, 0)
+
+                script = self.run_cli(["completion", "bash"])[1]
+                for words, cword, expected in (
+                    ("moc-env status-", 1, "status-hub\nstatus-workload\n"),
+                    ("moc-env status-hub bu-ist-", 2, "bu-ist-demo\n"),
+                ):
+                    with self.subTest(words=words):
+                        completion = subprocess.run(
+                            [
+                                "bash",
+                                "-c",
+                                script
+                                + f'\nCOMP_WORDS=({words}); COMP_CWORD={cword}; '
+                                + '_moc_env_complete; printf \'%s\\n\' "${COMPREPLY[@]}"',
+                            ],
+                            cwd=os.getcwd(),
+                            text=True,
+                            capture_output=True,
+                            check=True,
+                        )
+                        self.assertEqual(completion.stdout, expected)

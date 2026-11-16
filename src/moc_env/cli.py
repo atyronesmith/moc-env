@@ -30,6 +30,7 @@ from .credentials import (
 )
 from .github import GitHubClient, GitHubError, RateLimitError
 from .completion import (
+    COMMANDS,
     bash_completion_script,
     command_help_epilog,
     zsh_completion_script,
@@ -152,26 +153,38 @@ def _add_status_arguments(parser: argparse.ArgumentParser) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="moc-env",
-        description="Report CCI-MOC environment configuration state from public GitHub repositories",
+        description=(
+            "Report and manage CCI-MOC environment configuration state "
+            "from public GitHub repositories"
+        ),
         epilog=command_help_epilog(),
         formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+
+    return parser
+
+
+def build_status_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="moc-env status",
+        description="Report combined hub and workload repository configuration state",
     )
     _add_status_arguments(parser)
     return parser
 
 
-def build_hub_status_parser() -> argparse.ArgumentParser:
+def build_status_hub_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="moc-env hub-status",
+        prog="moc-env status-hub",
         description="Report hub-cluster repository configuration state",
     )
     _add_status_arguments(parser)
     return parser
 
 
-def build_work_status_parser() -> argparse.ArgumentParser:
+def build_status_workload_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="moc-env work-status",
+        prog="moc-env status-workload",
         description="Report workload-cluster repository configuration state",
     )
     _add_status_arguments(parser)
@@ -549,6 +562,14 @@ def _resolve_github_token(args: argparse.Namespace) -> str | None:
 
 def main(argv: list[str] | None = None) -> int:
     arguments = sys.argv[1:] if argv is None else argv
+    if not arguments:
+        print(build_parser().format_help(), end="")
+        return 0
+
+    if arguments[0] in {"-h", "--help"}:
+        print(build_parser().format_help(), end="")
+        return 0
+
     if arguments and arguments[0] == "__complete-environment":
         prefix = arguments[1] if len(arguments) > 1 else ""
         mode = arguments[2] if len(arguments) > 2 else "environment"
@@ -1319,11 +1340,15 @@ def main(argv: list[str] | None = None) -> int:
         }
         return 1 if any(check.state in differences for check in comparison.checks) else 0
 
-    if arguments and arguments[0] in {"hub-status", "work-status"}:
+    if arguments and arguments[0] in {"status", "status-hub", "status-workload"}:
         parser = (
-            build_hub_status_parser()
-            if arguments[0] == "hub-status"
-            else build_work_status_parser()
+            build_status_parser()
+            if arguments[0] == "status"
+            else (
+                build_status_hub_parser()
+                if arguments[0] == "status-hub"
+                else build_status_workload_parser()
+            )
         )
         args = parser.parse_args(arguments[1:])
         issue_number = args.issue
@@ -1335,7 +1360,7 @@ def main(argv: list[str] | None = None) -> int:
         client = GitHubClient(token=github_token, timeout=args.timeout)
         stage_step = 0
 
-        def print_scoped_progress(
+        def print_progress(
             stage: str,
             action: str,
             repository: str,
@@ -1354,56 +1379,27 @@ def main(argv: list[str] | None = None) -> int:
         checker = StatusChecker(
             client=client,
             include_prs=not args.no_prs,
-            progress=print_scoped_progress,
+            progress=print_progress,
         )
         try:
             report = (
-                checker.run_hub(environment)
-                if arguments[0] == "hub-status"
-                else checker.run_workload(environment)
+                    checker.run(environment)
+                    if arguments[0] == "status"
+                    else (
+                        checker.run_hub(environment)
+                        if arguments[0] == "status-hub"
+                        else checker.run_workload(environment)
+                    )
             ).to_dict()
         except (CredentialError, GitHubError, RateLimitError) as exc:
             print(f"moc-env: {exc}", file=sys.stderr)
             return 2
         return _render_status_report(args, report)
 
-    args = build_parser().parse_args(argv)
-    issue_number = args.issue
-    if issue_number is None:
-        issue_number = KNOWN_ISSUES.get(args.environment)
-
-    environment = Environment(name=args.environment, issue_number=issue_number)
-    github_token = _resolve_github_token(args)
-
-    client = GitHubClient(token=github_token, timeout=args.timeout)
-    stage_step = 0
-
-    def print_progress(
-        stage: str, action: str, repository: str, path: str
-    ) -> None:
-        nonlocal stage_step
-        stage_step += 1
-        print(
-            f"▶ Step {stage_step}: {stage}\n"
-            f"    Action:     {action}\n"
-            f"    Repository: {repository}\n"
-            f"    Source:     {path}",
-            file=sys.stderr,
-        )
-
-    checker = StatusChecker(
-        client=client,
-        include_prs=not args.no_prs,
-        progress=print_progress,
-    )
-
-    try:
-        report = checker.run(environment).to_dict()
-    except (CredentialError, GitHubError, RateLimitError) as exc:
-        print(f"moc-env: {exc}", file=sys.stderr)
-        return 2
-
-    return _render_status_report(args, report)
+    command = arguments[0]
+    print(f"moc-env: unknown command: {command}", file=sys.stderr)
+    print(command_help_epilog(), file=sys.stderr)
+    return 2
 
 
 if __name__ == "__main__":
