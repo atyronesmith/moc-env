@@ -652,7 +652,11 @@ bu_ist_demo_infra:
                 self.requested_files = []
 
             def pulls(self, repository, state="all"):
-                if repository != "CCI-MOC/oac-apps":
+                if repository not in {
+                    "CCI-MOC/oac-apps",
+                    "CCI-MOC/oac-infra",
+                    "CCI-MOC/moc-keycloak",
+                }:
                     return
                 for number in range(25):
                     yield {
@@ -672,20 +676,185 @@ bu_ist_demo_infra:
                     }
 
             def pr_files(self, repository, number):
-                self.requested_files.append(number)
-                yield {"filename": "values/bu-ist-demo-infra/example.yaml"}
+                self.requested_files.append((repository, number))
+                if repository == "CCI-MOC/oac-apps":
+                    yield {
+                        "filename": "values/bu-ist-demo-infra/example.yaml"
+                    }
+                elif repository == "CCI-MOC/oac-infra":
+                    yield {
+                        "filename": "infra/inventory/00hosts.yaml",
+                        "patch": "+cluster: bu-ist-demo-infra\n",
+                    }
+                else:
+                    yield {
+                        "filename": "main.tf",
+                        "patch": '+cluster_name = "bu-ist-demo-infra"\n',
+                    }
 
         client = LimitedPullRequestClient()
         report = StatusChecker(client).run(
             Environment(name="bu-ist-demo", issue_number=666)
         ).to_dict()
 
-        self.assertEqual(len(client.requested_files), 20)
-        self.assertEqual(sorted(client.requested_files), list(range(5, 25)))
+        self.assertEqual(len(client.requested_files), 60)
+        requested_by_repository = {
+            repository: [] for repository in (
+                "CCI-MOC/oac-apps",
+                "CCI-MOC/oac-infra",
+                "CCI-MOC/moc-keycloak",
+            )
+        }
+        for repository, number in client.requested_files:
+            requested_by_repository[repository].append(number)
+        self.assertEqual(requested_by_repository, {
+            "CCI-MOC/oac-apps": list(range(5, 25)),
+            "CCI-MOC/oac-infra": list(range(5, 25)),
+            "CCI-MOC/moc-keycloak": list(range(5, 25)),
+        })
         check = next(
             item for item in report["checks"] if item["check"] == "Relevant pull requests"
         )
-        self.assertEqual(check["actual"]["matching_pr_count"], 20)
+        self.assertEqual(check["actual"]["matching_pr_count"], 60)
+
+    def test_infra_pull_request_for_other_environment_is_not_relevant(self) -> None:
+        class OtherEnvironmentInfraPullClient(FakeGitHubClient):
+            def pulls(self, repository, state="all"):
+                if repository == "CCI-MOC/oac-infra":
+                    yield {
+                        "number": 27,
+                        "title": "Update another environment",
+                        "body": None,
+                        "state": "open",
+                        "merged_at": None,
+                        "updated_at": "2026-11-16T00:00:00Z",
+                        "head": {"ref": "another-environment", "sha": "abc123"},
+                        "html_url": (
+                            "https://github.com/CCI-MOC/oac-infra/pull/27"
+                        ),
+                    }
+                    return
+                yield from super().pulls(repository, state)
+
+            def pr_files(self, repository, number):
+                if repository == "CCI-MOC/oac-infra" and number == 27:
+                    yield {
+                        "filename": "infra/inventory/00hosts.yaml",
+                        "patch": (
+                            "@@ -1,3 +1,3 @@\n"
+                            "-cluster: another-env-infra\n"
+                            "+cluster: another-env-workload0\n"
+                        ),
+                    }
+                    return
+                yield from super().pr_files(repository, number)
+
+        report = StatusChecker(OtherEnvironmentInfraPullClient()).run(
+            Environment(name="bu-ist-demo", issue_number=666)
+        ).to_dict()
+        check = next(
+            item for item in report["checks"]
+            if item["check"] == "Relevant pull requests"
+        )
+        numbers = [
+            item["number"]
+            for item in check["evidence"]["pull_requests"]
+        ]
+        self.assertNotIn(27, numbers)
+        self.assertEqual(
+            check["actual"]["repository_counts"],
+            {"CCI-MOC/oac-apps": 1},
+        )
+
+    def test_issue_link_and_multi_repository_pull_request_counts(self) -> None:
+        issue_url = "https://github.com/CCI-MOC/MOC-issues/issues/666"
+
+        class MultiRepositoryPullClient(FakeGitHubClient):
+            def pulls(self, repository, state="all"):
+                if repository == "CCI-MOC/oac-infra":
+                    yield {
+                        "number": 28,
+                        "title": "Infrastructure follow-up",
+                        "body": f"Part of {issue_url}",
+                        "state": "open",
+                        "merged_at": None,
+                        "updated_at": "2026-11-16T00:00:00Z",
+                        "head": {"ref": "infra-follow-up", "sha": "abc123"},
+                        "html_url": (
+                            "https://github.com/CCI-MOC/oac-infra/pull/28"
+                        ),
+                    }
+                    return
+                if repository == "CCI-MOC/moc-keycloak":
+                    yield {
+                        "number": 7,
+                        "title": "Update OIDC client",
+                        "body": None,
+                        "state": "open",
+                        "merged_at": None,
+                        "updated_at": "2026-11-16T00:00:00Z",
+                        "head": {"ref": "bu-ist-demo-oidc", "sha": "def456"},
+                        "html_url": (
+                            "https://github.com/CCI-MOC/moc-keycloak/pull/7"
+                        ),
+                    }
+                    return
+                yield from super().pulls(repository, state)
+
+            def pr_files(self, repository, number):
+                if repository == "CCI-MOC/oac-infra" and number == 28:
+                    yield {"filename": "docs/inventory-follow-up.md"}
+                    return
+                if repository == "CCI-MOC/moc-keycloak" and number == 7:
+                    yield {
+                        "filename": "main.tf",
+                        "patch": (
+                            '@@ -1,3 +1,3 @@\n'
+                            '-cluster_name = "old-infra"\n'
+                            '+cluster_name = "bu-ist-demo-infra"\n'
+                        ),
+                    }
+                    return
+                yield from super().pr_files(repository, number)
+
+        report = StatusChecker(MultiRepositoryPullClient()).run(
+            Environment(name="bu-ist-demo", issue_number=666)
+        ).to_dict()
+        check = next(
+            item for item in report["checks"]
+            if item["check"] == "Relevant pull requests"
+        )
+        actual = check["actual"]
+        expected_repository_counts = {
+            "CCI-MOC/moc-keycloak": 1,
+            "CCI-MOC/oac-apps": 1,
+            "CCI-MOC/oac-infra": 1,
+        }
+        self.assertEqual(actual["matching_pr_count"], 3)
+        self.assertEqual(actual["repository_counts"], expected_repository_counts)
+        self.assertEqual(
+            sum(actual["repository_counts"].values()),
+            actual["matching_pr_count"],
+        )
+        self.assertEqual(
+            actual["open_count"]
+            + actual["merged_count"]
+            + actual["closed_unmerged_count"],
+            actual["matching_pr_count"],
+        )
+        evidence_repositories = {
+            item["repository"]["value"]
+            for item in check["evidence"]["pull_requests"]
+        }
+        self.assertEqual(evidence_repositories, set(expected_repository_counts))
+        text_report = render_text(report)
+        markdown_report = render_markdown(report)
+        self.assertIn("Pull requests by repository:", text_report)
+        self.assertIn("CCI-MOC/oac-infra: 1", text_report)
+        self.assertIn(
+            "**Relevant pull requests — CCI-MOC/oac-infra**",
+            markdown_report,
+        )
 
     def test_status_checker_reports_declared_apps_paths(self) -> None:
         required_components = self.required_components

@@ -216,36 +216,49 @@ def _pull_request_table(evidence: dict[str, Any]) -> list[str]:
     pull_requests = evidence.get("pull_requests")
     if not isinstance(pull_requests, list) or not pull_requests:
         return []
-    rows = [
-        [
-            pull.get("number"),
-            pull.get("title"),
-            pull.get("state"),
-            pull.get("merged"),
-            pull.get("classification"),
-            pull.get("head_ref"),
-            pull.get("html_url"),
-            pull.get("changed_files"),
-        ]
-        for pull in pull_requests
-    ]
-    return [
-        "**Relevant pull requests**",
-        "",
-        *_markdown_table(
+
+    def repository(pull: dict[str, Any]) -> str:
+        value = pull.get("repository")
+        if isinstance(value, dict):
+            return str(value.get("value"))
+        return str(value or "unknown")
+
+    lines: list[str] = []
+    for pull_repository in sorted({repository(pull) for pull in pull_requests}):
+        rows = [
             [
-                "PR",
-                "Title",
-                "State",
-                "Merged",
-                "Classification",
-                "Head branch",
-                "Link",
-                "Changed files",
-            ],
-            rows,
-        ),
-    ]
+                pull.get("number"),
+                pull.get("title"),
+                pull.get("state"),
+                pull.get("merged"),
+                pull.get("classification"),
+                pull.get("head_ref"),
+                pull.get("html_url"),
+                pull.get("changed_files"),
+            ]
+            for pull in pull_requests
+            if repository(pull) == pull_repository
+        ]
+        lines.extend(
+            [
+                f"**Relevant pull requests — {pull_repository}**",
+                "",
+                *_markdown_table(
+                    [
+                        "PR",
+                        "Title",
+                        "State",
+                        "Merged",
+                        "Classification",
+                        "Head branch",
+                        "Link",
+                        "Changed files",
+                    ],
+                    rows,
+                ),
+            ]
+        )
+    return lines
 
 
 def _text_value(value: Any, indent: int) -> str:
@@ -452,6 +465,7 @@ def _pull_request_count_summary(check: dict[str, Any]) -> list[str] | None:
         ("Closed-unmerged PRs", actual["closed_unmerged_count"]),
         ("Open PRs", actual["open_count"]),
     ]
+    repository_counts = actual.get("repository_counts")
     label_width = max(len(label) for label, _ in counts) + 2
     value_width = max(len(str(value)) for _, value in counts) + 2
     lines = ["  Pull request counts:"]
@@ -459,6 +473,12 @@ def _pull_request_count_summary(check: dict[str, Any]) -> list[str] | None:
         f"    {label:<{label_width}} {str(value):>{value_width}}"
         for label, value in counts
     )
+    if isinstance(repository_counts, dict) and repository_counts:
+        lines.append("  Pull requests by repository:")
+        lines.extend(
+            f"    {repository}: {count}"
+            for repository, count in sorted(repository_counts.items())
+        )
     return lines
 
 

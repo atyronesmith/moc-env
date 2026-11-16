@@ -46,7 +46,8 @@ It reports:
 - `update-agents.yaml` host inputs for non-OpenStack workload hosts;
 - Keycloak OIDC client registration;
 - `oac-apps` hub, local-cluster, and hosted-workload GitOps paths;
-- open and merged pull requests that reference the environment.
+- open and merged pull requests in `oac-apps`, `oac-infra`, and
+  `moc-keycloak` that reference the environment.
 
 Later milestones can add broader repository coverage and optional live
 OpenShift/Argo CD checks. Current desired-state tooling covers hub clusters,

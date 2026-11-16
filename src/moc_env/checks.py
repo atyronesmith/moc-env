@@ -1190,6 +1190,10 @@ class StatusChecker:
             for item in pull_requests
             if item.classification.value == "closed_unmerged"
         ]
+        repository_counts: dict[str, int] = {}
+        for item in pull_requests:
+            repository = item.repository.value
+            repository_counts[repository] = repository_counts.get(repository, 0) + 1
         state = "pr_open" if open_prs else "declared_in_main"
         evidence = []
         for item in pull_requests:
@@ -1204,6 +1208,7 @@ class StatusChecker:
                     "head_ref": pull.head_ref.to_dict(),
                     "head_sha": pull.head_sha.to_dict(),
                     "html_url": pull.url.to_dict(),
+                    "repository": pull.repository.to_dict(),
                     "changed_files": list(pull.changed_files.value),
                 }
             )
@@ -1238,6 +1243,7 @@ class StatusChecker:
                     "open_count": len(open_prs),
                     "merged_count": len(merged_prs),
                     "closed_unmerged_count": len(closed_unmerged_prs),
+                    "repository_counts": dict(sorted(repository_counts.items())),
                 },
                 reason=reason,
                 present={
@@ -1245,6 +1251,7 @@ class StatusChecker:
                     "merged_pr_count": len(merged_prs),
                     "open_pr_count": len(open_prs),
                     "closed_unmerged_pr_count": len(closed_unmerged_prs),
+                    "repository_counts": dict(sorted(repository_counts.items())),
                 },
                 missing=missing,
                 evidence={"pull_requests": evidence},

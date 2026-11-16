@@ -632,6 +632,10 @@ it. In JSON, each check has normalized `expected`, `observed`, and `gaps`
 arrays; the older `expected`, `present`, `missing`, and `actual` fields are
 retained temporarily for compatibility.
 
+Pull-request discovery covers `oac-apps`, `oac-infra`, and `moc-keycloak`.
+Reports record the repository for each PR and group rendered PR tables by
+repository.
+
 ### Pull-request calls are too expensive
 
 Use `--no-prs` for status, comparison, or planning commands when PR state is
