@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 import re
 from typing import Any
 
 import yaml
 
-from .github import GitHubClient
+from .github import GitHubClient, GitHubError
 from .model import Environment
 
 OAC_INFRA_REPOSITORY = "CCI-MOC/oac-infra"
@@ -257,6 +257,7 @@ class AppsObservation:
     pull_requests: tuple[PullRequestObservation, ...]
     source_repository: str
     source_ref: str = "main"
+    files: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -713,6 +714,13 @@ def read_apps_observation(
             "git/trees/main?recursive=1",
         )
     tree = client.get_tree(repository)
+    values_files: dict[str, str] = {}
+    for path in tree:
+        if path.startswith("hosted-clusters/") and path.endswith("/values.yaml"):
+            try:
+                values_files[path] = client.get_file(repository, path)
+            except GitHubError:
+                pass
     hub = environment.infra_cluster
     environment_path_prefixes = (
         f"hosted-clusters/{hub}/",
@@ -881,6 +889,7 @@ def read_apps_observation(
         ),
         pull_requests=tuple(pull_requests),
         source_repository=repository,
+        files=values_files,
     )
 
 

@@ -142,14 +142,6 @@ NOT_CHECKED: tuple[NotChecked, ...] = (
     NotChecked(
         "hub",
         2,
-        "Create internal DNS records for <cluster> api, api-int, and *.apps",
-        "The tool does not query the DNS service or read moc-dns, so it cannot "
-        "prove that the records for <cluster> exist.",
-        _CLUSTER_DEPLOYMENT,
-    ),
-    NotChecked(
-        "hub",
-        2,
         "Store the <cluster> SSH key and kubeadmin credentials in AWS Secrets Manager",
         "Secrets Manager is outside the public repositories read by this tool, "
         "so it cannot verify cluster/<cluster>/sshkey or "
@@ -179,22 +171,6 @@ NOT_CHECKED: tuple[NotChecked, ...] = (
         "Running setup-gitops.sh and applying the bootstrap Helm template "
         "changes live cluster state, which this repository-only report cannot "
         "verify.",
-        _CLUSTER_CONFIGURATION,
-    ),
-    NotChecked(
-        "hub",
-        5,
-        "Complete Pure storage configuration for <cluster>",
-        "Pure storage configuration is documented separately and is not among "
-        "the repositories read by this tool.",
-        _CLUSTER_CONFIGURATION,
-    ),
-    NotChecked(
-        "hub",
-        5,
-        "Complete cluster certificates and external DNS for <cluster>",
-        "The relevant IAM roles and policies are documented separately and are "
-        "not among the repositories read by this tool.",
         _CLUSTER_CONFIGURATION,
     ),
 )
@@ -273,6 +249,21 @@ CHECK_PHASES: dict[str, CheckPhase] = {
         "Workload component values",
         ("workload.hosted_cluster_values",),
     ),
+    "hub.pure_storage_realm": CheckPhase(5, "GitOps values and applications in oac-apps", ("hub.hosted_cluster_defaults",)),
+    "workload.pure_storage_realm": CheckPhase(5, "Merged GitOps changes", ("workload.component_values",)),
+    "hub.moc_aws_oidc_cluster": CheckPhase(5, "GitOps values and applications in oac-apps", ("hub.hosted_cluster_defaults",)),
+    "workload.moc_aws_oidc_cluster": CheckPhase(5, "Merged GitOps changes", ("workload.component_values",)),
+    "hub.moc_aws_cert_manager_policy": CheckPhase(5, "GitOps values and applications in oac-apps", ("hub.hosted_cluster_defaults",)),
+    "workload.moc_aws_cert_manager_policy": CheckPhase(5, "Merged GitOps changes", ("workload.component_values",)),
+    "hub.moc_aws_hosted_secret_prefix": CheckPhase(5, "GitOps values and applications in oac-apps", ("hub.moc_aws_oidc_cluster",)),
+    "workload.keycloak_oidc_client": CheckPhase(4, "Keycloak OIDC client", ("workload.hosted_cluster_values",)),
+    "hub.moc_dns_records": CheckPhase(2, "Hub-image inventory entry and group variables", ("hub.image_vars",)),
+    "workload.api_address_network": CheckPhase(3, "Hosted-cluster values", ("workload.hosted_cluster_values",)),
+    "workload.ingress_address_network": CheckPhase(3, "Hosted-cluster values", ("workload.hosted_cluster_values",)),
+    "workload.address_uniqueness": CheckPhase(3, "Hosted-cluster values", ("workload.hosted_cluster_values",)),
+    "workload.dns_base_domain": CheckPhase(3, "Hosted-cluster values", ("workload.hosted_cluster_values",)),
+    "workload.node_pool_hosts": CheckPhase(3, "Hosted-cluster values", ("workload.hosted_cluster_values",)),
+    "workload.gpu_without_hosts": CheckPhase(3, "Hosted-cluster values", ("workload.hosted_cluster_values",)),
 }
 
 _SCOPE_ORDER = {"hub": 0, "workload": 1, "shared": 2}

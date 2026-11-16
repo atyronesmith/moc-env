@@ -175,6 +175,51 @@
       "url": "https://github.com/CCI-MOC/oac-infra/blob/main/hub-images/group_vars/bu-ist-demo-infra/vars.yml"
     },
     {
+      "actual": {
+        "*.apps.bu-ist-demo.int.massopen.cloud": "10.20.27.12",
+        "api-int.bu-ist-demo.int.massopen.cloud": "10.20.27.11",
+        "api.bu-ist-demo.int.massopen.cloud": "10.20.27.11"
+      },
+      "blocked_by": [
+        "hub.image_vars"
+      ],
+      "check": "Hub moc-dns records",
+      "evidence": {},
+      "expected": {
+        "*.apps.bu-ist-demo.int.massopen.cloud": "10.20.27.12",
+        "api-int.bu-ist-demo.int.massopen.cloud": "10.20.27.11",
+        "api.bu-ist-demo.int.massopen.cloud": "10.20.27.11"
+      },
+      "gaps": [],
+      "id": "hub.moc_dns_records",
+      "next_action": null,
+      "observed": [
+        {
+          "name": "api.bu-ist-demo.int.massopen.cloud",
+          "value": "10.20.27.11"
+        },
+        {
+          "name": "api-int.bu-ist-demo.int.massopen.cloud",
+          "value": "10.20.27.11"
+        },
+        {
+          "name": "*.apps.bu-ist-demo.int.massopen.cloud",
+          "value": "10.20.27.12"
+        }
+      ],
+      "path": "zonefiles/int.massopen.cloud.zone",
+      "phase": 2,
+      "phase_title": "Hub-image inventory entry and group variables",
+      "reason": "All required hub DNS records match the hub-image variables.",
+      "ref": "main",
+      "repository": "CCI-MOC/moc-dns",
+      "scope": "hub",
+      "severity": "info",
+      "stage": "Cross-repository prerequisites",
+      "state": "declared_in_main",
+      "url": "https://github.com/CCI-MOC/moc-dns/blob/main/zonefiles/int.massopen.cloud.zone"
+    },
+    {
       "actual": [
         "http://10.2.0.82/boot/discovery.iso"
       ],
@@ -631,6 +676,153 @@
     },
     {
       "actual": {
+        "s3_endpoint": "s3.bu-ist-demo.int.massopen.cloud",
+        "subnet_prefix": "10.9.15.0/24",
+        "subnet_vlan": 2321
+      },
+      "blocked_by": [
+        "hub.hosted_cluster_defaults"
+      ],
+      "check": "Hub Pure storage realm",
+      "evidence": {},
+      "expected": {
+        "fields": [
+          "subnet_vlan",
+          "subnet_prefix",
+          "s3_endpoint"
+        ],
+        "name": "bu-ist-demo-infra"
+      },
+      "gaps": [],
+      "id": "hub.pure_storage_realm",
+      "next_action": null,
+      "observed": [
+        {
+          "name": "subnet_vlan",
+          "value": 2321
+        },
+        {
+          "name": "subnet_prefix",
+          "value": "10.9.15.0/24"
+        },
+        {
+          "name": "s3_endpoint",
+          "value": "s3.bu-ist-demo.int.massopen.cloud"
+        }
+      ],
+      "path": "ansible/group_vars/all/realms.yaml",
+      "phase": 5,
+      "phase_title": "GitOps values and applications in oac-apps",
+      "reason": "The bu-ist-demo-infra Pure storage realm is complete.",
+      "ref": "main",
+      "repository": "CCI-MOC/everpure-moc",
+      "scope": "hub",
+      "severity": "info",
+      "stage": "Cross-repository prerequisites",
+      "state": "declared_in_main",
+      "url": "https://github.com/CCI-MOC/everpure-moc/blob/main/ansible/group_vars/all/realms.yaml"
+    },
+    {
+      "actual": "local.defaults, {\n      cluster_name = \"bu-ist-demo-infra\"\n      eso_writable_secret_prefixes = [\"cluster/bu-ist-demo-infra/hostedcluster/\"]",
+      "blocked_by": [
+        "hub.hosted_cluster_defaults"
+      ],
+      "check": "Hub moc-aws OIDC cluster",
+      "evidence": {
+        "block": "local.defaults, {\n      cluster_name = \"bu-ist-demo-infra\"\n      eso_writable_secret_prefixes = [\"cluster/bu-ist-demo-infra/hostedcluster/\"]"
+      },
+      "expected": {
+        "cluster_name": "bu-ist-demo-infra"
+      },
+      "gaps": [],
+      "id": "hub.moc_aws_oidc_cluster",
+      "next_action": null,
+      "observed": [
+        {
+          "name": "value",
+          "value": "local.defaults, {\n      cluster_name = \"bu-ist-demo-infra\"\n      eso_writable_secret_prefixes = [\"cluster/bu-ist-demo-infra/hostedcluster/\"]"
+        }
+      ],
+      "path": "main.tf",
+      "phase": 5,
+      "phase_title": "GitOps values and applications in oac-apps",
+      "reason": "The moc-aws OIDC cluster entry for bu-ist-demo-infra is present.",
+      "ref": "main",
+      "repository": "CCI-MOC/moc-aws",
+      "scope": "hub",
+      "severity": "info",
+      "stage": "Cross-repository prerequisites",
+      "state": "declared_in_main",
+      "url": "https://github.com/CCI-MOC/moc-aws/blob/main/main.tf"
+    },
+    {
+      "actual": "cert_manager_policies",
+      "blocked_by": [
+        "hub.hosted_cluster_defaults"
+      ],
+      "check": "Hub moc-aws cert-manager policy",
+      "evidence": {
+        "block": "\n    \"cert_manager_policy_bu_ist_demo_infra\" = {\n      cluster_subdomain = \"bu-ist-demo.int.massopen.cloud\"\n      policy_name = \"cert-manager-bu-ist-demo-infra\""
+      },
+      "expected": {
+        "cluster": "bu-ist-demo-infra"
+      },
+      "gaps": [],
+      "id": "hub.moc_aws_cert_manager_policy",
+      "next_action": null,
+      "observed": [
+        {
+          "name": "value",
+          "value": "cert_manager_policies"
+        }
+      ],
+      "path": "cert-manager-policies.tf",
+      "phase": 5,
+      "phase_title": "GitOps values and applications in oac-apps",
+      "reason": "The cert-manager policy entry cert_manager_policies covers bu-ist-demo-infra.",
+      "ref": "main",
+      "repository": "CCI-MOC/moc-aws",
+      "scope": "hub",
+      "severity": "info",
+      "stage": "Cross-repository prerequisites",
+      "state": "declared_in_main",
+      "url": "https://github.com/CCI-MOC/moc-aws/blob/main/cert-manager-policies.tf"
+    },
+    {
+      "actual": [
+        "cluster/bu-ist-demo-infra/hostedcluster/"
+      ],
+      "blocked_by": [
+        "hub.moc_aws_oidc_cluster"
+      ],
+      "check": "Hub hosted-cluster secret prefix",
+      "evidence": {},
+      "expected": [
+        "cluster/bu-ist-demo-infra/hostedcluster/"
+      ],
+      "gaps": [],
+      "id": "hub.moc_aws_hosted_secret_prefix",
+      "next_action": null,
+      "observed": [
+        {
+          "name": "0",
+          "value": "cluster/bu-ist-demo-infra/hostedcluster/"
+        }
+      ],
+      "path": "main.tf",
+      "phase": 5,
+      "phase_title": "GitOps values and applications in oac-apps",
+      "reason": "The hub can write hosted-cluster secrets at cluster/bu-ist-demo-infra/hostedcluster/.",
+      "ref": "main",
+      "repository": "CCI-MOC/moc-aws",
+      "scope": "hub",
+      "severity": "info",
+      "stage": "Cross-repository prerequisites",
+      "state": "declared_in_main",
+      "url": "https://github.com/CCI-MOC/moc-aws/blob/main/main.tf"
+    },
+    {
+      "actual": {
         "found": true,
         "host_count": 1
       },
@@ -855,6 +1047,155 @@
       "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml"
     },
     {
+      "blocked_by": [
+        "workload.hosted_cluster_values"
+      ],
+      "check": "Workload API address network",
+      "evidence": {
+        "error": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable."
+      },
+      "expected": {},
+      "gaps": [],
+      "id": "workload.api_address_network",
+      "next_action": "Verify hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is readable and correctly formatted.",
+      "observed": [],
+      "path": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml",
+      "phase": 3,
+      "phase_title": "Hosted-cluster values",
+      "reason": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable.",
+      "ref": "main",
+      "repository": "CCI-MOC/oac-apps",
+      "scope": "workload",
+      "severity": "advisory",
+      "stage": "Cross-repository prerequisites",
+      "state": "unknown",
+      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml"
+    },
+    {
+      "blocked_by": [
+        "workload.hosted_cluster_values"
+      ],
+      "check": "Workload ingress address network",
+      "evidence": {
+        "error": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable."
+      },
+      "expected": {},
+      "gaps": [],
+      "id": "workload.ingress_address_network",
+      "next_action": "Verify hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is readable and correctly formatted.",
+      "observed": [],
+      "path": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml",
+      "phase": 3,
+      "phase_title": "Hosted-cluster values",
+      "reason": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable.",
+      "ref": "main",
+      "repository": "CCI-MOC/oac-apps",
+      "scope": "workload",
+      "severity": "advisory",
+      "stage": "Cross-repository prerequisites",
+      "state": "unknown",
+      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml"
+    },
+    {
+      "blocked_by": [
+        "workload.hosted_cluster_values"
+      ],
+      "check": "Workload DNS base domain",
+      "evidence": {
+        "error": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable."
+      },
+      "expected": {},
+      "gaps": [],
+      "id": "workload.dns_base_domain",
+      "next_action": "Verify hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is readable and correctly formatted.",
+      "observed": [],
+      "path": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml",
+      "phase": 3,
+      "phase_title": "Hosted-cluster values",
+      "reason": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable.",
+      "ref": "main",
+      "repository": "CCI-MOC/oac-apps",
+      "scope": "workload",
+      "severity": "advisory",
+      "stage": "Cross-repository prerequisites",
+      "state": "unknown",
+      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml"
+    },
+    {
+      "blocked_by": [
+        "workload.hosted_cluster_values"
+      ],
+      "check": "Workload node-pool host capacity",
+      "evidence": {
+        "error": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable."
+      },
+      "expected": {},
+      "gaps": [],
+      "id": "workload.node_pool_hosts",
+      "next_action": "Verify hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is readable and correctly formatted.",
+      "observed": [],
+      "path": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml",
+      "phase": 3,
+      "phase_title": "Hosted-cluster values",
+      "reason": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable.",
+      "ref": "main",
+      "repository": "CCI-MOC/oac-apps",
+      "scope": "workload",
+      "severity": "advisory",
+      "stage": "Cross-repository prerequisites",
+      "state": "unknown",
+      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml"
+    },
+    {
+      "blocked_by": [
+        "workload.hosted_cluster_values"
+      ],
+      "check": "Workload GPU feature support",
+      "evidence": {
+        "error": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable."
+      },
+      "expected": {},
+      "gaps": [],
+      "id": "workload.gpu_without_hosts",
+      "next_action": "Verify hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is readable and correctly formatted.",
+      "observed": [],
+      "path": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml",
+      "phase": 3,
+      "phase_title": "Hosted-cluster values",
+      "reason": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable.",
+      "ref": "main",
+      "repository": "CCI-MOC/oac-apps",
+      "scope": "workload",
+      "severity": "advisory",
+      "stage": "Cross-repository prerequisites",
+      "state": "unknown",
+      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml"
+    },
+    {
+      "actual": {},
+      "blocked_by": [
+        "workload.hosted_cluster_values"
+      ],
+      "check": "Workload address uniqueness",
+      "evidence": {},
+      "expected": "No address used by another cluster",
+      "gaps": [],
+      "id": "workload.address_uniqueness",
+      "next_action": null,
+      "observed": [],
+      "path": "hosted-clusters/",
+      "phase": 3,
+      "phase_title": "Hosted-cluster values",
+      "reason": "No workload address is used by another cluster.",
+      "ref": "main",
+      "repository": "CCI-MOC/oac-apps",
+      "scope": "workload",
+      "severity": "info",
+      "stage": "Cross-repository prerequisites",
+      "state": "declared_in_main",
+      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/"
+    },
+    {
       "actual": {
         "matched_file_count": 0
       },
@@ -912,6 +1253,120 @@
       "stage": "GitOps configuration",
       "state": "missing",
       "url": "https://github.com/CCI-MOC/oac-apps/blob/main/values/bu-ist-demo-infra/bu-ist-demo-workload0"
+    },
+    {
+      "actual": {
+        "s3_endpoint": "s3.bu-ist-demo-workload0.hcp.bu-ist-demo.int.massopen.cloud",
+        "subnet_prefix": "10.20.28.0/24",
+        "subnet_vlan": 2322
+      },
+      "blocked_by": [
+        "workload.component_values"
+      ],
+      "check": "Workload Pure storage realm",
+      "evidence": {},
+      "expected": {
+        "fields": [
+          "subnet_vlan",
+          "subnet_prefix",
+          "s3_endpoint"
+        ],
+        "name": "bu-ist-demo-workload0"
+      },
+      "gaps": [],
+      "id": "workload.pure_storage_realm",
+      "next_action": null,
+      "observed": [
+        {
+          "name": "subnet_vlan",
+          "value": 2322
+        },
+        {
+          "name": "subnet_prefix",
+          "value": "10.20.28.0/24"
+        },
+        {
+          "name": "s3_endpoint",
+          "value": "s3.bu-ist-demo-workload0.hcp.bu-ist-demo.int.massopen.cloud"
+        }
+      ],
+      "path": "ansible/group_vars/all/realms.yaml",
+      "phase": 5,
+      "phase_title": "Merged GitOps changes",
+      "reason": "The bu-ist-demo-workload0 Pure storage realm is complete.",
+      "ref": "main",
+      "repository": "CCI-MOC/everpure-moc",
+      "scope": "workload",
+      "severity": "info",
+      "stage": "Cross-repository prerequisites",
+      "state": "declared_in_main",
+      "url": "https://github.com/CCI-MOC/everpure-moc/blob/main/ansible/group_vars/all/realms.yaml"
+    },
+    {
+      "actual": "local.defaults, {\n      cluster_name = \"bu-ist-demo-workload0\"",
+      "blocked_by": [
+        "workload.component_values"
+      ],
+      "check": "Workload moc-aws OIDC cluster",
+      "evidence": {
+        "block": "local.defaults, {\n      cluster_name = \"bu-ist-demo-workload0\""
+      },
+      "expected": {
+        "cluster_name": "bu-ist-demo-workload0"
+      },
+      "gaps": [],
+      "id": "workload.moc_aws_oidc_cluster",
+      "next_action": null,
+      "observed": [
+        {
+          "name": "value",
+          "value": "local.defaults, {\n      cluster_name = \"bu-ist-demo-workload0\""
+        }
+      ],
+      "path": "main.tf",
+      "phase": 5,
+      "phase_title": "Merged GitOps changes",
+      "reason": "The moc-aws OIDC cluster entry for bu-ist-demo-workload0 is present.",
+      "ref": "main",
+      "repository": "CCI-MOC/moc-aws",
+      "scope": "workload",
+      "severity": "info",
+      "stage": "Cross-repository prerequisites",
+      "state": "declared_in_main",
+      "url": "https://github.com/CCI-MOC/moc-aws/blob/main/main.tf"
+    },
+    {
+      "actual": "cert_manager_policy_bu_ist_demo_workload0",
+      "blocked_by": [
+        "workload.component_values"
+      ],
+      "check": "Workload moc-aws cert-manager policy",
+      "evidence": {
+        "block": "\n      cluster_subdomain = \"bu-ist-demo-workload0.hcp.bu-ist-demo.int.massopen.cloud\"\n      policy_name = \"cert-manager-bu-ist-demo-workload0\""
+      },
+      "expected": {
+        "cluster": "bu-ist-demo-workload0"
+      },
+      "gaps": [],
+      "id": "workload.moc_aws_cert_manager_policy",
+      "next_action": null,
+      "observed": [
+        {
+          "name": "value",
+          "value": "cert_manager_policy_bu_ist_demo_workload0"
+        }
+      ],
+      "path": "cert-manager-policies.tf",
+      "phase": 5,
+      "phase_title": "Merged GitOps changes",
+      "reason": "The cert-manager policy entry cert_manager_policy_bu_ist_demo_workload0 covers bu-ist-demo-workload0.",
+      "ref": "main",
+      "repository": "CCI-MOC/moc-aws",
+      "scope": "workload",
+      "severity": "info",
+      "stage": "Cross-repository prerequisites",
+      "state": "declared_in_main",
+      "url": "https://github.com/CCI-MOC/moc-aws/blob/main/cert-manager-policies.tf"
     },
     {
       "actual": "open",
@@ -1158,6 +1613,26 @@
       },
       {
         "ref": "main",
+        "repository": "CCI-MOC/ansible-switches",
+        "sha": "8888888888888888888888888888888888888888"
+      },
+      {
+        "ref": "main",
+        "repository": "CCI-MOC/everpure-moc",
+        "sha": "5555555555555555555555555555555555555555"
+      },
+      {
+        "ref": "main",
+        "repository": "CCI-MOC/moc-aws",
+        "sha": "6666666666666666666666666666666666666666"
+      },
+      {
+        "ref": "main",
+        "repository": "CCI-MOC/moc-dns",
+        "sha": "7777777777777777777777777777777777777777"
+      },
+      {
+        "ref": "main",
         "repository": "CCI-MOC/moc-keycloak",
         "sha": "4444444444444444444444444444444444444444"
       },
@@ -1183,15 +1658,6 @@
         "heading": "Infrastructure Configuration"
       },
       "why": "The four repositories read by this tool do not describe the switch, network, or firewall state required for bu-ist-demo-infra."
-    },
-    {
-      "phase": 2,
-      "title": "Create internal DNS records for bu-ist-demo-infra api, api-int, and *.apps",
-      "where": {
-        "document": "docs/infra-cluster-deployment.md",
-        "heading": "Cluster Deployment"
-      },
-      "why": "The tool does not query the DNS service or read moc-dns, so it cannot prove that the records for bu-ist-demo-infra exist."
     },
     {
       "phase": 2,
@@ -1228,24 +1694,6 @@
         "heading": "Cluster Configuration"
       },
       "why": "Running setup-gitops.sh and applying the bootstrap Helm template changes live cluster state, which this repository-only report cannot verify."
-    },
-    {
-      "phase": 5,
-      "title": "Complete Pure storage configuration for bu-ist-demo-infra",
-      "where": {
-        "document": "docs/infra-cluster-deployment.md",
-        "heading": "Cluster Configuration"
-      },
-      "why": "Pure storage configuration is documented separately and is not among the repositories read by this tool."
-    },
-    {
-      "phase": 5,
-      "title": "Complete cluster certificates and external DNS for bu-ist-demo-infra",
-      "where": {
-        "document": "docs/infra-cluster-deployment.md",
-        "heading": "Cluster Configuration"
-      },
-      "why": "The relevant IAM roles and policies are documented separately and are not among the repositories read by this tool."
     }
   ],
   "overall_state": "CONFIGURATION IN PROGRESS",
@@ -1337,11 +1785,12 @@
   },
   "scope": "environment",
   "summary": {
-    "advisory_count": 0,
-    "check_count": 16,
+    "advisory_count": 5,
+    "check_count": 30,
     "severity_counts": {
+      "advisory": 5,
       "blocking": 9,
-      "info": 7
+      "info": 16
     },
     "stages": [
       {
@@ -1357,6 +1806,14 @@
         "stage": "Cluster build",
         "state_counts": {
           "declared_in_main": 2
+        }
+      },
+      {
+        "check_count": 14,
+        "stage": "Cross-repository prerequisites",
+        "state_counts": {
+          "declared_in_main": 9,
+          "unknown": 5
         }
       },
       {
@@ -1383,11 +1840,12 @@
       }
     ],
     "state_counts": {
-      "declared_in_main": 6,
+      "declared_in_main": 15,
       "missing": 6,
       "partial": 2,
       "pr_open": 1,
-      "requested": 1
+      "requested": 1,
+      "unknown": 5
     }
   }
 }

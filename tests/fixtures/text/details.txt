@@ -1,0 +1,321 @@
+bu-ist-demo · hub + workload · repo config as of 2026-11-16 12:34:56 UTC
+MOC-issues@1111111  ansible-switches@8888888  everpure-moc@5555555  moc-aws@6666666
+moc-dns@7777777  moc-keycloak@4444444  oac-apps@3333333  oac-infra@2222222  issue #666 (open)
+
+RESULT: 8 blocking gaps (workload 3) · 0 advisories · 16 of 29 checks pass
+UNKNOWN: Workload API address network: hosted-clusters/bu-ist-demo-infra/bu-ist-demo-…
+
+PHASE                        HUB bu-ist-demo-infra           WORKLOAD bu-ist-demo-workload0  
+1 Host inventory entry in…   ✅ 1 hosts                       ✅ 1 hosts                       
+2 Hub-image inventory entry… ✅ 6/6 variables                 🟡 partial                       
+3 Cluster discovery image…   🟡 partial                       ⚪ unknown                       
+4 Keycloak OIDC client /…    ✅ 1/1 checks                    ❌ none                          
+5 GitOps values and…         ❌ none                          ✅ 3/3 checks                    
+
+NEXT
+  1. [oac-infra] Generate and publish the parent hub's agent discovery ISO, then replace the
+  generic boot_image_url for every host in the workload cluster group. (after 2)
+       guide: docs/infra-cluster-deployment.md → Cluster Deployment
+  2. [oac-infra] Generate and publish a hub-specific discovery ISO, then replace the generic
+  boot_image_url for every host in the hub cluster group.
+       guide: docs/infra-cluster-deployment.md → Cluster Deployment
+  3. [oac-apps] Create the missing hosted-cluster values file from the closest existing
+  environment; set the cluster name, parent hub, networking, and node pools before adding
+  components. (after 5)
+       guide: docs/infra-cluster-deployment.md → Cluster Configuration
+  4. [oac-apps] Create the workload component-values directory, starting with hcp-config.yaml
+  and only the shared components this workload needs. (after 3)
+       guide: docs/infra-cluster-deployment.md → Cluster Configuration
+  5. [oac-apps] Create or complete the hub hosted-cluster defaults file at
+  hosted-clusters/<hub>/values.yaml in CCI-MOC/oac-infra. (after 2)
+       guide: docs/infra-cluster-deployment.md → Cluster Configuration
+  6. [oac-apps] Create or complete values/<hub>/hcp-config.yaml in CCI-MOC/oac-infra for
+  hub-wide HCP and secret-selector values. (after 5)
+       guide: docs/infra-cluster-deployment.md → Cluster Configuration
+  7. [oac-apps] Copy the required local-cluster component files from an existing hub environment
+  and adjust cluster-specific names and addresses. (after 5)
+       guide: docs/infra-cluster-deployment.md → Cluster Configuration
+  8. [oac-apps] Add Argo CD application manifests for the hub after its hosted-cluster, hub-wide
+  component, and local-cluster values are present, and reference the correct clusters. (after 5,
+  6, 7)
+       guide: docs/infra-cluster-deployment.md → Cluster Configuration
+
+NOT CHECKED — verify by hand:
+  Configure cluster and storage networks and firewalls for bu-ist-demo-infra; Store the
+  bu-ist-demo-infra SSH key and kubeadmin credentials in AWS Secrets Manager; Place the pull
+  secret and SSH key under hub-images/credentials/bu-ist-demo-infra; Run
+  create_agent_install_media and copy the bu-ist-demo-infra ISO to the bastion host; Bootstrap
+  Argo CD for bu-ist-demo-infra
+
+Details:  moc-env status bu-ist-demo --details
+Markdown: moc-env status bu-ist-demo --format markdown --output report.md
+
+DETAILED CHECKS
+
+----------------------------------------------------------------------------------------------------
+  ✅ Host inventory entry in oac-infra / bu-ist-demo-infra host inventory
+  Finding: The inventory contains a bu-ist-demo-infra group with 1 hosts.
+  Source: CCI-MOC/oac-infra · infra/inventory/00hosts.yaml @ 2222222
+  Field      Expected                       Observed
+  value      Inventory group for bu-ist-demo-infra found=True, host_count=1
+  URL: https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml
+----------------------------------------------------------------------------------------------------
+  ✅ Hub-image inventory entry and group variables / Hub image inventory
+  Finding: The hub-image inventory contains the all.children.bu-ist-demo-infra key.
+  Source: CCI-MOC/oac-infra · hub-images/inventory.yml @ 2222222
+  Field      Expected                       Observed
+  value      Hub-image inventory entry for bu-ist-demo-infra found=True
+  URL: https://github.com/CCI-MOC/oac-infra/blob/main/hub-images/inventory.yml
+----------------------------------------------------------------------------------------------------
+  ✅ Hub-image inventory entry and group variables / Hub image variables
+  Finding: All required hub-image variables are present in main.
+  Source: CCI-MOC/oac-infra · hub-images/group_vars/bu-ist-demo-infra/vars.yml @ 2222222
+  Field      Expected                       Observed
+  [0]        cluster_domain_name            cluster_domain_name
+  [1]        base_domain                    base_domain
+  [2]        machine_network                machine_network
+  [3]        api_ip                         api_ip
+  [4]        ingress_ip                     ingress_ip
+  [5]        dns_ip                         dns_ip
+  URL: https://github.com/CCI-MOC/oac-infra/blob/main/hub-images/group_vars/bu-ist-demo-infra/va
+  rs.yml
+----------------------------------------------------------------------------------------------------
+  ✅ Hub-image inventory entry and group variables / Hub moc-dns records
+  Finding: All required hub DNS records match the hub-image variables.
+  Source: CCI-MOC/moc-dns · zonefiles/int.massopen.cloud.zone @ 7777777
+  Field                                    Expected                       Observed
+  api.bu-ist-demo.int.massopen.cloud       10.20.27.11                    10.20.27.11
+  api-int.bu-ist-demo.int.massopen.cloud   10.20.27.11                    10.20.27.11
+  *.apps.bu-ist-demo.int.massopen.cloud    10.20.27.12                    10.20.27.12
+  URL: https://github.com/CCI-MOC/moc-dns/blob/main/zonefiles/int.massopen.cloud.zone
+----------------------------------------------------------------------------------------------------
+  🟡 Cluster discovery image published and referenced by the inventory / bu-ist-demo-infra boot
+  image
+  Finding: A boot image URL is present, but it points to the generic discovery.iso rather than a
+  cluster-specific image.
+  Source: CCI-MOC/oac-infra · infra/inventory/00hosts.yaml @ 2222222
+  Field      Expected                       Observed
+  value      Cluster-specific discovery image for bu-ist-demo-infra
+  http://10.2.0.82/boot/discovery.iso
+  URL: https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml
+----------------------------------------------------------------------------------------------------
+  ✅ Keycloak OIDC client / Infra OIDC client
+  Finding: All expected Keycloak OIDC client fields match.
+  Source: CCI-MOC/moc-keycloak · main.tf @ 4444444
+  Field          Expected                       Observed
+  client         bu-ist-demo-infra              bu-ist-demo-infra
+  redirect_uri
+  https://oauth-openshift.apps.bu-ist-demo.int.massopen.cloud/oauth2callback/mocsso
+  https://oauth-openshift.apps.bu-ist-demo.int.massopen.cloud/oauth2callback/mocsso
+  secret_name    cluster/bu-ist-demo-infra/keycloak-oidc cluster/bu-ist-demo-infra/keycloak-oidc
+  URL: https://github.com/CCI-MOC/moc-keycloak/blob/main/main.tf
+----------------------------------------------------------------------------------------------------
+  ❌ GitOps values and applications in oac-apps / Infra hosted-cluster defaults
+  Finding: No merged main paths were found for the default values for hosted clusters on this
+  hub cluster.
+  Source: CCI-MOC/oac-apps · hosted-clusters/bu-ist-demo-infra/values.yaml @ 3333333
+  Field                Expected                       Observed
+  file_count           1                              -
+  scope                hosted-clusters/bu-ist-demo-infra/values.yaml -
+  matched_file_count   -                              0
+  URL: https://github.com/CCI-MOC/oac-apps/tree/main/hosted-clusters/bu-ist-demo-infra
+----------------------------------------------------------------------------------------------------
+  ❌ GitOps values and applications in oac-apps / Hub-wide component values
+  Finding: No merged main paths were found for hub-wide HCP and secret-selector values.
+  Source: CCI-MOC/oac-apps · values/bu-ist-demo-infra @ 3333333
+  Field                Expected                       Observed
+  file_count           1                              -
+  scope                values/bu-ist-demo-infra       -
+  matched_file_count   -                              0
+  URL: https://github.com/CCI-MOC/oac-apps/tree/main/values
+----------------------------------------------------------------------------------------------------
+  ❌ GitOps values and applications in oac-apps / Infra local-cluster values
+  Finding: No merged main paths were found for the hub cluster's local operator and
+  shared-service values.
+  Source: CCI-MOC/oac-apps · values/bu-ist-demo-infra/local-cluster @ 3333333
+  Field                Expected                       Observed
+  file_count           13                             -
+  scope                values/bu-ist-demo-infra/local-cluster -
+  matched_file_count   -                              0
+  URL: https://github.com/CCI-MOC/oac-apps/tree/main/values/bu-ist-demo-infra
+----------------------------------------------------------------------------------------------------
+  ❌ GitOps values and applications in oac-apps / Infra ArgoCD applications
+  Finding: No merged main paths were found for direct ArgoCD applications applied on the hub
+  cluster.
+  Source: CCI-MOC/oac-apps · apps/bu-ist-demo-infra @ 3333333
+  Field                Expected                       Observed
+  file_count           1                              -
+  scope                apps/bu-ist-demo-infra         -
+  matched_file_count   -                              0
+  URL: https://github.com/CCI-MOC/oac-apps/tree/main/apps
+----------------------------------------------------------------------------------------------------
+  ✅ GitOps values and applications in oac-apps / Hub Pure storage realm
+  Finding: The bu-ist-demo-infra Pure storage realm is complete.
+  Source: CCI-MOC/everpure-moc · ansible/group_vars/all/realms.yaml @ 5555555
+  Field           Expected                       Observed
+  name            bu-ist-demo-infra              -
+  fields          subnet_vlan, subnet_prefix, s3_endpoint -
+  subnet_vlan     -                              2321
+  subnet_prefix   -                              10.9.15.0/24
+  s3_endpoint     -                              s3.bu-ist-demo.int.massopen.cloud
+  URL: https://github.com/CCI-MOC/everpure-moc/blob/main/ansible/group_vars/all/realms.yaml
+----------------------------------------------------------------------------------------------------
+  ✅ GitOps values and applications in oac-apps / Hub moc-aws OIDC cluster
+  Finding: The moc-aws OIDC cluster entry for bu-ist-demo-infra is present.
+  Source: CCI-MOC/moc-aws · main.tf @ 6666666
+  Field      Expected                       Observed
+  value      cluster_name=bu-ist-demo-infra local.defaults, {       cluster_name =
+  "bu-ist-demo-infra"       eso_writable_secret_prefixes =
+  ["cluster/bu-ist-demo-infra/hostedcluster/"]
+  URL: https://github.com/CCI-MOC/moc-aws/blob/main/main.tf
+----------------------------------------------------------------------------------------------------
+  ✅ GitOps values and applications in oac-apps / Hub moc-aws cert-manager policy
+  Finding: The cert-manager policy entry cert_manager_policies covers bu-ist-demo-infra.
+  Source: CCI-MOC/moc-aws · cert-manager-policies.tf @ 6666666
+  Field      Expected                       Observed
+  value      cluster=bu-ist-demo-infra      cert_manager_policies
+  URL: https://github.com/CCI-MOC/moc-aws/blob/main/cert-manager-policies.tf
+----------------------------------------------------------------------------------------------------
+  ✅ GitOps values and applications in oac-apps / Hub hosted-cluster secret prefix
+  Finding: The hub can write hosted-cluster secrets at cluster/bu-ist-demo-infra/hostedcluster/.
+  Source: CCI-MOC/moc-aws · main.tf @ 6666666
+  Field      Expected                       Observed
+  [0]        cluster/bu-ist-demo-infra/hostedcluster/ cluster/bu-ist-demo-infra/hostedcluster/
+  URL: https://github.com/CCI-MOC/moc-aws/blob/main/main.tf
+----------------------------------------------------------------------------------------------------
+  ✅ Host inventory entry in oac-infra / bu-ist-demo-workload0 host inventory
+  Finding: The inventory contains a bu-ist-demo-workload0 group with 1 hosts.
+  Source: CCI-MOC/oac-infra · infra/inventory/00hosts.yaml @ 2222222
+  Field      Expected                       Observed
+  value      Inventory group for bu-ist-demo-workload0 found=True, host_count=1
+  URL: https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml
+----------------------------------------------------------------------------------------------------
+  ✅ Discovery image and agent inputs / bu-ist-demo-workload0 update-agents inputs
+  Finding: Every non-openstack host has the mac_addr and resource_class inputs required by
+  infra/update-agents.yaml.
+  Source: CCI-MOC/oac-infra · infra/update-agents.yaml @ 2222222
+  Field      Expected                       Observed
+  [0]        mac_addr                       host=compute-0, node_name=MOC-R4PAC10U31-S1B,
+  bm_management=ipmi, mac_addr=00:11:22:33:44:55, resource_class=bu-ist-demo-worker,
+  documented_resource_class=bu-ist-demo-worker
+  [1]        resource_class                 -
+  URL: https://github.com/CCI-MOC/oac-infra/blob/main/infra/update-agents.yaml
+----------------------------------------------------------------------------------------------------
+  🟡 Discovery image and agent inputs / bu-ist-demo-workload0 boot image
+  Finding: A boot image URL is present, but the workload is still on the generic discovery.iso
+  rather than the expected `bu-ist-demo-infra-agent-discovery.iso`.
+  Source: CCI-MOC/oac-infra · infra/inventory/00hosts.yaml @ 2222222
+  Field      Expected                       Observed
+  value      Cluster-specific discovery image for bu-ist-demo-workload0
+  http://10.2.0.82/boot/discovery.iso
+  URL: https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml
+----------------------------------------------------------------------------------------------------
+  ❌ Hosted-cluster values / Workload hosted-cluster values
+  Finding: No merged main paths were found for the hosted workload cluster definition.
+  Source: CCI-MOC/oac-apps · hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml
+  @ 3333333
+  Field                Expected                       Observed
+  file_count           1                              -
+  scope                hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml -
+  matched_file_count   -                              0
+  URL: https://github.com/CCI-MOC/oac-apps/tree/main/hosted-clusters/bu-ist-demo-infra/bu-ist-de
+  mo-workload0
+----------------------------------------------------------------------------------------------------
+  ❓ Hosted-cluster values / Workload API address network
+  Finding: hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or
+  unavailable.
+  Source: CCI-MOC/oac-apps · hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml
+  @ 3333333
+  Field      Expected                       Observed
+  value                                     -
+  URL: https://github.com/CCI-MOC/oac-apps/tree/main/hosted-clusters/bu-ist-demo-infra/bu-ist-de
+  mo-workload0
+----------------------------------------------------------------------------------------------------
+  ❓ Hosted-cluster values / Workload ingress address network
+  Finding: hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or
+  unavailable.
+  Source: CCI-MOC/oac-apps · hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml
+  @ 3333333
+  Field      Expected                       Observed
+  value                                     -
+  URL: https://github.com/CCI-MOC/oac-apps/tree/main/hosted-clusters/bu-ist-demo-infra/bu-ist-de
+  mo-workload0
+----------------------------------------------------------------------------------------------------
+  ❓ Hosted-cluster values / Workload DNS base domain
+  Finding: hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or
+  unavailable.
+  Source: CCI-MOC/oac-apps · hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml
+  @ 3333333
+  Field      Expected                       Observed
+  value                                     -
+  URL: https://github.com/CCI-MOC/oac-apps/tree/main/hosted-clusters/bu-ist-demo-infra/bu-ist-de
+  mo-workload0
+----------------------------------------------------------------------------------------------------
+  ❓ Hosted-cluster values / Workload node-pool host capacity
+  Finding: hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or
+  unavailable.
+  Source: CCI-MOC/oac-apps · hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml
+  @ 3333333
+  Field      Expected                       Observed
+  value                                     -
+  URL: https://github.com/CCI-MOC/oac-apps/tree/main/hosted-clusters/bu-ist-demo-infra/bu-ist-de
+  mo-workload0
+----------------------------------------------------------------------------------------------------
+  ❓ Hosted-cluster values / Workload GPU feature support
+  Finding: hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or
+  unavailable.
+  Source: CCI-MOC/oac-apps · hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml
+  @ 3333333
+  Field      Expected                       Observed
+  value                                     -
+  URL: https://github.com/CCI-MOC/oac-apps/tree/main/hosted-clusters/bu-ist-demo-infra/bu-ist-de
+  mo-workload0
+----------------------------------------------------------------------------------------------------
+  ✅ Hosted-cluster values / Workload address uniqueness
+  Finding: No workload address is used by another cluster.
+  Source: CCI-MOC/oac-apps · hosted-clusters/ @ 3333333
+  Field      Expected                       Observed
+  value      No address used by another cluster
+  URL: https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/
+----------------------------------------------------------------------------------------------------
+  ❌ Workload component values / Workload component values
+  Finding: No merged main paths were found for component values scoped to the workload cluster.
+  Source: CCI-MOC/oac-apps · values/bu-ist-demo-infra/bu-ist-demo-workload0 @ 3333333
+  Field      Expected                       Observed
+  value      At least one matching path     matched_file_count=0
+  URL: https://github.com/CCI-MOC/oac-apps/tree/main/values/bu-ist-demo-infra
+----------------------------------------------------------------------------------------------------
+  ✅ Merged GitOps changes / Workload Pure storage realm
+  Finding: The bu-ist-demo-workload0 Pure storage realm is complete.
+  Source: CCI-MOC/everpure-moc · ansible/group_vars/all/realms.yaml @ 5555555
+  Field           Expected                       Observed
+  name            bu-ist-demo-workload0          -
+  fields          subnet_vlan, subnet_prefix, s3_endpoint -
+  subnet_vlan     -                              2322
+  subnet_prefix   -                              10.20.28.0/24
+  s3_endpoint     -
+  s3.bu-ist-demo-workload0.hcp.bu-ist-demo.int.massopen.cloud
+  URL: https://github.com/CCI-MOC/everpure-moc/blob/main/ansible/group_vars/all/realms.yaml
+----------------------------------------------------------------------------------------------------
+  ✅ Merged GitOps changes / Workload moc-aws OIDC cluster
+  Finding: The moc-aws OIDC cluster entry for bu-ist-demo-workload0 is present.
+  Source: CCI-MOC/moc-aws · main.tf @ 6666666
+  Field      Expected                       Observed
+  value      cluster_name=bu-ist-demo-workload0 local.defaults, {       cluster_name =
+  "bu-ist-demo-workload0"
+  URL: https://github.com/CCI-MOC/moc-aws/blob/main/main.tf
+----------------------------------------------------------------------------------------------------
+  ✅ Merged GitOps changes / Workload moc-aws cert-manager policy
+  Finding: The cert-manager policy entry cert_manager_policy_bu_ist_demo_workload0 covers
+  bu-ist-demo-workload0.
+  Source: CCI-MOC/moc-aws · cert-manager-policies.tf @ 6666666
+  Field      Expected                       Observed
+  value      cluster=bu-ist-demo-workload0  cert_manager_policy_bu_ist_demo_workload0
+  URL: https://github.com/CCI-MOC/moc-aws/blob/main/cert-manager-policies.tf
+----------------------------------------------------------------------------------------------------
+  📝 Environment request / MOC issue
+  Finding: Issue #666 is open and records the environment request.
+  Source: CCI-MOC/MOC-issues · issues/666 @ 1111111
+  Field      Expected                       Observed
+  value      Open issue recording the environment request open
+  URL: https://github.com/CCI-MOC/MOC-issues/issues/666

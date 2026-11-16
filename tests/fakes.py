@@ -11,10 +11,19 @@ class FakeGitHubClient(GitHubClient):
         "CCI-MOC/oac-infra": "2222222222222222222222222222222222222222",
         "CCI-MOC/oac-apps": "3333333333333333333333333333333333333333",
         "CCI-MOC/moc-keycloak": "4444444444444444444444444444444444444444",
+        "CCI-MOC/everpure-moc": "5555555555555555555555555555555555555555",
+        "CCI-MOC/moc-aws": "6666666666666666666666666666666666666666",
+        "CCI-MOC/moc-dns": "7777777777777777777777777777777777777777",
+        "CCI-MOC/ansible-switches": "8888888888888888888888888888888888888888",
     }
 
-    def __init__(self, token: str | None = None, timeout: float = 1) -> None:
-        super().__init__(token=token, timeout=timeout)
+    def __init__(
+        self,
+        token: str | None = None,
+        timeout: float = 1,
+        refs: dict[str, str] | None = None,
+    ) -> None:
+        super().__init__(token=token, timeout=timeout, refs=refs)
         self.rate_limit_remaining = 4999
 
     def get_json(self, path_or_url: str):
@@ -27,6 +36,7 @@ class FakeGitHubClient(GitHubClient):
         raise AssertionError(f"unexpected get_json path: {path_or_url}")
 
     def get_tree(self, repository: str, ref: str = "main"):
+        ref = self.ref_for(repository)
         if repository == "CCI-MOC/MOC-issues":
             self.record_source(repository, ref, self.SOURCE_SHAS[repository])
             return {}
@@ -51,6 +61,29 @@ class FakeGitHubClient(GitHubClient):
         if repository == "CCI-MOC/moc-keycloak":
             self.record_source(repository, ref, self.SOURCE_SHAS[repository])
             return {"main.tf": {"path": "main.tf"}}
+        if repository == "CCI-MOC/everpure-moc":
+            self.record_source(repository, ref, self.SOURCE_SHAS[repository])
+            return {
+                "ansible/group_vars/all/realms.yaml": {
+                    "path": "ansible/group_vars/all/realms.yaml"
+                }
+            }
+        if repository == "CCI-MOC/moc-aws":
+            self.record_source(repository, ref, self.SOURCE_SHAS[repository])
+            return {
+                "main.tf": {"path": "main.tf"},
+                "cert-manager-policies.tf": {"path": "cert-manager-policies.tf"},
+            }
+        if repository == "CCI-MOC/moc-dns":
+            self.record_source(repository, ref, self.SOURCE_SHAS[repository])
+            return {
+                "zonefiles/int.massopen.cloud.zone": {
+                    "path": "zonefiles/int.massopen.cloud.zone"
+                }
+            }
+        if repository == "CCI-MOC/ansible-switches":
+            self.record_source(repository, ref, self.SOURCE_SHAS[repository])
+            return {"group_vars/all/vlans.yaml": {"path": "group_vars/all/vlans.yaml"}}
         raise AssertionError(f"unexpected repository: {repository}")
 
     def get_file(self, repository: str, path: str, ref: str = "main") -> str:
@@ -123,6 +156,39 @@ api_ip: 10.20.27.11
 ingress_ip: 10.20.27.12
 dns_ip: 8.8.8.8
 """
+        if (
+            repository == "CCI-MOC/oac-apps"
+            and path.startswith("hosted-clusters/")
+            and path.endswith("/values.yaml")
+        ):
+            if path.endswith("bu-ist-demo-workload0/values.yaml"):
+                return """
+clusterName: bu-ist-demo-workload0
+feature-gpu: "false"
+services:
+  APIServer:
+    ipAddress: 10.20.26.10
+    externalIpAddress: 10.20.29.10
+ingress:
+  poolAddress: 10.20.28.10
+  externalIpAddress: 10.20.29.10
+dns:
+  records:
+    - hostname: api.bu-ist-demo-workload0.int.massopen.cloud
+oauth:
+  mocsso:
+    enabled: true
+nodePools:
+  - name: compute
+    replicas: 1
+    agentLabelSelector:
+      cluster: bu-ist-demo-workload0
+      resource_class: bu-ist-demo-worker
+"""
+            return """
+hcpExternalDomain: hcp.bu-ist-demo.int.massopen.cloud
+baseDomain: int.massopen.cloud
+"""
         if repository == "CCI-MOC/moc-keycloak" and path == "main.tf":
             return """
 bu_ist_demo_infra = {
@@ -130,6 +196,73 @@ bu_ist_demo_infra = {
   openshift_redirect_uri = "https://oauth-openshift.apps.bu-ist-demo.int.massopen.cloud/oauth2callback/mocsso"
   client_secret_name = "cluster/bu-ist-demo-infra/keycloak-oidc"
 }
+bu_ist_demo_workload0 = {
+  cluster_name = "bu-ist-demo-workload0"
+  openshift_redirect_uri = "https://oauth-bu-ist-demo-workload0.hcp.bu-ist-demo.int.massopen.cloud:443/oauth2callback/mocsso"
+  client_secret_name = "cluster/bu-ist-demo-infra/hostedcluster/bu-ist-demo-workload0/keycloak-oidc"
+}
+"""
+        if (
+            repository == "CCI-MOC/everpure-moc"
+            and path == "ansible/group_vars/all/realms.yaml"
+        ):
+            return """
+realms:
+  - name: bu-ist-demo-infra
+    subnet_vlan: 2321
+    subnet_prefix: 10.9.15.0/24
+    s3_endpoint: s3.bu-ist-demo.int.massopen.cloud
+  - name: bu-ist-demo-workload0
+    subnet_vlan: 2322
+    subnet_prefix: 10.20.28.0/24
+    s3_endpoint: s3.bu-ist-demo-workload0.hcp.bu-ist-demo.int.massopen.cloud
+"""
+        if repository == "CCI-MOC/moc-aws" and path == "main.tf":
+            return """
+locals {
+  openshift_oidc_clusters = {
+    bu_ist_demo_infra = merge(local.defaults, {
+      cluster_name = "bu-ist-demo-infra"
+      eso_writable_secret_prefixes = ["cluster/bu-ist-demo-infra/hostedcluster/"]
+    })
+    bu_ist_demo_workload0 = merge(local.defaults, {
+      cluster_name = "bu-ist-demo-workload0"
+    })
+  }
+}
+"""
+        if repository == "CCI-MOC/moc-aws" and path == "cert-manager-policies.tf":
+            return """
+locals {
+  cert_manager_policies = {
+    "cert_manager_policy_bu_ist_demo_infra" = {
+      cluster_subdomain = "bu-ist-demo.int.massopen.cloud"
+      policy_name = "cert-manager-bu-ist-demo-infra"
+    }
+    "cert_manager_policy_bu_ist_demo_workload0" = {
+      cluster_subdomain = "bu-ist-demo-workload0.hcp.bu-ist-demo.int.massopen.cloud"
+      policy_name = "cert-manager-bu-ist-demo-workload0"
+    }
+  }
+}
+"""
+        if (
+            repository == "CCI-MOC/moc-dns"
+            and path == "zonefiles/int.massopen.cloud.zone"
+        ):
+            return """
+api.bu-ist-demo.int.massopen.cloud. 300 IN A 10.20.27.11
+api-int.bu-ist-demo.int.massopen.cloud. 300 IN A 10.20.27.11
+*.apps.bu-ist-demo.int.massopen.cloud. 300 IN A 10.20.27.12
+"""
+        if (
+            repository == "CCI-MOC/ansible-switches"
+            and path == "group_vars/all/vlans.yaml"
+        ):
+            return """
+vlans:
+  - name: BU-IST-DEMO-WORKLOAD0
+    subnet4: 10.20.28.0/24
 """
         raise AssertionError(f"unexpected file: {repository}:{path}")
 
@@ -151,6 +284,112 @@ bu_ist_demo_infra = {
 
     def pr_files(self, repository: str, number: int):
         yield {"filename": "values/bu-ist-demo-infra/hcp-config.yaml"}
+
+
+class CrossRepoFakeGitHubClient(FakeGitHubClient):
+    """Offline fixture with passing cross-repository prerequisite data."""
+
+    def get_tree(self, repository: str, ref: str = "main"):
+        tree = super().get_tree(repository, ref)
+        if repository == "CCI-MOC/oac-apps":
+            paths = {
+                "hosted-clusters/bu-ist-demo-infra/values.yaml",
+                "hosted-clusters/bu-ist-demo-infra/"
+                "bu-ist-demo-workload0/values.yaml",
+            }
+            tree.update({path: {"path": path} for path in paths})
+        return tree
+
+    def get_file(self, repository: str, path: str, ref: str = "main") -> str:
+        if repository == "CCI-MOC/oac-apps":
+            files = {
+                "hosted-clusters/bu-ist-demo-infra/values.yaml": """
+hcpExternalDomain: hcp.bu-ist-demo.int.massopen.cloud
+baseDomain: int.massopen.cloud
+""",
+                "hosted-clusters/bu-ist-demo-infra/"
+                "bu-ist-demo-workload0/values.yaml": """
+clusterName: bu-ist-demo-workload0
+feature-gpu: "false"
+services:
+  APIServer:
+    ipAddress: 10.20.26.10
+    externalIpAddress: 10.20.29.10
+ingress:
+  poolAddress: 10.20.28.10
+  externalIpAddress: 10.20.29.10
+dns:
+  records:
+    - hostname: api.bu-ist-demo-workload0.int.massopen.cloud
+oauth:
+  mocsso:
+    enabled: true
+nodePools:
+  - name: compute
+    replicas: 1
+    agentLabelSelector:
+      cluster: bu-ist-demo-workload0
+      resource_class: bu-ist-demo-worker
+""",
+            }
+            if path in files:
+                return files[path]
+        return super().get_file(repository, path, ref)
+
+
+class FullyConfiguredFakeGitHubClient(CrossRepoFakeGitHubClient):
+    """Offline fixture where every repository check passes."""
+
+    REQUIRED_LOCAL_COMPONENTS = (
+        "acm.yaml",
+        "acm-placements.yaml",
+        "cert-manager.yaml",
+        "cluster-certificates.yaml",
+        "cluster-version.yaml",
+        "external-dns-operator.yaml",
+        "external-secrets.yaml",
+        "hcp-config.yaml",
+        "keycloak-oauth.yaml",
+        "metallb.yaml",
+        "openshift-gitops.yaml",
+        "portworx.yaml",
+        "user-workload-monitoring.yaml",
+    )
+
+    def get_tree(self, repository: str, ref: str = "main"):
+        tree = super().get_tree(repository, ref)
+        if repository == "CCI-MOC/oac-apps":
+            paths = {
+                "hosted-clusters/bu-ist-demo-infra/values.yaml",
+                "values/bu-ist-demo-infra/hcp-config.yaml",
+                "apps/bu-ist-demo-infra/keycloak-oauth.yaml",
+                "hosted-clusters/bu-ist-demo-infra/"
+                "bu-ist-demo-workload0/values.yaml",
+                "values/bu-ist-demo-infra/bu-ist-demo-workload0/example.yaml",
+            }
+            paths.update(
+                f"values/bu-ist-demo-infra/local-cluster/{name}"
+                for name in self.REQUIRED_LOCAL_COMPONENTS
+            )
+            tree.update({path: {"path": path} for path in paths})
+        return tree
+
+    def get_file(self, repository: str, path: str, ref: str = "main") -> str:
+        if (
+            repository == "CCI-MOC/oac-infra"
+            and path == "infra/inventory/00hosts.yaml"
+        ):
+            return super().get_file(repository, path, ref).replace(
+                "http://10.2.0.82/boot/discovery.iso",
+                "http://10.2.0.82/boot/bu-ist-demo-infra-agent-discovery.iso",
+            )
+        if repository == "CCI-MOC/oac-apps" and path not in {
+            "hosted-clusters/bu-ist-demo-infra/values.yaml",
+            "hosted-clusters/bu-ist-demo-infra/"
+            "bu-ist-demo-workload0/values.yaml",
+        }:
+            return "{}\n"
+        return super().get_file(repository, path, ref)
 
 
 class MultiWorkloadFakeGitHubClient(FakeGitHubClient):

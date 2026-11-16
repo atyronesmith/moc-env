@@ -41,20 +41,24 @@ class ReportRenderingTest(unittest.TestCase):
         ).to_dict()
 
     def test_text_includes_reason_present_and_missing(self) -> None:
-        rendered = render_text(self.report)
-        self.assertIn("Environment configuration status: fixture-env", rendered)
-        self.assertIn("Why checked:", rendered)
+        rendered = render_text(self.report, details=True)
+        self.assertIn("fixture-env · hub + workload", rendered)
+        self.assertIn("Finding:", rendered)
+        self.assertNotIn("Why checked:", rendered)
         self.assertIn("A URL exists, but it points to the generic discovery.iso.", rendered)
-        self.assertIn("Fields:", rendered)
-        self.assertIn("boot_image_url", rendered)
+        self.assertIn("Expected", rendered)
+        self.assertIn("Observed", rendered)
         self.assertIn("http://10.2.0.82/boot/discovery.iso", rendered)
-        self.assertIn("Missing fields:", rendered)
-        self.assertIn("cluster_specific_image", rendered)
-        self.assertIn("MISSING", rendered)
-        self.assertIn("Stage summary:", rendered)
-        self.assertIn("Suggested next actions:", rendered)
-        self.assertIn("cluster_specific_image", rendered.split("Suggested next actions:", 1)[1])
-        self.assertIn("Next:", rendered)
+        self.assertIn("URL:", rendered)
+        self.assertNotIn('": ', rendered)
+
+    def test_default_text_is_compact(self) -> None:
+        rendered = render_text(self.report)
+        self.assertIn("RESULT:", rendered)
+        self.assertIn("NEXT", rendered)
+        self.assertIn("NOT CHECKED — verify by hand", rendered)
+        self.assertNotIn("DETAILED CHECKS", rendered)
+        self.assertLessEqual(len(rendered.splitlines()), 60)
         self.assertIn("hub-specific discovery ISO", rendered)
 
     def test_markdown_is_verbose_and_actionable(self) -> None:
@@ -82,26 +86,27 @@ class ReportRenderingTest(unittest.TestCase):
     def test_not_checked_is_rendered_after_next_actions(self) -> None:
         for rendered in (render_text(self.report), render_markdown(self.report)):
             with self.subTest(renderer=rendered):
-                actions = rendered.index("Suggested next actions")
-                heading = rendered.index("Not checked — verify by hand")
+                actions = rendered.index("NEXT" if "RESULT:" in rendered else "Suggested next actions")
+                heading = rendered.index(
+                    "NOT CHECKED — verify by hand"
+                    if "RESULT:" in rendered
+                    else "Not checked — verify by hand"
+                )
                 self.assertLess(actions, heading)
                 manual_section = rendered[heading:]
                 self.assertIn("fixture-env-infra", manual_section)
-                self.assertIn(
-                    "docs/infra-cluster-deployment.md",
-                    manual_section,
-                )
+                if "RESULT:" not in rendered:
+                    self.assertIn("docs/infra-cluster-deployment.md", manual_section)
 
     def test_report_titles_identify_scope(self) -> None:
         for scope, title in (
-            ("environment", "Environment configuration status"),
-            ("hub", "Hub environment configuration status"),
-            ("workload", "Workload environment configuration status"),
+            ("environment", "hub + workload"),
+            ("hub", "hub"),
+            ("workload", "workload"),
         ):
             with self.subTest(scope=scope):
                 report = {**self.report, "scope": scope}
-                self.assertIn(f"{title}: fixture-env", render_text(report))
-                self.assertIn(f"# {title}", render_markdown(report))
+                self.assertIn(f"fixture-env · {title} ·", render_text(report))
 
     def test_text_and_markdown_headers_include_generation_and_sources(self) -> None:
         report = {
@@ -117,11 +122,11 @@ class ReportRenderingTest(unittest.TestCase):
                 ],
             },
         }
-        expected_source = "CCI-MOC/oac-infra@2222222"
-        self.assertIn("Generated: 2026-11-16T12:34:56Z", render_text(report))
-        self.assertIn(f"Sources: {expected_source}", render_text(report))
+        expected_source = "oac-infra@2222222"
+        self.assertIn("as of 2026-11-16 12:34:56 UTC", render_text(report))
+        self.assertIn(expected_source, render_text(report))
         self.assertIn("Generated: 2026-11-16T12:34:56Z", render_markdown(report))
-        self.assertIn(f"Sources: {expected_source}", render_markdown(report))
+        self.assertIn("Sources: CCI-MOC/oac-infra@2222222", render_markdown(report))
 
     def test_markdown_renders_host_table(self) -> None:
         check = {
@@ -267,170 +272,6 @@ class ReportRenderingTest(unittest.TestCase):
             "[https://github.com/CCI-MOC/oac-apps/pull/237](https://github.com/CCI-MOC/oac-apps/pull/237)",
             rendered,
         )
-
-    def test_text_path_checks_use_aligned_checklist(self) -> None:
-        check = self.report["checks"][0]
-        check = {
-            **check,
-            "stage": "GitOps configuration",
-            "check": "Fixture path values",
-            "expected": {"file_count": 2, "scope": "values/fixture"},
-            "present": {"file_count": 1},
-            "missing": {"file_count": 1, "paths": ["values/fixture/missing.yaml"]},
-            "actual": {"matched_file_count": 1},
-            "evidence": {
-                "expected_paths": [
-                    "values/fixture/present.yaml",
-                    "values/fixture/missing.yaml",
-                ],
-                "paths": ["values/fixture/present.yaml"],
-            },
-        }
-        report = {**self.report, "checks": [check]}
-        rendered = render_text(report)
-        self.assertIn("Expected paths:", rendered)
-        self.assertIn("values/fixture/present.yaml", rendered)
-        self.assertIn("✅", rendered)
-        self.assertIn("❌", rendered)
-        self.assertIn("1 of 2 expected paths present", rendered)
-
-    def test_text_field_checks_use_aligned_value_table(self) -> None:
-        check = self.report["checks"][0]
-        check = {
-            **check,
-            "stage": "Cluster build",
-            "check": "Fixture variables",
-            "expected": ["cluster_domain_name", "base_domain", "api_ip"],
-            "present": {
-                "fields": ["cluster_domain_name", "base_domain"],
-                "values": {
-                    "cluster_domain_name": "fixture-env",
-                    "base_domain": "example.test",
-                },
-            },
-            "missing": {"fields": ["api_ip"]},
-            "actual": ["cluster_domain_name", "base_domain"],
-            "evidence": {
-                "values": {
-                    "cluster_domain_name": "fixture-env",
-                    "base_domain": "example.test",
-                }
-            },
-        }
-        report = {**self.report, "checks": [check]}
-        rendered = render_text(report)
-        self.assertIn("Expected fields:", rendered)
-        self.assertIn("cluster_domain_name", rendered)
-        self.assertIn("fixture-env", rendered)
-        self.assertIn("base_domain", rendered)
-        self.assertIn("example.test", rendered)
-        self.assertIn("api_ip", rendered)
-        self.assertIn("MISSING", rendered)
-        self.assertIn("2 of 3 expected fields present", rendered)
-
-    def test_text_path_scope_checks_are_compact(self) -> None:
-        check = self.report["checks"][0]
-        check = {
-            **check,
-            "stage": "GitOps configuration",
-            "check": "Fixture component values",
-            "expected": "At least one matching path",
-            "present": {"file_count": 0},
-            "missing": {"file_count": 1, "paths": ["values/fixture/"]},
-            "actual": {"matched_file_count": 0},
-            "evidence": {
-                "path_count": 0,
-                "expected_path_count": 0,
-                "expected_paths": [],
-                "paths": [],
-            },
-        }
-        report = {**self.report, "checks": [check]}
-        rendered = render_text(report)
-        self.assertIn("Result:       0 matching paths; expected at least one", rendered)
-        self.assertNotIn("Present:", rendered)
-        self.assertNotIn("Missing:", rendered)
-
-    def test_text_pull_request_counts_are_compact(self) -> None:
-        check = self.report["checks"][0]
-        check = {
-            **check,
-            "stage": "GitOps configuration",
-            "check": "Relevant pull requests",
-            "expected": "No open PRs; relevant changes merged into main",
-            "present": {
-                "matching_pr_count": 3,
-                "merged_pr_count": 3,
-                "open_pr_count": 0,
-                "closed_unmerged_pr_count": 0,
-            },
-            "missing": None,
-            "actual": {
-                "matching_pr_count": 3,
-                "open_count": 0,
-                "merged_count": 3,
-                "closed_unmerged_count": 0,
-            },
-            "evidence": {"pull_requests": []},
-        }
-        report = {**self.report, "checks": [check]}
-        rendered = render_text(report)
-        self.assertIn("Pull request counts:", rendered)
-        self.assertIn("Matching PRs", rendered)
-        self.assertIn("Merged PRs", rendered)
-        self.assertIn("Closed-unmerged PRs", rendered)
-        self.assertIn("Open PRs", rendered)
-        self.assertNotIn("Present:", rendered)
-        self.assertNotIn("Missing:", rendered)
-
-    def test_text_scalar_fields_are_compact(self) -> None:
-        check = self.report["checks"][0]
-        check = {
-            **check,
-            "stage": "Hardware and inventory",
-            "check": "Fixture host inventory",
-            "expected": "Inventory group for fixture-env",
-            "present": {"cluster_group": "fixture-env", "host_count": 3},
-            "missing": None,
-            "actual": {"found": True, "host_count": 3},
-            "evidence": {"hosts": []},
-        }
-        report = {**self.report, "checks": [check]}
-        rendered = render_text(report)
-        self.assertIn("Fields:", rendered)
-        self.assertIn("cluster_group", rendered)
-        self.assertIn("fixture-env", rendered)
-        self.assertIn("host_count", rendered)
-        self.assertIn("3", rendered)
-        self.assertNotIn("Present:", rendered)
-        self.assertNotIn("Actual:", rendered)
-
-    def test_text_expected_declarations_are_compact(self) -> None:
-        check = self.report["checks"][0]
-        check = {
-            **check,
-            "stage": "Identity",
-            "check": "Fixture OIDC client",
-            "expected": ["client", "redirect_uri", "secret_name"],
-            "present": {"declarations": ["client", "secret_name"]},
-            "missing": {"declarations": ["redirect_uri"]},
-            "actual": ["client", "secret_name"],
-            "evidence": {
-                "client": True,
-                "redirect_uri": False,
-                "secret_name": True,
-            },
-        }
-        report = {**self.report, "checks": [check]}
-        rendered = render_text(report)
-        self.assertIn("Expected fields:", rendered)
-        self.assertIn("client", rendered)
-        self.assertIn("present", rendered)
-        self.assertIn("redirect_uri", rendered)
-        self.assertIn("MISSING", rendered)
-        self.assertIn("2 of 3 expected fields present", rendered)
-        self.assertNotIn("Present:", rendered)
-        self.assertNotIn("Actual:", rendered)
 
 
 if __name__ == "__main__":
