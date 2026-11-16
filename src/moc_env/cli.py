@@ -577,6 +577,17 @@ def main(argv: list[str] | None = None) -> int:
             print("moc-env: unknown completion mode", file=sys.stderr)
             return 2
         clusters = read_environment_cache()
+        if not clusters:
+            # Completion should work immediately after installation. Refresh the
+            # cache once; subsequent Tab presses use the local cache.
+            try:
+                clusters = list_environments(
+                    GitHubClient(token=os.environ.get("GITHUB_TOKEN"))
+                )
+                write_environment_cache(clusters)
+            except (GitHubError, RateLimitError, OSError):
+                # Shell completion must never disrupt the interactive prompt.
+                clusters = []
         if mode == "environment":
             values = sorted(
                 {

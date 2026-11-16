@@ -242,8 +242,10 @@ repository. The default location follows XDG:
 ${XDG_CACHE_HOME:-$HOME/.cache}/moc-env/environment-clusters.json
 ```
 
-Shell completion reads that cache and does not call GitHub on every Tab press.
-Refresh it by running `moc-env list` again.
+Shell completion reads that cache. If the cache is empty, the first
+environment-name completion refreshes it from GitHub; later Tab presses use the
+local cache and do not call GitHub. Run `moc-env list` again when you want to
+refresh it explicitly.
 
 Set `MOC_ENV_CACHE_DIR` to use a different cache directory.
 
@@ -268,7 +270,8 @@ For a non-default startup file, run
 `make completion-init COMPLETION_RC=/path/to/rc-file`. The managed block sets
 `MOC_ENV_COMPLETION_COMMAND` and `PATH` to this checkout's virtual environment,
 so both the command and completion work outside the repository directory. If
-completion returns nothing, run `moc-env list` once to populate the cache.
+completion returns nothing, check network access or run `moc-env list` to see
+the GitHub error directly.
 
 Use `moc-env` rather than `uv run moc-env` after initialization. Shell
 completion is attached to the command name `moc-env`; with

@@ -34,6 +34,7 @@ class ReportRenderingTest(unittest.TestCase):
 
     def test_text_includes_reason_present_and_missing(self) -> None:
         rendered = render_text(self.report)
+        self.assertIn("Environment configuration status: fixture-env", rendered)
         self.assertIn("Why checked:", rendered)
         self.assertIn("A URL exists, but it points to the generic discovery.iso.", rendered)
         self.assertIn("Fields:", rendered)
@@ -48,7 +49,7 @@ class ReportRenderingTest(unittest.TestCase):
 
     def test_markdown_is_verbose_and_actionable(self) -> None:
         rendered = render_markdown(self.report)
-        self.assertIn("# 🛰️ MOC Environment Configuration Status", rendered)
+        self.assertIn("# Environment configuration status", rendered)
         self.assertIn("## Environment identity", rendered)
         self.assertIn("## Stage summary", rendered)
         self.assertIn("## Detailed findings by stage", rendered)
@@ -63,6 +64,17 @@ class ReportRenderingTest(unittest.TestCase):
         self.assertIn("fixture-env-agent-discovery.iso", rendered)
         self.assertNotIn("## Raw report data", rendered)
         self.assertNotIn("```json", rendered)
+
+    def test_report_titles_identify_scope(self) -> None:
+        for scope, title in (
+            ("environment", "Environment configuration status"),
+            ("hub", "Hub environment configuration status"),
+            ("workload", "Workload environment configuration status"),
+        ):
+            with self.subTest(scope=scope):
+                report = {**self.report, "scope": scope}
+                self.assertIn(f"{title}: fixture-env", render_text(report))
+                self.assertIn(f"# {title}", render_markdown(report))
 
     def test_markdown_renders_host_table(self) -> None:
         check = {

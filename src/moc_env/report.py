@@ -395,12 +395,21 @@ def _followup_gap(check: dict[str, Any]) -> str:
     return _text_value(missing, 4)
 
 
+def _scope_title(scope: str) -> str:
+    titles = {
+        "environment": "Environment configuration status",
+        "hub": "Hub environment configuration status",
+        "workload": "Workload environment configuration status",
+    }
+    return titles.get(scope, f"{scope.title()} environment configuration status")
+
+
 def render_text(report: dict[str, Any]) -> str:
     environment = report["environment"]
     scope = report.get("scope", "environment")
     lines = [
         "=" * 78,
-        f"MOC {scope} status: {environment['name']}",
+        f"{_scope_title(scope)}: {environment['name']}",
         "=" * 78,
         f"Hub cluster:      {environment['infra_cluster']}",
         f"Workload cluster: {environment['workload_cluster']}",
@@ -524,7 +533,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     state_counts = report["summary"]["state_counts"]
     scope = report.get("scope", "environment")
     lines = [
-        f"# 🛰️ MOC {scope.title()} Configuration Status",
+        f"# {_scope_title(scope)}",
         "",
         f"## `{environment['name']}` — {report['overall_state']}",
         "",
