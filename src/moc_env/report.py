@@ -222,6 +222,7 @@ def _pull_request_table(evidence: dict[str, Any]) -> list[str]:
             pull.get("title"),
             pull.get("state"),
             pull.get("merged"),
+            pull.get("classification"),
             pull.get("head_ref"),
             pull.get("html_url"),
             pull.get("changed_files"),
@@ -232,7 +233,16 @@ def _pull_request_table(evidence: dict[str, Any]) -> list[str]:
         "**Relevant pull requests**",
         "",
         *_markdown_table(
-            ["PR", "Title", "State", "Merged", "Head branch", "Link", "Changed files"],
+            [
+                "PR",
+                "Title",
+                "State",
+                "Merged",
+                "Classification",
+                "Head branch",
+                "Link",
+                "Changed files",
+            ],
             rows,
         ),
     ]
@@ -427,13 +437,19 @@ def _path_scope_summary(check: dict[str, Any]) -> list[str] | None:
 def _pull_request_count_summary(check: dict[str, Any]) -> list[str] | None:
     """Render pull-request counts once instead of three nested JSON objects."""
     actual = check.get("actual")
-    required = {"matching_pr_count", "open_count", "merged_count"}
+    required = {
+        "matching_pr_count",
+        "open_count",
+        "merged_count",
+        "closed_unmerged_count",
+    }
     if not isinstance(actual, dict) or not required.issubset(actual):
         return None
 
     counts = [
         ("Matching PRs", actual["matching_pr_count"]),
         ("Merged PRs", actual["merged_count"]),
+        ("Closed-unmerged PRs", actual["closed_unmerged_count"]),
         ("Open PRs", actual["open_count"]),
     ]
     label_width = max(len(label) for label, _ in counts) + 2

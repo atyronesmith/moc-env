@@ -499,7 +499,189 @@ bu_ist_demo_infra:
         check = next(
             item for item in report["checks"] if item["check"] == "Relevant pull requests"
         )
-        self.assertEqual(check["state"], "pr_merged")
+        self.assertEqual(check["state"], "declared_in_main")
+        self.assertEqual(check["actual"]["merged_count"], 1)
+
+    def test_pull_request_body_match_alone_is_not_relevant(self) -> None:
+        class UnrelatedPullRequestClient(FakeGitHubClient):
+            def pulls(self, repository, state="all"):
+                if repository != "CCI-MOC/oac-apps":
+                    return
+                yield {
+                    "number": 999,
+                    "title": "Unrelated chart update",
+                    "body": "This mentions oac-prod but does not change it.",
+                    "state": "open",
+                    "merged_at": None,
+                    "updated_at": "2026-11-16T00:00:00Z",
+                    "head": {"ref": "unrelated", "sha": "abc123"},
+                    "html_url": "https://github.com/CCI-MOC/oac-apps/pull/999",
+                }
+
+            def pr_files(self, repository, number):
+                yield {"filename": "values/oac-dev-infra/example.yaml"}
+
+        report = StatusChecker(UnrelatedPullRequestClient()).run(
+            Environment(name="oac-prod", workload_clusters=())
+        ).to_dict()
+        check = next(
+            item for item in report["checks"] if item["check"] == "Relevant pull requests"
+        )
+
+        self.assertEqual(check["state"], "missing")
+        self.assertEqual(check["actual"]["matching_pr_count"], 0)
+        self.assertNotIn("pr_open", report["summary"]["state_counts"])
+
+    def test_pull_requests_classify_closed_unmerged_and_counts_add_up(self) -> None:
+        class ClassifiedPullRequestClient(FakeGitHubClient):
+            def pulls(self, repository, state="all"):
+                if repository != "CCI-MOC/oac-apps":
+                    return
+                yield {
+                    "number": 1,
+                    "title": "Open",
+                    "body": None,
+                    "state": "open",
+                    "merged_at": None,
+                    "updated_at": "2026-11-16T03:00:00Z",
+                    "head": {"ref": "open", "sha": "abc123"},
+                    "html_url": "https://github.com/CCI-MOC/oac-apps/pull/1",
+                }
+                yield {
+                    "number": 2,
+                    "title": "Merged",
+                    "body": None,
+                    "state": "closed",
+                    "merged_at": "2026-11-15T00:00:00Z",
+                    "updated_at": "2026-11-15T00:00:00Z",
+                    "head": {"ref": "merged", "sha": "def456"},
+                    "html_url": "https://github.com/CCI-MOC/oac-apps/pull/2",
+                }
+                yield {
+                    "number": 3,
+                    "title": "Closed without merge",
+                    "body": None,
+                    "state": "closed",
+                    "merged_at": None,
+                    "updated_at": "2026-11-14T00:00:00Z",
+                    "head": {"ref": "closed", "sha": "789012"},
+                    "html_url": "https://github.com/CCI-MOC/oac-apps/pull/3",
+                }
+
+            def pr_files(self, repository, number):
+                yield {
+                    "filename": f"values/bu-ist-demo-infra/pr-{number}.yaml"
+                }
+
+        report = StatusChecker(ClassifiedPullRequestClient()).run(
+            Environment(name="bu-ist-demo", issue_number=666)
+        ).to_dict()
+        check = next(
+            item for item in report["checks"] if item["check"] == "Relevant pull requests"
+        )
+
+        actual = check["actual"]
+        self.assertEqual(actual["matching_pr_count"], 3)
+        self.assertEqual(actual["open_count"], 1)
+        self.assertEqual(actual["merged_count"], 1)
+        self.assertEqual(actual["closed_unmerged_count"], 1)
+        self.assertEqual(
+            actual["open_count"]
+            + actual["merged_count"]
+            + actual["closed_unmerged_count"],
+            actual["matching_pr_count"],
+        )
+        self.assertEqual(
+            [item["classification"]["value"] for item in check["evidence"]["pull_requests"]],
+            ["open", "merged", "closed_unmerged"],
+        )
+
+    def test_workload_only_pull_request_is_not_hub_work(self) -> None:
+        class WorkloadOnlyPullRequestClient(FakeGitHubClient):
+            def pulls(self, repository, state="all"):
+                if repository != "CCI-MOC/oac-apps":
+                    return
+                yield {
+                    "number": 900,
+                    "title": "Workload-only change",
+                    "body": None,
+                    "state": "open",
+                    "merged_at": None,
+                    "updated_at": "2026-11-16T00:00:00Z",
+                    "head": {"ref": "workload", "sha": "abc123"},
+                    "html_url": "https://github.com/CCI-MOC/oac-apps/pull/900",
+                }
+
+            def pr_files(self, repository, number):
+                yield {
+                    "filename": (
+                        "values/bu-ist-demo-infra/bu-ist-demo-workload0/example.yaml"
+                    )
+                }
+
+        environment = Environment(
+            name="bu-ist-demo",
+            issue_number=666,
+            workload_clusters=("bu-ist-demo-workload0",),
+        )
+        checker = StatusChecker(WorkloadOnlyPullRequestClient())
+        hub_report = checker.run_hub(environment).to_dict()
+        workload_report = checker.run_workload(environment).to_dict()
+
+        hub_check = next(
+            item
+            for item in hub_report["checks"]
+            if item["check"] == "Relevant pull requests"
+        )
+        workload_check = next(
+            item
+            for item in workload_report["checks"]
+            if item["check"] == "Relevant pull requests"
+        )
+        self.assertEqual(hub_check["state"], "missing")
+        self.assertEqual(workload_check["state"], "pr_open")
+
+    def test_closed_pull_request_file_fetches_are_limited_to_recent_twenty(self) -> None:
+        class LimitedPullRequestClient(FakeGitHubClient):
+            def __init__(self):
+                super().__init__()
+                self.requested_files = []
+
+            def pulls(self, repository, state="all"):
+                if repository != "CCI-MOC/oac-apps":
+                    return
+                for number in range(25):
+                    yield {
+                        "number": number,
+                        "title": f"Closed PR {number}",
+                        "body": None,
+                        "state": "closed",
+                        "merged_at": None,
+                        "updated_at": (
+                            f"2026-11-{number + 1:02d}T00:00:00Z"
+                        ),
+                        "head": {"ref": f"closed-{number}", "sha": "abc123"},
+                        "html_url": (
+                            "https://github.com/CCI-MOC/oac-apps/pull/"
+                            f"{number}"
+                        ),
+                    }
+
+            def pr_files(self, repository, number):
+                self.requested_files.append(number)
+                yield {"filename": "values/bu-ist-demo-infra/example.yaml"}
+
+        client = LimitedPullRequestClient()
+        report = StatusChecker(client).run(
+            Environment(name="bu-ist-demo", issue_number=666)
+        ).to_dict()
+
+        self.assertEqual(len(client.requested_files), 20)
+        self.assertEqual(sorted(client.requested_files), list(range(5, 25)))
+        check = next(
+            item for item in report["checks"] if item["check"] == "Relevant pull requests"
+        )
+        self.assertEqual(check["actual"]["matching_pr_count"], 20)
 
     def test_status_checker_reports_declared_apps_paths(self) -> None:
         class DeclaredAppsClient(FakeGitHubClient):
