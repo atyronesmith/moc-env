@@ -31,6 +31,24 @@ class StatusCheckerTest(unittest.TestCase):
         for check in report["checks"]:
             self.assertNotIn("expected_paths", check.get("present") or {})
 
+    def test_boot_image_checks_state_the_matching_rule(self) -> None:
+        report = StatusChecker(FakeGitHubClient()).run(
+            Environment(name="bu-ist-demo", issue_number=666)
+        ).to_dict()
+        rules = [
+            check["evidence"]["check_rule"]
+            for check in report["checks"]
+            if check["check"].endswith("boot image")
+        ]
+        self.assertEqual(len(rules), 2)
+        self.assertTrue(
+            all(
+                "must contain the full cluster name" in rule
+                and "generic `discovery.iso`" in rule
+                for rule in rules
+            )
+        )
+
     def test_hub_status_includes_hub_checks_and_excludes_workload_checks(self) -> None:
         report = StatusChecker(FakeGitHubClient()).run_hub(
             Environment(name="bu-ist-demo", issue_number=666)

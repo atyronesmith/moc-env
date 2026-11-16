@@ -364,7 +364,17 @@ class StatusChecker:
                     evidence={
                         "generic_discovery_iso": bool(
                             boot_urls and boot_urls[0].endswith("discovery.iso")
-                        )
+                        ),
+                        "check_rule": (
+                            "The boot-image filename must contain the full cluster "
+                            f"name `{cluster}`"
+                            + (
+                                f" (or the oac-shortened name `{cluster.removeprefix('oac-')}`)"
+                                if cluster.startswith("oac-")
+                                else ""
+                            )
+                            + "; generic `discovery.iso` does not satisfy this rule."
+                        ),
                     },
                     url=github_url(repository, inventory_path),
                 )
