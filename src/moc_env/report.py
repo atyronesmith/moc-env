@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from .github import github_url
+
 
 STATE_SYMBOLS = {
     "requested": "📝",
@@ -15,6 +17,10 @@ STATE_SYMBOLS = {
     "missing": "❌",
     "unknown": "❓",
 }
+
+
+class MarkdownCell(str):
+    """A pre-rendered Markdown table cell that must not be escaped again."""
 
 
 def _value(value: Any) -> str:
@@ -48,10 +54,25 @@ def _markdown_inline(value: Any) -> str:
             return "—"
         return "<br>".join(_markdown_inline(item) for item in value)
     if isinstance(value, str):
-        if value.startswith(("http://", "https://")):
+        if isinstance(value, MarkdownCell):
+            return str(value)
+        if value.startswith("https://github.com/"):
             return f"[{value}]({value})"
         return f"`{_markdown_escape_cell(value)}`" if value else "—"
     return f"`{value}`"
+
+
+def _github_location(
+    repository: str | None, path: str | None, ref: str | None = None
+) -> str | None:
+    if not repository or not path:
+        return None
+    return github_url(repository, path, ref or "main")
+
+
+def _linked_code(value: Any, url: str | None) -> str:
+    rendered = _markdown_inline(value)
+    return MarkdownCell(f"[{rendered}]({url})") if url else rendered
 
 
 def _markdown_table(
@@ -81,15 +102,18 @@ def _markdown_escape_cell(value: str) -> str:
     return value.replace("|", "\\|").replace("\n", "<br>")
 
 
-def _host_table(evidence: dict[str, Any]) -> list[str]:
+def _host_table(check: dict[str, Any], evidence: dict[str, Any]) -> list[str]:
     hosts = evidence.get("hosts")
     if not isinstance(hosts, list) or not all(isinstance(host, dict) for host in hosts):
         return []
+    source_url = _github_location(
+        check.get("repository"), check.get("path"), check.get("ref")
+    )
     rows = [
         [
-            host.get("name"),
-            host.get("node_name"),
-            host.get("bmc_addr"),
+            _linked_code(host.get("name"), source_url),
+            _linked_code(host.get("node_name"), source_url),
+            _linked_code(host.get("bmc_addr"), source_url),
             host.get("boot_image_url"),
         ]
         for host in hosts
@@ -107,8 +131,14 @@ def _path_table(check: dict[str, Any], evidence: dict[str, Any]) -> list[str]:
     if not isinstance(expected_paths, list) or not expected_paths:
         return []
     found = set(found_paths or [])
+    source_url = _github_location(
+        check.get("repository"), check.get("path"), check.get("ref")
+    )
     rows = [
-        [path, "Present" if path in found else "Missing"]
+        [
+            _linked_code(path, source_url),
+            "Present" if path in found else "Missing",
+        ]
         for path in expected_paths
     ]
     return [
@@ -133,19 +163,19 @@ def _field_table(check: dict[str, Any], evidence: dict[str, Any]) -> list[str]:
     rows = [
         [
             field,
-            values.get(field),
             "Present" if values.get(field) not in (None, False) else "Missing",
+            values.get(field),
         ]
         for field in expected_fields
     ]
     return [
         "**Expected fields**",
         "",
-        *_markdown_table(["Field", "Observed value", "Status"], rows),
+        *_markdown_table(["Expected field", "Status", "Observed value"], rows),
     ]
 
 
-def _source_value_table(evidence: dict[str, Any]) -> list[str]:
+def _source_value_table(check: dict[str, Any], evidence: dict[str, Any]) -> list[str]:
     client = evidence.get("client")
     if not isinstance(client, dict):
         return []
@@ -154,14 +184,22 @@ def _source_value_table(evidence: dict[str, Any]) -> list[str]:
         if not isinstance(source_value, dict):
             continue
         provenance = source_value.get("provenance", {})
+        source_url = _github_location(
+            provenance.get("repository"),
+            provenance.get("path"),
+            provenance.get("ref"),
+        )
         rows.append(
             [
                 field,
                 source_value.get("value"),
                 source_value.get("confidence"),
-                (
+                _linked_code(
                     f"{provenance.get('repository', '—')} / "
                     f"{provenance.get('path', '—')} @ {provenance.get('ref', '—')}"
+                    if not source_url
+                    else f"{provenance.get('repository')} / {provenance.get('path')}",
+                    source_url,
                 ),
             ]
         )
@@ -395,6 +433,40 @@ def _followup_gap(check: dict[str, Any]) -> str:
     return _text_value(missing, 4)
 
 
+def _followup_action(check: dict[str, Any]) -> str:
+    name = check.get("check", "")
+    if "boot image" in name:
+        return (
+            "Generate and publish a cluster-specific discovery ISO, then replace "
+            "the generic boot_image_url for every host in the cluster group."
+        )
+    if "hosted-cluster values" in name:
+        return (
+            "Create the missing hosted-cluster values file from the closest "
+            "existing environment; set the cluster name, parent hub, networking, "
+            "and node pools before adding components."
+        )
+    if "component values" in name:
+        return (
+            "Create the workload component-values directory, starting with "
+            "hcp-config.yaml and only the shared components this workload needs."
+        )
+    if "applications" in name.lower():
+        return (
+            "Add Argo CD application manifests after the hosted-cluster and "
+            "component values are present, and reference the correct clusters."
+        )
+    if "local-cluster values" in name:
+        return (
+            "Copy the required local-cluster component files from an existing "
+            "hub environment and adjust cluster-specific names and addresses."
+        )
+    return (
+        "Create or complete the repository declaration at the source path, using "
+        "an equivalent configured environment as the template."
+    )
+
+
 def _scope_title(scope: str) -> str:
     titles = {
         "environment": "Environment configuration status",
@@ -454,6 +526,9 @@ def render_text(report: dict[str, Any]) -> str:
             )
         if check.get("url"):
             lines.append(f"  URL:          {check['url']}")
+        check_rule = (check.get("evidence") or {}).get("check_rule")
+        if check_rule:
+            lines.append(f"  Check rule:   {check_rule}")
         lines.append("")
 
     followups = [
@@ -473,6 +548,7 @@ def render_text(report: dict[str, Any]) -> str:
                     f"{priority}. [{_state(check['state'])}] "
                     f"{check['stage']} / {check['check']}",
                     f"   Gap: {_followup_gap(check)}",
+                    f"   Next: {_followup_action(check)}",
                 ]
             )
 
@@ -489,11 +565,13 @@ def render_text(report: dict[str, Any]) -> str:
 
 def _check_markdown(check: dict[str, Any], number: int) -> list[str]:
     evidence = check.get("evidence") or {}
+    check_rule = evidence.get("check_rule")
     lines = [
         f"#### {_state(check['state'])} — {number}. {check['check']}",
         "",
         f"**Why this was checked:** {check['reason']}",
         "",
+        *([f"**Status rule:** {check_rule}", ""] if check_rule else []),
         "| Source | Value |",
         "|---|---|",
         f"| Repository | `{check['repository']}` |",
@@ -503,35 +581,136 @@ def _check_markdown(check: dict[str, Any], number: int) -> list[str]:
     if check.get("url"):
         lines.append(f"| Link | [Open source]({check['url']}) |")
 
-    lines.extend(
-        [
-            "",
-            "**Result**",
-            "",
+    field_table = _field_table(check, evidence)
+    if field_table:
+        lines.append("")
+        lines.extend(field_table)
+    else:
+        lines.extend(
+            [
+                "",
+                "**Result**",
+                "",
+            ]
+        )
+        result_rows = [
+            ["Expected", check.get("expected")],
+            ["Present", check.get("present")],
         ]
-    )
-    result_rows = [
-        ["Expected", check.get("expected")],
-        ["Present", check.get("present")],
-    ]
-    if check.get("missing") is not None:
-        result_rows.append(["Missing", check.get("missing")])
-    result_rows.append(["Actual", check.get("actual")])
-    lines.extend(
-        _markdown_table(["Aspect", "Value"], result_rows, plain_first_column=True)
-    )
-    lines.extend(_host_table(evidence))
+        if check.get("missing") is not None:
+            result_rows.append(["Missing", check.get("missing")])
+        result_rows.append(["Actual", check.get("actual")])
+        lines.extend(
+            _markdown_table(["Aspect", "Value"], result_rows, plain_first_column=True)
+        )
+    lines.extend(_host_table(check, evidence))
     lines.extend(_path_table(check, evidence))
-    lines.extend(_field_table(check, evidence))
-    lines.extend(_source_value_table(evidence))
+    if not field_table:
+        lines.extend(_field_table(check, evidence))
+    lines.extend(_source_value_table(check, evidence))
     lines.extend(_pull_request_table(evidence))
     return lines
+
+
+def _identity_link(value: Any, url: str | None) -> str:
+    rendered = f"`{value}`"
+    return f"[{rendered}]({url})" if url else rendered
+
+
+def _identity_source_url(report: dict[str, Any], check_name: str) -> str | None:
+    for check in report.get("checks", []):
+        if check.get("check") == check_name:
+            return check.get("url")
+    return None
+
+
+def _deployment_context_diagram(scope: str) -> list[str]:
+    if scope == "hub":
+        sequence = """\
+sequenceDiagram
+    autonumber
+    participant Request as MOC issue
+    participant Infra as oac-infra inventory and hub-image variables
+    participant Identity as moc-keycloak OIDC client
+    participant HubGitOps as oac-apps hub GitOps
+    participant Hub as Hub cluster
+    Request->>Infra: Record requested hardware, network, and build inputs
+    Infra->>Hub: Build and start the hub cluster
+    Identity->>Hub: Register the hub OIDC client
+    HubGitOps->>Hub: Apply hub local-cluster components and applications\
+"""
+    elif scope == "workload":
+        sequence = """\
+sequenceDiagram
+    autonumber
+    participant Hub as Parent hub cluster
+    participant Inventory as oac-infra workload inventory
+    participant Hosted as Hosted-cluster values
+    participant Components as Workload component values
+    participant Apps as Workload Argo CD applications
+    participant Workload as Workload cluster
+    Hub->>Inventory: Provide parent hub and network context
+    Inventory->>Hosted: Define workload hosts and boot image
+    Hosted->>Workload: Create the hosted control plane
+    Components->>Workload: Configure shared workload components
+    Apps->>Workload: Apply workload applications\
+"""
+    else:
+        sequence = """\
+sequenceDiagram
+    autonumber
+    participant Request as MOC issue
+    participant Infra as oac-infra inventory and variables
+    participant Identity as moc-keycloak OIDC client
+    participant HubGitOps as oac-apps hub GitOps
+    participant Hub as Hub cluster
+    participant WorkloadGitOps as oac-apps workload GitOps
+    participant Workload as Workload cluster
+    Request->>Infra: Record requested hardware, network, and build inputs
+    Infra->>Hub: Build and start the hub cluster
+    Identity->>Hub: Register the hub OIDC client
+    HubGitOps->>Hub: Apply hub local-cluster components and applications
+    Hub->>WorkloadGitOps: Provide parent hub context
+    WorkloadGitOps->>Workload: Define and configure the hosted workload\
+"""
+    return [
+        "## Deployment context",
+        "",
+        "This compact sequence shows where the checked repository evidence fits. "
+        "It does not claim that these deployment steps have run.",
+        "",
+        "```mermaid",
+        sequence,
+        "```",
+        "",
+    ]
 
 
 def render_markdown(report: dict[str, Any]) -> str:
     environment = report["environment"]
     state_counts = report["summary"]["state_counts"]
     scope = report.get("scope", "environment")
+    environment_name = environment["name"]
+    infra_cluster = environment["infra_cluster"]
+    workload_cluster = environment["workload_cluster"]
+    issue_url = _identity_source_url(report, "MOC issue") or (
+        f"https://github.com/CCI-MOC/MOC-issues/issues/{environment['issue_number']}"
+        if environment["issue_number"] is not None
+        else None
+    )
+    inventory_url = github_url(
+        "CCI-MOC/oac-infra", "infra/inventory/00hosts.yaml"
+    )
+    hub_url = _identity_source_url(
+        report, f"{infra_cluster} host inventory"
+    ) or inventory_url
+    workload_url = _identity_source_url(
+        report, f"{workload_cluster} host inventory"
+    ) or inventory_url
+    domain_url = _identity_source_url(report, "Hub image variables") or github_url(
+        "CCI-MOC/oac-infra",
+        f"hub-images/group_vars/{infra_cluster}/vars.yml",
+    )
     lines = [
         f"# {_scope_title(scope)}",
         "",
@@ -544,11 +723,11 @@ def render_markdown(report: dict[str, Any]) -> str:
         "| Field | Value |",
         "|---|---|",
         f"| Scope | `{scope}` |",
-        f"| Environment | `{environment['name']}` |",
-        f"| MOC issue | `{environment['issue_number']}` |",
-        f"| Hub cluster | `{environment['infra_cluster']}` |",
-        f"| Workload cluster | `{environment['workload_cluster']}` |",
-        f"| Domain | `{environment['domain']}` |",
+        f"| Environment | {_identity_link(environment_name, issue_url)} |",
+        f"| MOC issue | {_identity_link(environment['issue_number'], issue_url)} |",
+        f"| Hub cluster | {_identity_link(infra_cluster, hub_url)} |",
+        f"| Workload cluster | {_identity_link(workload_cluster, workload_url)} |",
+        f"| Domain | {_identity_link(environment['domain'], domain_url)} |",
         f"| Overall state | **{report['overall_state']}** |",
         "",
         "## Executive summary",
@@ -564,6 +743,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         "",
         f"**Total checks:** {report['summary']['check_count']}",
         "",
+        *_deployment_context_diagram(scope),
         "## Stage summary",
         "",
         "| Stage | Checks | States |",
@@ -600,15 +780,18 @@ def render_markdown(report: dict[str, Any]) -> str:
             [
                 "These actions are derived directly from the missing or partial checks above.",
                 "",
-                "| Priority | Stage / check | Gap to resolve |",
-                "|---:|---|---|",
+                "| Priority | Stage / check | Gap to resolve | Suggested action |",
+                "|---:|---|---|---|",
             ]
         )
         for priority, (check, missing_value) in enumerate(followups, start=1):
             gap = _markdown_inline(missing_value)
             if check["state"] == "pr_open":
                 gap = "Merge or close the relevant open pull request."
-            lines.append(f"| {priority} | {check['stage']} / {check['check']} | {gap} |")
+            lines.append(
+                f"| {priority} | {check['stage']} / {check['check']} | {gap} "
+                f"| {_markdown_inline(_followup_action(check))} |"
+            )
 
     lines.extend(
         [
