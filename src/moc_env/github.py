@@ -12,6 +12,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
+from .github_cache import GitHubResponseCache
+
 
 class GitHubError(RuntimeError):
     """A GitHub API request failed."""
@@ -29,6 +31,8 @@ class GitHubClient:
         token: str | None = None,
         timeout: float = 20.0,
         refs: dict[str, str] | None = None,
+        offline: bool = False,
+        refresh: bool = False,
     ) -> None:
         self.token = token
         self.timeout = timeout
@@ -38,6 +42,10 @@ class GitHubClient:
         self.rate_limit_remaining: int | None = None
         self.on_response: Callable[[int], None] | None = None
         self._rate_limit_warning_sent = False
+        self.offline = offline
+        self.refresh = refresh
+        self.response_cache = GitHubResponseCache()
+        self._responses: dict[str, tuple[Any, Any]] = {}
 
     @property
     def authenticated(self) -> bool:
@@ -66,7 +74,7 @@ class GitHubClient:
                 self._rate_limit_warning_sent = True
                 self.on_response(self.rate_limit_remaining)
 
-    def _headers(self) -> dict[str, str]:
+    def _headers(self, etag: str | None = None) -> dict[str, str]:
         headers = {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
@@ -74,18 +82,31 @@ class GitHubClient:
         }
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
+        if etag:
+            headers["If-None-Match"] = etag
         return headers
 
-    def _request(self, url: str) -> tuple[Any, Any]:
-        request = Request(url, headers=self._headers(), method="GET")
+    def _request(self, url: str, etag: str | None = None) -> tuple[Any, Any]:
+        request = Request(url, headers=self._headers(etag), method="GET")
         try:
             with urlopen(request, timeout=self.timeout) as response:
                 body = response.read().decode("utf-8")
                 self._record_headers(response.headers)
-                return json.loads(body), response.headers
+                data = json.loads(body)
+                response_etag = response.headers.get("ETag")
+                if response_etag:
+                    self._store_response(url, response_etag, body)
+                return data, response.headers
         except HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace")
             self._record_headers(exc.headers)
+            if exc.code == 304 and etag is not None:
+                cached = self.response_cache.read(url)
+                if cached is not None:
+                    return json.loads(cached["body"]), exc.headers
+                raise GitHubError(
+                    f"GitHub returned 304 without a usable cached response for {url}"
+                ) from exc
             remaining = exc.headers.get("X-RateLimit-Remaining")
             if exc.code in (403, 429) and remaining == "0":
                 reset = int(exc.headers.get("X-RateLimit-Reset", "0"))
@@ -102,8 +123,34 @@ class GitHubClient:
 
     def get_json(self, path_or_url: str) -> Any:
         url = path_or_url if path_or_url.startswith("https://") else self.base_url + path_or_url
-        data, _ = self._request(url)
-        return data
+        return self._get_response(url)[0]
+
+    def _get_response(self, url: str) -> tuple[Any, Any]:
+        if url in self._responses:
+            return self._responses[url]
+        if self.offline:
+            cached = self.response_cache.read(url)
+            if cached is None:
+                raise GitHubError(
+                    f"No cached GitHub response is available for {url}; "
+                    "run the command without --offline to populate the cache"
+                )
+            data = json.loads(cached["body"])
+            response = (data, None)
+            self._responses[url] = response
+            return response
+
+        cached = None if self.refresh else self.response_cache.read(url)
+        response = self._request(url, cached["etag"] if cached else None)
+        self._responses[url] = response
+        return response
+
+    def _store_response(self, url: str, etag: str, body: str) -> None:
+        try:
+            self.response_cache.write(url, etag, body)
+        except OSError:
+            # A read-only or unwritable cache must not prevent a read-only report.
+            pass
 
     def list(self, path: str, params: dict[str, str] | None = None) -> Iterator[dict[str, Any]]:
         query = ""
@@ -113,7 +160,7 @@ class GitHubClient:
         url = self.base_url + path + query
 
         while url:
-            data, headers = self._request(url)
+            data, headers = self._get_response(url)
             if not isinstance(data, list):
                 raise GitHubError(f"Expected a GitHub list response from {url}")
             yield from data

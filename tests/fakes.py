@@ -22,8 +22,16 @@ class FakeGitHubClient(GitHubClient):
         token: str | None = None,
         timeout: float = 1,
         refs: dict[str, str] | None = None,
+        offline: bool = False,
+        refresh: bool = False,
     ) -> None:
-        super().__init__(token=token, timeout=timeout, refs=refs)
+        super().__init__(
+            token=token,
+            timeout=timeout,
+            refs=refs,
+            offline=offline,
+            refresh=refresh,
+        )
         self.rate_limit_remaining = 4999
 
     def get_json(self, path_or_url: str):
