@@ -79,6 +79,19 @@ class ReportRenderingTest(unittest.TestCase):
         self.assertNotIn("## Raw report data", rendered)
         self.assertNotIn("```json", rendered)
 
+    def test_not_checked_is_rendered_after_next_actions(self) -> None:
+        for rendered in (render_text(self.report), render_markdown(self.report)):
+            with self.subTest(renderer=rendered):
+                actions = rendered.index("Suggested next actions")
+                heading = rendered.index("Not checked — verify by hand")
+                self.assertLess(actions, heading)
+                manual_section = rendered[heading:]
+                self.assertIn("fixture-env-infra", manual_section)
+                self.assertIn(
+                    "docs/infra-cluster-deployment.md",
+                    manual_section,
+                )
+
     def test_report_titles_identify_scope(self) -> None:
         for scope, title in (
             ("environment", "Environment configuration status"),

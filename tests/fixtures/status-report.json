@@ -1174,6 +1174,80 @@
     ],
     "tool_version": "0.1.0"
   },
+  "not_checked": [
+    {
+      "phase": 1,
+      "title": "Configure cluster and storage networks and firewalls for bu-ist-demo-infra",
+      "where": {
+        "document": "docs/infra-cluster-deployment.md",
+        "heading": "Infrastructure Configuration"
+      },
+      "why": "The four repositories read by this tool do not describe the switch, network, or firewall state required for bu-ist-demo-infra."
+    },
+    {
+      "phase": 2,
+      "title": "Create internal DNS records for bu-ist-demo-infra api, api-int, and *.apps",
+      "where": {
+        "document": "docs/infra-cluster-deployment.md",
+        "heading": "Cluster Deployment"
+      },
+      "why": "The tool does not query the DNS service or read moc-dns, so it cannot prove that the records for bu-ist-demo-infra exist."
+    },
+    {
+      "phase": 2,
+      "title": "Store the bu-ist-demo-infra SSH key and kubeadmin credentials in AWS Secrets Manager",
+      "where": {
+        "document": "docs/infra-cluster-deployment.md",
+        "heading": "Cluster Deployment"
+      },
+      "why": "Secrets Manager is outside the public repositories read by this tool, so it cannot verify cluster/bu-ist-demo-infra/sshkey or cluster/bu-ist-demo-infra/kubeadmin."
+    },
+    {
+      "phase": 2,
+      "title": "Place the pull secret and SSH key under hub-images/credentials/bu-ist-demo-infra",
+      "where": {
+        "document": "docs/infra-cluster-deployment.md",
+        "heading": "Cluster Deployment"
+      },
+      "why": "The documented credential directory is intentionally not committed, so repository state cannot prove that its files exist for bu-ist-demo-infra."
+    },
+    {
+      "phase": 3,
+      "title": "Run create_agent_install_media and copy the bu-ist-demo-infra ISO to the bastion host",
+      "where": {
+        "document": "docs/infra-cluster-deployment.md",
+        "heading": "Cluster Deployment"
+      },
+      "why": "Running the playbook and copying the generated discovery ISO leave no trace that this tool can verify in the four repositories it reads."
+    },
+    {
+      "phase": 5,
+      "title": "Bootstrap Argo CD for bu-ist-demo-infra",
+      "where": {
+        "document": "docs/infra-cluster-deployment.md",
+        "heading": "Cluster Configuration"
+      },
+      "why": "Running setup-gitops.sh and applying the bootstrap Helm template changes live cluster state, which this repository-only report cannot verify."
+    },
+    {
+      "phase": 5,
+      "title": "Complete Pure storage configuration for bu-ist-demo-infra",
+      "where": {
+        "document": "docs/infra-cluster-deployment.md",
+        "heading": "Cluster Configuration"
+      },
+      "why": "Pure storage configuration is documented separately and is not among the repositories read by this tool."
+    },
+    {
+      "phase": 5,
+      "title": "Complete cluster certificates and external DNS for bu-ist-demo-infra",
+      "where": {
+        "document": "docs/infra-cluster-deployment.md",
+        "heading": "Cluster Configuration"
+      },
+      "why": "The relevant IAM roles and policies are documented separately and are not among the repositories read by this tool."
+    }
+  ],
   "overall_state": "CONFIGURATION IN PROGRESS",
   "phases": {
     "hub": [

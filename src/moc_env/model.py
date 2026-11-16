@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from .phases import phase_definitions
+from .phases import not_checked_entries, phase_definitions
 
 
 @dataclass(frozen=True)
@@ -188,6 +188,7 @@ class StatusReport:
             **({"metadata": self.metadata.to_dict()} if self.metadata else {}),
             "environment": self.environment.to_dict(),
             "overall_state": self.overall_state,
+            "not_checked": self._not_checked(),
             "summary": {
                 "check_count": len(self.checks),
                 "state_counts": dict(sorted(state_counts.items())),
@@ -222,6 +223,30 @@ class StatusReport:
                 for scope in ("hub", "workload")
             }
         return [phase.to_dict() for phase in phase_definitions(self.scope)]
+
+    def _not_checked(self) -> list[dict[str, object]]:
+        if self.scope == "environment":
+            entries = [
+                entry
+                for scope in ("hub", "workload")
+                for entry in not_checked_entries(
+                    scope,
+                    (
+                        self.environment.workload_cluster
+                        if scope == "workload"
+                        else self.environment.infra_cluster
+                    )
+                    or "",
+                )
+            ]
+        else:
+            cluster = (
+                self.environment.workload_cluster
+                if self.scope == "workload"
+                else self.environment.infra_cluster
+            )
+            entries = not_checked_entries(self.scope, cluster or "")
+        return [entry.to_dict() for entry in entries]
 
     def _scope_current_phase(self, scope: str) -> int | str:
         phases = [
