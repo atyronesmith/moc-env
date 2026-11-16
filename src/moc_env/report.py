@@ -462,10 +462,56 @@ def _pull_request_count_summary(check: dict[str, Any]) -> list[str] | None:
     return lines
 
 
+def _agent_label_inputs_table(check: dict[str, Any]) -> list[str] | None:
+    evidence = check.get("evidence") or {}
+    rows = evidence.get("agent_label_hosts")
+    if check.get("id") != "workload.agent_labels_inputs" or not isinstance(rows, list):
+        return None
+
+    def display(value: Any) -> str:
+        return "MISSING" if value is None else str(value)
+
+    rendered = [
+        (
+            display(row.get("host")),
+            display(row.get("bm_management")),
+            display(row.get("mac_addr")),
+            display(row.get("resource_class")),
+        )
+        for row in rows
+        if isinstance(row, dict)
+    ]
+    if not rendered:
+        return []
+    widths = [
+        max(len(header), *(len(row[index]) for row in rendered)) + 2
+        for index, header in enumerate(("Host", "bm_management", "mac_addr", "resource_class"))
+    ]
+    lines = [
+        "  Agent label inputs:",
+        "  "
+        + "Host:".ljust(widths[0])
+        + "bm_management:".ljust(widths[1])
+        + "mac_addr:".ljust(widths[2])
+        + "resource_class:",
+    ]
+    lines.extend(
+        "  "
+        + host.ljust(widths[0])
+        + management.ljust(widths[1])
+        + mac_addr.ljust(widths[2])
+        + resource_class
+        for host, management, mac_addr, resource_class in rendered
+    )
+    return lines
+
+
 def _structured_summary(check: dict[str, Any]) -> list[str] | None:
     """Route a check to the most specific compact text renderer."""
     return (
         _oidc_field_table(check)
+        or
+        _agent_label_inputs_table(check)
         or
         _path_checklist(check)
         or _field_value_checklist(check)
@@ -627,6 +673,32 @@ def _oidc_markdown_table(check: dict[str, Any]) -> list[str] | None:
     ]
 
 
+def _agent_label_markdown_table(check: dict[str, Any]) -> list[str] | None:
+    evidence = check.get("evidence") or {}
+    rows = evidence.get("agent_label_hosts")
+    if not isinstance(rows, list):
+        return []
+    table_rows = [
+        [
+            row.get("host"),
+            row.get("bm_management"),
+            row.get("mac_addr"),
+            row.get("resource_class"),
+        ]
+        for row in rows
+        if isinstance(row, dict)
+    ]
+    if not table_rows:
+        return []
+    return [
+        "**Agent label inputs**",
+        "",
+        *_markdown_table(
+            ["Host", "bm_management", "mac_addr", "resource_class"], table_rows
+        ),
+    ]
+
+
 def _check_markdown(check: dict[str, Any], number: int) -> list[str]:
     evidence = check.get("evidence") or {}
     check_rule = evidence.get("check_rule")
@@ -673,6 +745,7 @@ def _check_markdown(check: dict[str, Any], number: int) -> list[str]:
             _markdown_table(["Aspect", "Value"], result_rows, plain_first_column=True)
         )
     lines.extend(_host_table(check, evidence))
+    lines.extend(_agent_label_markdown_table(check))
     lines.extend(_path_table(check, evidence))
     if not field_table and not oidc_table:
         lines.extend(_field_table(check, evidence))

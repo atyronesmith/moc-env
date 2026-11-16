@@ -17,6 +17,7 @@ MOC_ISSUES_REPOSITORY = "CCI-MOC/MOC-issues"
 MOC_KEYCLOAK_REPOSITORY = "CCI-MOC/moc-keycloak"
 OAC_APPS_REPOSITORY = "CCI-MOC/oac-apps"
 INVENTORY_PATH = "infra/inventory/00hosts.yaml"
+UPDATE_AGENTS_PATH = "infra/update-agents.yaml"
 HUB_INVENTORY_PATH = "hub-images/inventory.yml"
 KEYCLOAK_PATH = "main.tf"
 PR_FILE_FETCH_LIMIT = 20
@@ -319,6 +320,7 @@ class InfraObservation:
     hub_inventory_path: str
     variables_path: str
     inventory_present: SourceValue
+    update_agents_present: SourceValue
     clusters: dict[str, ClusterInventoryObservation]
     discovered_workload_clusters: tuple[str, ...]
     workload_clusters: tuple[str, ...]
@@ -348,6 +350,18 @@ def read_infra_observation(
         if INVENTORY_PATH in tree
         else None
     )
+    emit(
+        "Hardware and inventory",
+        "read update-agents inputs required to label and approve agents",
+        UPDATE_AGENTS_PATH,
+    )
+    update_agents_text = (
+        client.get_file(OAC_INFRA_REPOSITORY, UPDATE_AGENTS_PATH)
+        if UPDATE_AGENTS_PATH in tree
+        else None
+    )
+    update_agents = yaml.safe_load(update_agents_text) if update_agents_text else None
+    update_agents_supported = update_agents is None or isinstance(update_agents, dict)
     inventory = yaml.safe_load(inventory_text) if inventory_text else None
     inventory_root = (
         inventory.get("all", inventory) if isinstance(inventory, dict) else inventory
@@ -467,6 +481,12 @@ def read_infra_observation(
         hub_inventory_path=HUB_INVENTORY_PATH,
         variables_path=variables_path,
         inventory_present=inventory_present,
+        update_agents_present=SourceValue(
+            update_agents_text is not None,
+            OAC_INFRA_REPOSITORY,
+            UPDATE_AGENTS_PATH,
+            confidence="exact" if update_agents_supported else "unsupported",
+        ),
         clusters=cluster_observations,
         discovered_workload_clusters=discovered_workloads,
         workload_clusters=workload_clusters,

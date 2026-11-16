@@ -317,6 +317,8 @@ Open the generated files and review:
 
 - names and parent/child references;
 - inventory hosts and boot images;
+- non-OpenStack host `mac_addr` and `resource_class` inputs used by
+  `infra/update-agents.yaml`;
 - domain and machine network;
 - chart variables;
 - component and application paths;

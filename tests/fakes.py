@@ -34,6 +34,9 @@ class FakeGitHubClient(GitHubClient):
             self.record_source(repository, ref, self.SOURCE_SHAS[repository])
             return {
                 "infra/inventory/00hosts.yaml": {"path": "infra/inventory/00hosts.yaml"},
+                "infra/update-agents.yaml": {
+                    "path": "infra/update-agents.yaml"
+                },
                 "hub-images/inventory.yml": {"path": "hub-images/inventory.yml"},
                 "hub-images/group_vars/bu-ist-demo-infra/vars.yml": {
                     "path": "hub-images/group_vars/bu-ist-demo-infra/vars.yml"
@@ -74,6 +77,15 @@ all:
               hosts:
                 compute-0:
                   node_name: MOC-R4PAC10U31-S1B
+                  bm_management: ipmi
+                  mac_addr: 00:11:22:33:44:55
+                  resource_class: bu-ist-demo-worker
+"""
+        if repository == "CCI-MOC/oac-infra" and path == "infra/update-agents.yaml":
+            return """
+- name: Label and approve agents
+  hosts: all
+  tasks: []
 """
         if repository == "CCI-MOC/oac-infra" and path == "hub-images/inventory.yml":
             return """

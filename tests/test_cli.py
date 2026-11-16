@@ -152,8 +152,8 @@ class CliDispatchTest(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertIn("Environment configuration status: bu-ist-demo", stdout)
         self.assertIn("Step 1:", stderr)
-        self.assertIn("Step 6:", stderr)
-        self.assertNotIn("Step 7:", stderr)
+        self.assertIn("Step 7:", stderr)
+        self.assertNotIn("Step 8:", stderr)
 
     def test_hub_status_json_dispatch(self) -> None:
         exit_code, stdout, _ = self.run_cli(
@@ -416,7 +416,8 @@ class CliDispatchTest(unittest.TestCase):
         self.assertEqual(document["metadata"]["name"]["value"], "bu-ist-demo-infra")
         self.assertIn("Step 1:", stderr)
         self.assertIn("Step 3:", stderr)
-        self.assertNotIn("Step 4:", stderr)
+        self.assertIn("Step 4:", stderr)
+        self.assertNotIn("Step 5:", stderr)
 
     def test_export_infra_dispatch_and_output_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -443,7 +444,8 @@ class CliDispatchTest(unittest.TestCase):
         )
         self.assertIn("Step 1:", stderr)
         self.assertIn("Step 4:", stderr)
-        self.assertNotIn("Step 5:", stderr)
+        self.assertIn("Step 5:", stderr)
+        self.assertNotIn("Step 6:", stderr)
 
     def test_export_workload_dispatch_and_output_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

@@ -20,10 +20,13 @@ from .model import (
 )
 from .observed import (
     AppsObservation,
+    ClusterInventoryObservation,
     InfraObservation,
     IssueObservation,
     KeycloakObservation,
     OAC_INFRA_REPOSITORY,
+    SourceValue,
+    UPDATE_AGENTS_PATH,
     inventory_clusters,
     read_environment_observation,
 )
@@ -51,8 +54,12 @@ _NEXT_ACTIONS = {
         "generic boot_image_url for every host in the hub cluster group."
     ),
     "workload.boot_image": (
-        "Generate and publish a workload-specific discovery ISO, then replace "
-        "the generic boot_image_url for every host in the workload cluster group."
+        "Generate and publish the parent hub's agent discovery ISO, then "
+        "replace the generic boot_image_url for every host in the workload "
+        "cluster group."
+    ),
+    "workload.agent_labels_inputs": (
+        "Edit the inventory inputs used by infra/update-agents.yaml."
     ),
     "hub.image_inventory": (
         "Edit CCI-MOC/oac-infra at hub-images/inventory.yml and add the hub "
@@ -184,7 +191,11 @@ def list_environments(client: GitHubClient) -> list[dict[str, Any]]:
     return clusters
 
 
-def _boot_image_state(url: str | None, cluster: str) -> str:
+def _boot_image_state(
+    url: str | None,
+    cluster: str,
+    hub_cluster: str | None = None,
+) -> str:
     if not url:
         return "missing"
     image_name = url.rsplit("/", 1)[-1]
@@ -193,6 +204,8 @@ def _boot_image_state(url: str | None, cluster: str) -> str:
     cluster_aliases = [cluster]
     if cluster.startswith("oac-"):
         cluster_aliases.append(cluster.removeprefix("oac-"))
+    if hub_cluster is not None:
+        cluster_aliases.extend((hub_cluster, hub_cluster.removeprefix("oac-")))
     if any(alias in image_name for alias in cluster_aliases):
         return "declared_in_main"
     return "partial"
@@ -432,19 +445,40 @@ class StatusChecker:
                 )
             )
 
+            if inventory_scope == "workload":
+                results.append(
+                    self._workload_agent_labels_check(
+                        cluster,
+                        cluster_observation,
+                        observation.update_agents_present,
+                    )
+                )
+
             if not hosts:
                 continue
 
+            is_hub = cluster == environment.infra_cluster
             selected_url = boot_urls[0] if len(boot_urls) == 1 else None
-            boot_state = _boot_image_state(selected_url, cluster)
+            boot_state = _boot_image_state(
+                selected_url,
+                cluster,
+                hub_cluster=None if is_hub else environment.infra_cluster,
+            )
             boot_id = (
                 "hub.boot_image"
-                if cluster == environment.infra_cluster
+                if is_hub
                 else "workload.boot_image"
             )
-            boot_scope = "hub" if cluster == environment.infra_cluster else "workload"
+            boot_scope = "hub" if is_hub else "workload"
             if boot_state == "declared_in_main":
-                boot_reason = f"The boot image URL is specific to {cluster}."
+                boot_reason = (
+                    f"The boot image URL is specific to {cluster}."
+                    if is_hub
+                    else (
+                        "The boot image URL identifies the workload or its parent "
+                        f"hub {environment.infra_cluster}."
+                    )
+                )
                 boot_present = {"boot_image_url": selected_url}
                 boot_missing = None
             elif len(boot_urls) > 1:
@@ -455,28 +489,50 @@ class StatusChecker:
                 )
                 boot_present = {"boot_image_urls": boot_urls}
                 boot_missing = {"single_cluster_specific_url": True}
-            elif selected_url and selected_url.endswith("discovery.iso"):
+            elif selected_url and selected_url.rsplit("/", 1)[-1] == "discovery.iso":
+                expected_image = (
+                    f"{cluster}-agent-discovery.iso"
+                    if is_hub
+                    else f"{environment.infra_cluster}-agent-discovery.iso"
+                )
                 boot_reason = (
-                    "A boot image URL is present, but it points to the generic "
-                    "discovery.iso rather than a cluster-specific image."
+                    "A boot image URL is present, but the workload is still on the "
+                    f"generic discovery.iso rather than the expected "
+                    f"`{expected_image}`."
+                    if not is_hub
+                    else (
+                        "A boot image URL is present, but it points to the generic "
+                        "discovery.iso rather than a cluster-specific image."
+                    )
                 )
                 boot_present = {"boot_image_url": selected_url}
                 boot_missing = {
-                    "cluster_specific_image": (
-                        f"an image name containing {cluster}"
-                    )
+                    "cluster_specific_image": expected_image
                 }
             elif selected_url:
+                image_name = selected_url.rsplit("/", 1)[-1]
                 boot_reason = (
-                    "A boot image URL is present, but it does not identify the "
-                    "expected cluster by its full name or oac-shortened name."
+                    "A boot image URL is present, but the filename "
+                    f"`{image_name}` does not consistently identify this workload "
+                    "or its parent hub."
+                    if not is_hub
+                    else (
+                        "A boot image URL is present, but it does not identify the "
+                        "expected cluster by its full name or oac-shortened name."
+                    )
                 )
                 boot_present = {"boot_image_url": selected_url}
                 boot_missing = {
-                    "cluster_name_in_image": [
-                        cluster,
-                        cluster.removeprefix("oac-"),
-                    ]
+                    "cluster_name_in_image": (
+                        [cluster, cluster.removeprefix("oac-")]
+                        if is_hub
+                        else [
+                            cluster,
+                            cluster.removeprefix("oac-"),
+                            environment.infra_cluster,
+                            environment.infra_cluster.removeprefix("oac-"),
+                        ]
+                    )
                 }
             else:
                 boot_reason = "No boot image URL is inherited by the cluster host group."
@@ -496,7 +552,18 @@ class StatusChecker:
                     ref="main",
                     state=boot_state,
                     severity=(
-                        "info" if boot_state == "declared_in_main" else "blocking"
+                        "info"
+                        if boot_state == "declared_in_main"
+                        else (
+                            "advisory"
+                            if (
+                                not is_hub
+                                and selected_url is not None
+                                and selected_url.rsplit("/", 1)[-1]
+                                != "discovery.iso"
+                            )
+                            else "blocking"
+                        )
                     ),
                     expected=f"Cluster-specific discovery image for {cluster}",
                     actual=boot_urls,
@@ -508,14 +575,27 @@ class StatusChecker:
                             boot_urls and boot_urls[0].endswith("discovery.iso")
                         ),
                         "check_rule": (
-                            "The boot-image filename must contain the full cluster "
-                            f"name `{cluster}`"
-                            + (
-                                f" (or the oac-shortened name `{cluster.removeprefix('oac-')}`)"
-                                if cluster.startswith("oac-")
-                                else ""
+                            (
+                                "The boot-image filename must contain the full cluster "
+                                f"name `{cluster}`"
+                                + (
+                                    f" (or the oac-shortened name "
+                                    f"`{cluster.removeprefix('oac-')}`)"
+                                    if cluster.startswith("oac-")
+                                    else ""
+                                )
+                                + "; generic `discovery.iso` does not satisfy this rule."
                             )
-                            + "; generic `discovery.iso` does not satisfy this rule."
+                            if is_hub
+                            else (
+                                "The workload boot-image filename may contain the "
+                                f"workload name `{cluster}`, its oac-shortened name, "
+                                f"the parent hub name `{environment.infra_cluster}`, "
+                                "or the hub's oac-shortened name. Unrecognized "
+                                "names are advisory because naming is not consistent "
+                                "across environments; generic `discovery.iso` "
+                                "remains a gap."
+                            )
                         ),
                     },
                     url=github_url(repository, inventory_path),
@@ -637,6 +717,110 @@ class StatusChecker:
             )
         )
         return results, environment
+
+    def _workload_agent_labels_check(
+        self,
+        cluster: str,
+        cluster_observation: ClusterInventoryObservation,
+        update_agents_present: SourceValue,
+    ) -> CheckResult:
+        """Check host inputs consumed by infra/update-agents.yaml."""
+
+        repository = OAC_INFRA_REPOSITORY
+        hosts = cluster_observation.hosts.value
+        rows = [
+            {
+                "host": host.get("name"),
+                "bm_management": host.get("bm_management"),
+                "mac_addr": host.get("mac_addr"),
+                "resource_class": host.get("resource_class"),
+            }
+            for host in hosts
+        ]
+        checked_rows = [
+            row for row in rows if row["bm_management"] != "openstack"
+        ]
+        missing_by_host = {
+            row["host"]: [
+                name
+                for name in ("mac_addr", "resource_class")
+                if row[name] is None
+            ]
+            for row in checked_rows
+        }
+        missing_by_host = {
+            host: variables
+            for host, variables in missing_by_host.items()
+            if variables
+        }
+
+        if not update_agents_present.value:
+            state = "missing"
+            reason = "The infra/update-agents.yaml playbook is absent from main."
+        elif not hosts:
+            state = "missing"
+            reason = f"No hosts are declared for the {cluster} workload cluster."
+        elif not checked_rows:
+            state = "declared_in_main"
+            reason = (
+                "All hosts use bm_management openstack, so update-agents.yaml "
+                "does not require mac_addr or resource_class for them."
+            )
+        elif missing_by_host:
+            state = "partial"
+            reason = (
+                "Some non-openstack hosts are missing mac_addr or "
+                "resource_class inputs required by infra/update-agents.yaml."
+            )
+            if len(rows) - len(checked_rows):
+                reason += " Hosts using bm_management openstack are not checked."
+        else:
+            state = "declared_in_main"
+            reason = (
+                "Every non-openstack host has the mac_addr and resource_class "
+                "inputs required by infra/update-agents.yaml."
+            )
+
+        next_action = _next_action("workload.agent_labels_inputs", state)
+        if next_action is not None:
+            affected_hosts = ", ".join(sorted(missing_by_host)) or "none"
+            missing_variables = (
+                ", ".join(
+                    sorted({name for names in missing_by_host.values() for name in names})
+                )
+                or "mac_addr, resource_class"
+            )
+            next_action += (
+                f" For hosts {affected_hosts}, provide {missing_variables}. "
+                "resource_class must match the value the NodePool selects on."
+            )
+
+        return CheckResult(
+            id="workload.agent_labels_inputs",
+            stage="Hardware and inventory",
+            check=f"{cluster} update-agents inputs",
+            scope="workload",
+            repository=repository,
+            path=UPDATE_AGENTS_PATH,
+            ref="main",
+            state=state,
+            severity="info" if state == "declared_in_main" else "blocking",
+            expected=["mac_addr", "resource_class"],
+            actual=rows,
+            reason=reason,
+            present={
+                "checked_host_count": len(checked_rows),
+                "complete_host_count": len(checked_rows) - len(missing_by_host),
+            },
+            missing={"hosts": missing_by_host} if missing_by_host else None,
+            evidence={
+                "agent_label_hosts": rows,
+                "missing_variables": missing_by_host,
+                "openstack_hosts_skipped": len(rows) - len(checked_rows),
+            },
+            url=github_url(repository, UPDATE_AGENTS_PATH),
+            next_action=next_action,
+        )
 
     def _keycloak_checks(
         self,

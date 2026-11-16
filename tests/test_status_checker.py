@@ -49,13 +49,10 @@ class StatusCheckerTest(unittest.TestCase):
             if check["check"].endswith("boot image")
         ]
         self.assertEqual(len(rules), 2)
-        self.assertTrue(
-            all(
-                "must contain the full cluster name" in rule
-                and "generic `discovery.iso`" in rule
-                for rule in rules
-            )
-        )
+        self.assertIn("must contain the full cluster name", rules[0])
+        self.assertIn("generic `discovery.iso`", rules[0])
+        self.assertIn("parent hub name", rules[1])
+        self.assertIn("generic `discovery.iso`", rules[1])
 
     def test_hub_status_includes_hub_checks_and_excludes_workload_checks(self) -> None:
         report = StatusChecker(FakeGitHubClient()).run_hub(
@@ -952,6 +949,150 @@ all:
             boot_states(["http://example.invalid/bu-ist-demo-infra-agent.iso"])["state"],
             "declared_in_main",
         )
+
+    def test_workload_boot_image_accepts_parent_hub_image(self) -> None:
+        class WorkloadBootImageClient(FakeGitHubClient):
+            def get_file(self, repository, path, ref="main"):
+                content = super().get_file(repository, path, ref)
+                if (
+                    repository == "CCI-MOC/oac-infra"
+                    and path == "infra/inventory/00hosts.yaml"
+                ):
+                    return content.replace(
+                        "http://10.2.0.82/boot/discovery.iso",
+                        "http://10.2.0.82/boot/"
+                        "bu-ist-demo-infra-agent-discovery.iso",
+                        1,
+                    ).replace(
+                        "http://10.2.0.82/boot/discovery.iso",
+                        "http://10.2.0.82/boot/"
+                        "bu-ist-demo-infra-agent-discovery.iso",
+                        1,
+                    )
+                return content
+
+        report = StatusChecker(WorkloadBootImageClient()).run(
+            Environment(name="bu-ist-demo", issue_number=666)
+        ).to_dict()
+        check = next(
+            item for item in report["checks"]
+            if item["check"] == "bu-ist-demo-workload0 boot image"
+        )
+        self.assertEqual(check["state"], "declared_in_main")
+        self.assertEqual(check["severity"], "info")
+
+    def test_workload_generic_boot_image_is_a_named_gap(self) -> None:
+        report = StatusChecker(FakeGitHubClient()).run(
+            Environment(name="bu-ist-demo", issue_number=666)
+        ).to_dict()
+        check = next(
+            item for item in report["checks"]
+            if item["check"] == "bu-ist-demo-workload0 boot image"
+        )
+        self.assertEqual(check["state"], "partial")
+        self.assertEqual(check["severity"], "blocking")
+        self.assertIn("still on the generic discovery.iso", check["reason"])
+        self.assertIn("bu-ist-demo-infra-agent-discovery.iso", check["reason"])
+
+    def test_workload_unrecognized_boot_image_name_is_advisory(self) -> None:
+        class UnrecognizedBootImageClient(FakeGitHubClient):
+            def get_file(self, repository, path, ref="main"):
+                content = super().get_file(repository, path, ref)
+                if (
+                    repository == "CCI-MOC/oac-infra"
+                    and path == "infra/inventory/00hosts.yaml"
+                ):
+                    return content.replace(
+                        "http://10.2.0.82/boot/discovery.iso",
+                        "http://10.2.0.82/boot/"
+                        "bu-ist-demo-infra-agent-discovery.iso",
+                        1,
+                    ).replace(
+                        "http://10.2.0.82/boot/discovery.iso",
+                        "http://10.2.0.82/dev-workload-agent.iso",
+                        1,
+                    )
+                return content
+
+        report = StatusChecker(UnrecognizedBootImageClient()).run(
+            Environment(name="bu-ist-demo", issue_number=666)
+        ).to_dict()
+        check = next(
+            item for item in report["checks"]
+            if item["check"] == "bu-ist-demo-workload0 boot image"
+        )
+        self.assertEqual(check["state"], "partial")
+        self.assertEqual(check["severity"], "advisory")
+        self.assertIn("dev-workload-agent.iso", check["reason"])
+
+    def test_workload_agent_labels_missing_resource_class_is_partial(self) -> None:
+        class MissingResourceClassClient(FakeGitHubClient):
+            def get_file(self, repository, path, ref="main"):
+                content = super().get_file(repository, path, ref)
+                if (
+                    repository == "CCI-MOC/oac-infra"
+                    and path == "infra/inventory/00hosts.yaml"
+                ):
+                    return content.replace(
+                        "bm_management: ipmi\n"
+                        "                  mac_addr: 00:11:22:33:44:55\n"
+                        "                  resource_class: bu-ist-demo-worker",
+                        "bm_management: bmc\n"
+                        "                  mac_addr: 00:11:22:33:44:55",
+                    )
+                return content
+
+        report = StatusChecker(MissingResourceClassClient()).run(
+            Environment(name="bu-ist-demo", issue_number=666)
+        ).to_dict()
+        check = next(
+            item for item in report["checks"]
+            if item["id"] == "workload.agent_labels_inputs"
+        )
+        self.assertEqual(check["state"], "partial")
+        self.assertEqual(check["severity"], "blocking")
+        self.assertEqual(
+            check["missing"]["hosts"], {"compute-0": ["resource_class"]}
+        )
+        self.assertIn("infra/update-agents.yaml", check["next_action"])
+        self.assertIn("compute-0", check["next_action"])
+        self.assertIn("resource_class", check["next_action"])
+        self.assertIn("NodePool", check["next_action"])
+        text_report = render_text(report)
+        markdown_report = render_markdown(report)
+        self.assertIn("Agent label inputs:", text_report)
+        self.assertIn("bm_management", text_report)
+        self.assertIn("MISSING", text_report)
+        self.assertIn("Agent label inputs", markdown_report)
+        self.assertIn("| `compute-0` | `bmc` |", markdown_report)
+
+    def test_workload_agent_labels_skips_openstack_hosts(self) -> None:
+        class OpenStackHostClient(FakeGitHubClient):
+            def get_file(self, repository, path, ref="main"):
+                content = super().get_file(repository, path, ref)
+                if (
+                    repository == "CCI-MOC/oac-infra"
+                    and path == "infra/inventory/00hosts.yaml"
+                ):
+                    return content.replace(
+                        "bm_management: ipmi\n"
+                        "                  mac_addr: 00:11:22:33:44:55\n"
+                        "                  resource_class: bu-ist-demo-worker",
+                        "bm_management: openstack",
+                    )
+                return content
+
+        report = StatusChecker(OpenStackHostClient()).run(
+            Environment(name="bu-ist-demo", issue_number=666)
+        ).to_dict()
+        check = next(
+            item for item in report["checks"]
+            if item["id"] == "workload.agent_labels_inputs"
+        )
+        self.assertEqual(check["state"], "declared_in_main")
+        self.assertEqual(check["severity"], "info")
+        self.assertIn("openstack", check["reason"])
+        self.assertEqual(check["evidence"]["openstack_hosts_skipped"], 1)
 
 
 if __name__ == "__main__":

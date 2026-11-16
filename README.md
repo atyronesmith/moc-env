@@ -43,6 +43,7 @@ It reports:
 - hub and hosted-workload host inventory;
 - hub-image variables and hardware identifiers;
 - boot-image specificity;
+- `update-agents.yaml` host inputs for non-OpenStack workload hosts;
 - Keycloak OIDC client registration;
 - `oac-apps` hub, local-cluster, and hosted-workload GitOps paths;
 - open and merged pull requests that reference the environment.
