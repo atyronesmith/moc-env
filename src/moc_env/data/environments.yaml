@@ -1,0 +1,23 @@
+defaults:
+  # All currently known local-cluster files remain required. To make a file
+  # optional for one environment, list it in that environment's
+  # optional_local_cluster_components and remove it from its required list.
+  required_local_cluster_components:
+    - acm.yaml
+    - acm-placements.yaml
+    - cert-manager.yaml
+    - cluster-certificates.yaml
+    - cluster-version.yaml
+    - external-dns-operator.yaml
+    - external-secrets.yaml
+    - hcp-config.yaml
+    - keycloak-oauth.yaml
+    - metallb.yaml
+    - openshift-gitops.yaml
+    - portworx.yaml
+    - user-workload-monitoring.yaml
+  optional_local_cluster_components: []
+
+environments:
+  bu-ist-demo:
+    issue: 666

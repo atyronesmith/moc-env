@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import unittest
 
-from moc_env.checks import LOCAL_CLUSTER_COMPONENTS
+from moc_env.checks import StatusChecker
+from moc_env.registry import EnvironmentRegistry
 from moc_env.checks import StatusChecker
 from moc_env.checks import list_environments
 from moc_env.model import Environment
@@ -16,6 +17,12 @@ from fakes import FakeGitHubClient
 
 
 class StatusCheckerTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.registry = EnvironmentRegistry.load()
+        self.required_components = self.registry.required_components(
+            "bu-ist-demo"
+        )
+
     def test_bu_ist_demo_milestone_one_states(self) -> None:
         environment = Environment(name="bu-ist-demo", issue_number=666)
         report = StatusChecker(FakeGitHubClient()).run(environment).to_dict()
@@ -684,6 +691,8 @@ bu_ist_demo_infra:
         self.assertEqual(check["actual"]["matching_pr_count"], 20)
 
     def test_status_checker_reports_declared_apps_paths(self) -> None:
+        required_components = self.required_components
+
         class DeclaredAppsClient(FakeGitHubClient):
             def get_tree(self, repository, ref="main"):
                 if repository == "CCI-MOC/oac-apps":
@@ -697,7 +706,7 @@ bu_ist_demo_infra:
                     }
                     paths.update(
                         f"values/bu-ist-demo-infra/local-cluster/{name}"
-                        for name in LOCAL_CLUSTER_COMPONENTS
+                        for name in required_components
                     )
                     return {path: {"path": path} for path in paths}
                 return super().get_tree(repository, ref)
@@ -712,6 +721,116 @@ bu_ist_demo_infra:
         self.assertEqual(states["Infra ArgoCD applications"], "declared_in_main")
         self.assertEqual(states["Workload hosted-cluster values"], "declared_in_main")
         self.assertEqual(states["Workload component values"], "declared_in_main")
+
+    def test_optional_component_absence_is_advisory(self) -> None:
+        optional_component = "user-workload-monitoring.yaml"
+        required_components = tuple(
+            name
+            for name in self.required_components
+            if name != optional_component
+        )
+        registry = EnvironmentRegistry.from_document(
+            {
+                "defaults": {
+                    "required_local_cluster_components": required_components,
+                    "optional_local_cluster_components": [optional_component],
+                },
+                "environments": {
+                    "bu-ist-demo": {
+                        "issue": 666,
+                        "required_local_cluster_components": list(
+                            required_components
+                        ),
+                        "optional_local_cluster_components": [optional_component],
+                    }
+                },
+            }
+        )
+
+        class OptionalComponentClient(FakeGitHubClient):
+            def get_file(self, repository, path, ref="main"):
+                content = super().get_file(repository, path, ref)
+                if (
+                    repository == "CCI-MOC/oac-infra"
+                    and path == "infra/inventory/00hosts.yaml"
+                ):
+                    content = content.replace(
+                        "http://10.2.0.82/boot/discovery.iso",
+                        "http://10.2.0.82/boot/"
+                        "bu-ist-demo-infra-agent-discovery.iso",
+                        1,
+                    )
+                    content = content.replace(
+                        "http://10.2.0.82/boot/discovery.iso",
+                        "http://10.2.0.82/boot/"
+                        "bu-ist-demo-workload0-agent-discovery.iso",
+                        1,
+                    )
+                return content
+
+            def get_tree(self, repository, ref="main"):
+                if repository == "CCI-MOC/oac-apps":
+                    paths = {
+                        "hosted-clusters/bu-ist-demo-infra/values.yaml",
+                        "values/bu-ist-demo-infra/hcp-config.yaml",
+                        "apps/bu-ist-demo-infra/keycloak-oauth.yaml",
+                        "hosted-clusters/bu-ist-demo-infra/"
+                        "bu-ist-demo-workload0/values.yaml",
+                        "values/bu-ist-demo-infra/bu-ist-demo-workload0/example.yaml",
+                    }
+                    paths.update(
+                        f"values/bu-ist-demo-infra/local-cluster/{name}"
+                        for name in required_components
+                    )
+                    return {path: {"path": path} for path in paths}
+                return super().get_tree(repository, ref)
+
+        report = StatusChecker(
+            OptionalComponentClient(),
+            include_prs=False,
+            registry=registry,
+        ).run(Environment(name="bu-ist-demo", issue_number=666)).to_dict()
+        check = next(
+            item for item in report["checks"]
+            if item["check"] == "Infra local-cluster values"
+        )
+        self.assertEqual(check["state"], "partial")
+        self.assertEqual(check["severity"], "advisory")
+        self.assertEqual(report["summary"]["advisory_count"], 1)
+        self.assertEqual(report["overall_state"], "DECLARED IN MAIN")
+
+    def test_generic_hub_boot_image_with_later_evidence_is_advisory(self) -> None:
+        required_components = self.required_components
+
+        class DeclaredAppsClient(FakeGitHubClient):
+            def get_tree(self, repository, ref="main"):
+                if repository == "CCI-MOC/oac-apps":
+                    paths = {
+                        "hosted-clusters/bu-ist-demo-infra/values.yaml",
+                        "values/bu-ist-demo-infra/hcp-config.yaml",
+                        "apps/bu-ist-demo-infra/keycloak-oauth.yaml",
+                        "hosted-clusters/bu-ist-demo-infra/"
+                        "bu-ist-demo-workload0/values.yaml",
+                        "values/bu-ist-demo-infra/bu-ist-demo-workload0/example.yaml",
+                    }
+                    paths.update(
+                        f"values/bu-ist-demo-infra/local-cluster/{name}"
+                        for name in required_components
+                    )
+                    return {path: {"path": path} for path in paths}
+                return super().get_tree(repository, ref)
+
+        report = StatusChecker(
+            DeclaredAppsClient(),
+            include_prs=False,
+        ).run(Environment(name="bu-ist-demo", issue_number=666)).to_dict()
+        check = next(
+            item for item in report["checks"]
+            if item["check"] == "bu-ist-demo-infra boot image"
+        )
+        self.assertEqual(check["state"], "partial")
+        self.assertEqual(check["severity"], "advisory")
+        self.assertEqual(report["overall_state"], "DECLARED IN MAIN")
 
     def test_status_checker_reports_keycloak_block_for_other_cluster(self) -> None:
         class OtherKeycloakClient(FakeGitHubClient):
@@ -736,6 +855,47 @@ other_infra = {
             [result["status"] for result in check["evidence"]["fields"].values()],
             ["absent", "absent", "absent"],
         )
+
+    def test_registry_can_override_keycloak_client_name(self) -> None:
+        registry = EnvironmentRegistry.from_document(
+            {
+                "defaults": {
+                    "required_local_cluster_components": list(
+                        self.required_components
+                    ),
+                    "optional_local_cluster_components": [],
+                },
+                "environments": {
+                    "bu-ist-demo": {
+                        "issue": 666,
+                        "keycloak_client_name": "custom-oidc-client",
+                    }
+                },
+            }
+        )
+
+        class CustomKeycloakClient(FakeGitHubClient):
+            def get_file(self, repository, path, ref="main"):
+                if repository == "CCI-MOC/moc-keycloak" and path == "main.tf":
+                    return """
+custom_client = {
+  cluster_name = "custom-oidc-client"
+  openshift_redirect_uri = "https://oauth-openshift.apps.bu-ist-demo.int.massopen.cloud/oauth2callback/mocsso"
+  client_secret_name = "cluster/bu-ist-demo-infra/keycloak-oidc"
+}
+"""
+                return super().get_file(repository, path, ref)
+
+        report = StatusChecker(
+            CustomKeycloakClient(),
+            include_prs=False,
+            registry=registry,
+        ).run(Environment(name="bu-ist-demo", issue_number=666)).to_dict()
+        check = next(
+            item for item in report["checks"] if item["check"] == "Infra OIDC client"
+        )
+        self.assertEqual(check["state"], "declared_in_main")
+        self.assertEqual(check["expected"]["client"], "custom-oidc-client")
 
     def test_status_checker_reports_boot_image_check_states(self) -> None:
         def boot_states(urls):

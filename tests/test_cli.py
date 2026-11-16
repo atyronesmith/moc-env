@@ -264,6 +264,75 @@ class CliDispatchTest(unittest.TestCase):
         self.assertEqual(report["environment"]["name"], "new-environment")
         self.assertEqual(report["environment"]["workload_clusters"], [])
 
+    def test_registry_issue_is_used_and_command_line_issue_overrides_it(self) -> None:
+        class RegistryIssueClient(FakeGitHubClient):
+            def get_json(self, path_or_url):
+                if path_or_url == "/repos/CCI-MOC/MOC-issues/issues/123":
+                    return {
+                        "state": "open",
+                        "title": "Registry issue",
+                        "html_url": (
+                            "https://github.com/CCI-MOC/MOC-issues/issues/123"
+                        ),
+                    }
+                return super().get_json(path_or_url)
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            registry_path = Path(temporary_directory) / "environments.yaml"
+            registry_path.write_text(
+                "defaults:\n"
+                "  required_local_cluster_components: []\n"
+                "  optional_local_cluster_components: []\n"
+                "environments:\n"
+                "  bu-ist-demo:\n"
+                "    issue: 123\n",
+                encoding="utf-8",
+            )
+            with patch.object(cli, "DEFAULT_REGISTRY_PATH", registry_path):
+                exit_code, stdout, _ = self.run_cli(
+                    [
+                        "status",
+                        "bu-ist-demo",
+                        "--format",
+                        "json",
+                        "--no-prs",
+                    ],
+                    client_class=RegistryIssueClient,
+                )
+                self.assertEqual(exit_code, 0)
+                report = json.loads(stdout)
+                self.assertEqual(report["environment"]["issue_number"], 123)
+
+                exit_code, stdout, _ = self.run_cli(
+                    [
+                        "status",
+                        "bu-ist-demo",
+                        "--issue",
+                        "666",
+                        "--format",
+                        "json",
+                        "--no-prs",
+                    ],
+                    client_class=RegistryIssueClient,
+                )
+            self.assertEqual(exit_code, 0)
+            report = json.loads(stdout)
+            self.assertEqual(report["environment"]["issue_number"], 666)
+
+    def test_malformed_registry_exits_two_and_names_bad_key(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            registry_path = Path(temporary_directory) / "environments.yaml"
+            registry_path.write_text(
+                "defaults:\n  issue: 666\n  bad-key: []\n",
+                encoding="utf-8",
+            )
+            with patch.object(cli, "DEFAULT_REGISTRY_PATH", registry_path):
+                exit_code, stdout, stderr = self.run_cli(["list"])
+
+        self.assertEqual(exit_code, 2)
+        self.assertEqual(stdout, "")
+        self.assertIn("defaults.bad-key", stderr)
+
     def test_status_markdown_dispatch_and_output_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             output = Path(temporary_directory) / "report.md"

@@ -74,6 +74,7 @@ class CheckResult:
     path: str
     ref: str
     state: str
+    severity: str
     expected: Any
     actual: Any
     reason: str
@@ -109,8 +110,12 @@ class StatusReport:
 
     def to_dict(self) -> dict[str, Any]:
         state_counts: dict[str, int] = {}
+        severity_counts: dict[str, int] = {}
         for check in self.checks:
             state_counts[check.state] = state_counts.get(check.state, 0) + 1
+            severity_counts[check.severity] = (
+                severity_counts.get(check.severity, 0) + 1
+            )
 
         stages: list[str] = []
         stage_counts: dict[str, dict[str, int]] = {}
@@ -129,6 +134,8 @@ class StatusReport:
             "summary": {
                 "check_count": len(self.checks),
                 "state_counts": dict(sorted(state_counts.items())),
+                "severity_counts": dict(sorted(severity_counts.items())),
+                "advisory_count": severity_counts.get("advisory", 0),
                 "stages": [
                     {
                         "stage": stage,
