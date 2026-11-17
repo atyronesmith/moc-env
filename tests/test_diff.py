@@ -46,6 +46,26 @@ class DnsClient:
 
 
 class EnvironmentDiffTest(unittest.TestCase):
+    def test_markdown_explains_comparison_and_identifies_each_source_ref(self):
+        a, b = report("oac-prod"), report("bu-ist-demo")
+        for item, ref, sha in ((a, "main", "a" * 40), (b, "pull/246/head", "b" * 40)):
+            item["metadata"] = {"generated_at": "2026-11-17T19:00:00Z", "sources": [
+                {"repository": "CCI-MOC/oac-apps", "ref": ref, "sha": sha},
+            ]}
+        a["checks"].append({"id": "hub.extra", "check": "Hub reference-only prerequisite",
+                            "scope": "hub", "state": "declared_in_main"})
+        diff = build_environment_diff(a, b)
+        rendered = render_diff_markdown(diff)
+        self.assertIn("not a live cluster health check", rendered)
+        self.assertIn("Differences are not automatically defects", rendered)
+        self.assertIn("Hub reference-only prerequisite", rendered)
+        self.assertIn("Compared source snapshots", rendered)
+        self.assertIn("`oac-prod` | `CCI-MOC/oac-apps` | `main`", rendered)
+        self.assertIn("`bu-ist-demo` | `CCI-MOC/oac-apps` | `pull/246/head`", rendered)
+        self.assertIn("Generated 2026-11-17 19:00 UTC", rendered)
+        self.assertEqual(diff["comparison_sources"]["a"][0]["ref"], "main")
+        self.assertEqual(diff["comparison_sources"]["b"][0]["ref"], "pull/246/head")
+
     def test_environment_names_do_not_create_file_differences(self):
         diff = build_environment_diff(report("bu-ist-demo"), report("oac-prod"))
         for scope in diff["scopes"]:

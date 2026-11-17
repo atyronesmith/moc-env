@@ -102,6 +102,52 @@ class CliDispatchTest(unittest.TestCase):
         self.assertIn("Files only in bu-ist-demo:", stdout)
         self.assertIn("hub.component_values", stdout)
 
+    def test_diff_ref_applies_only_to_second_environment_and_keeps_sources_distinct(self) -> None:
+        selected_refs: list[str] = []
+
+        class RefTrackingClient(CrossRepoFakeGitHubClient):
+            def get_tree(self, repository: str, ref: str = "main"):
+                if repository == "CCI-MOC/oac-apps":
+                    selected_refs.append(self.ref_for(repository))
+                return super().get_tree(repository, ref)
+
+        exit_code, stdout, stderr = self.run_cli(
+            [
+                "diff",
+                "bu-ist-demo",
+                "bu-ist-demo",
+                "--format",
+                "json",
+                "--ref",
+                "oac-apps=pull/246/head",
+            ],
+            client_class=RefTrackingClient,
+        )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stderr, "")
+        self.assertIn("main", selected_refs)
+        self.assertIn("pull/246/head", selected_refs)
+        self.assertLess(selected_refs.index("main"), selected_refs.index("pull/246/head"))
+
+        diff = json.loads(stdout)
+        apps_sources = {
+            source["ref"]
+            for source in diff["metadata"]["sources"]
+            if source["repository"] == "CCI-MOC/oac-apps"
+        }
+        self.assertEqual(apps_sources, {"main", "pull/246/head"})
+
+    def test_diff_invalid_ref_fails_before_credentials_or_client(self) -> None:
+        with (
+            patch.object(cli, "_resolve_github_token", side_effect=AssertionError("credentials must not resolve")),
+            patch.object(cli, "GitHubClient", side_effect=AssertionError("client must not initialize")),
+            contextlib.redirect_stderr(io.StringIO()),
+        ):
+            with self.assertRaises(SystemExit) as raised:
+                cli.main(["diff", "bu-ist-demo", "bu-ist-demo", "--ref", "not-a-ref"])
+        self.assertEqual(raised.exception.code, 2)
+
     def test_top_level_help_lists_every_command(self) -> None:
         rendered = cli.build_parser().format_help()
 

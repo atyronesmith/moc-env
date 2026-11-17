@@ -868,6 +868,19 @@ Status-specific options:
 comparison. It reports checks, files, components, and structural facts; it does
 not compare addresses, cluster-specific names, or MAC addresses.
 
+To compare a reference environment on `main` with proposed changes for the
+second environment, pass repeatable `--ref REPO=REF` overrides:
+
+```sh
+moc-env diff oac-prod bu-ist-demo --ref oac-apps=pull/246/head \
+  --format markdown --output reports/oac-prod-vs-bu-ist-demo-pr246.md
+```
+
+These overrides apply only to `ENV_B`; `ENV_A` remains on `main`. The Markdown
+report records the refs and commit snapshots for each environment separately.
+It compares repository configuration, not live cluster health; differences
+can reflect legitimate environment-specific choices rather than defects.
+
 File paths are normalized before comparison: hub names become `<hub>` and
 workload names become `<workload>`. Equivalent environment-specific layouts
 therefore do not appear as differences. Remaining file differences are printed
