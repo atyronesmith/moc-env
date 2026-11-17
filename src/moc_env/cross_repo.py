@@ -216,7 +216,7 @@ def _realm_check(
     observed = {field: realm.get(field) for field in ("subnet_vlan", "subnet_prefix", "s3_endpoint")}
     if missing:
         return _result(check_id, scope, EVERPURE_REPOSITORY, EVERPURE_PATH, "partial", "blocking", expected, observed, f"The {cluster} realm is missing: {', '.join(missing)}.", {"fields": missing}, {"realm": realm})
-    return _result(check_id, scope, EVERPURE_REPOSITORY, EVERPURE_PATH, "declared_in_main", "info", expected, observed, f"The {cluster} Pure storage realm is complete.")
+    return _result(check_id, scope, EVERPURE_REPOSITORY, EVERPURE_PATH, "declared_in_main", "info", expected, observed, f"The {cluster} Pure storage realm is complete.", evidence={"realm": observed})
 
 
 def _moc_aws_checks(
@@ -248,7 +248,8 @@ def _moc_aws_checks(
         if not matches:
             results.append(_result(oidc_id, scope, MOC_AWS_REPOSITORY, MOC_AWS_MAIN, "missing", "blocking", expected, None, f"No moc-aws OIDC cluster entry has cluster_name {cluster}."))
         else:
-            results.append(_result(oidc_id, scope, MOC_AWS_REPOSITORY, MOC_AWS_MAIN, "declared_in_main", "info", expected, matches[0], f"The moc-aws OIDC cluster entry for {cluster} is present.", evidence={"block": matches[0]}))
+            observed = {"cluster_name": _hcl_string(matches[0], "cluster_name"), "eso_writable_secret_prefixes": _hcl_strings(matches[0], "eso_writable_secret_prefixes")}
+            results.append(_result(oidc_id, scope, MOC_AWS_REPOSITORY, MOC_AWS_MAIN, "declared_in_main", "info", expected, observed, f"The moc-aws OIDC cluster entry for {cluster} is present."))
 
         cert_id = f"{scope}.moc_aws_cert_manager_policy"
         if cert_block_error:
@@ -275,7 +276,7 @@ def _moc_aws_checks(
             hub = next((body for _, body in blocks if _hcl_string(body, "cluster_name") == environment.infra_cluster), None)
             writable = _hcl_strings(hub, "eso_writable_secret_prefixes") if hub else []
             if prefix in writable:
-                results.append(_result("hub.moc_aws_hosted_secret_prefix", "hub", MOC_AWS_REPOSITORY, MOC_AWS_MAIN, "declared_in_main", "info", [prefix], writable, f"The hub can write hosted-cluster secrets at {prefix}."))
+                results.append(_result("hub.moc_aws_hosted_secret_prefix", "hub", MOC_AWS_REPOSITORY, MOC_AWS_MAIN, "declared_in_main", "info", {"eso_writable_secret_prefix": prefix}, {"eso_writable_secret_prefix": writable}, f"The hub can write hosted-cluster secrets at {prefix}."))
             else:
                 results.append(_result("hub.moc_aws_hosted_secret_prefix", "hub", MOC_AWS_REPOSITORY, MOC_AWS_MAIN, "missing", "blocking", [prefix], writable, f"The hub entry does not list {prefix}; it cannot push hosted-cluster secrets.", {"prefix": prefix}))
     return results
@@ -288,16 +289,33 @@ def _dns_records_check(
     progress: ProgressCallback | None,
 ) -> CheckResult | None:
     domain_parts = [hub_values.get("cluster_domain_name"), hub_values.get("base_domain")]
-    api_ip, ingress_ip, machine_network = hub_values.get("api_ip"), hub_values.get("ingress_ip"), hub_values.get("machine_network")
-    if not all(isinstance(part, str) and part for part in (*domain_parts, api_ip, ingress_ip, machine_network)):
+    api_ip, ingress_ip = hub_values.get("api_ip"), hub_values.get("ingress_ip")
+    if not all(isinstance(part, str) and part for part in (*domain_parts, api_ip, ingress_ip)):
         return _unknown("hub.moc_dns_records", "hub", MOC_DNS_REPOSITORY, "zonefiles/", "Hub-image variables required for DNS validation are unavailable.", {"api": api_ip, "api-int": api_ip, "*.apps": ingress_ip})
     domain = ".".join(domain_parts)
     _progress(progress, "read DNS zonefiles", MOC_DNS_REPOSITORY, "zonefiles/")
     try:
         tree = client.get_tree(MOC_DNS_REPOSITORY)
-        zone_path = f"zonefiles/{domain_parts[1]}.zone"
-        if zone_path not in tree:
-            return _unknown("hub.moc_dns_records", "hub", MOC_DNS_REPOSITORY, zone_path, "The expected DNS zonefile is absent or unavailable.", {"domain": domain})
+        zone_names = sorted(
+            path.removeprefix("zonefiles/").removesuffix(".zone")
+            for path in tree
+            if path.startswith("zonefiles/") and path.endswith(".zone")
+        )
+        matching_zones = [
+            zone for zone in zone_names
+            if domain == zone or domain.endswith(f".{zone}")
+        ]
+        if not matching_zones:
+            return _unknown(
+                "hub.moc_dns_records",
+                "hub",
+                MOC_DNS_REPOSITORY,
+                "zonefiles/",
+                "No DNS zonefile is a suffix of the hub domain.",
+                {"domain": domain, "zonefiles": zone_names},
+            )
+        zone = max(matching_zones, key=len)
+        zone_path = f"zonefiles/{zone}.zone"
         text = client.get_file(MOC_DNS_REPOSITORY, zone_path)
     except GitHubError as exc:
         return _unknown("hub.moc_dns_records", "hub", MOC_DNS_REPOSITORY, "zonefiles/", f"moc-dns could not be read: {exc}", {"domain": domain})
@@ -314,7 +332,18 @@ def _dns_records_check(
         return _result("hub.moc_dns_records", "hub", MOC_DNS_REPOSITORY, zone_path, "missing", "blocking", expected, observed, "Missing DNS records: " + ", ".join(missing) + ".", {"records": missing})
     if mismatched:
         return _result("hub.moc_dns_records", "hub", MOC_DNS_REPOSITORY, zone_path, "value_mismatch", "blocking", expected, observed, "One or more DNS records point to the wrong address.", {"records": mismatched})
-    return _result("hub.moc_dns_records", "hub", MOC_DNS_REPOSITORY, zone_path, "declared_in_main", "info", expected, observed, "All required hub DNS records match the hub-image variables.")
+    return _result(
+        "hub.moc_dns_records",
+        "hub",
+        MOC_DNS_REPOSITORY,
+        zone_path,
+        "declared_in_main",
+        "info",
+        expected,
+        observed,
+        f"All required hub DNS records in {zone_path} match the hub-image variables.",
+        evidence={"zone": zone, "zonefile": zone_path, "records": observed},
+    )
 
 
 def _nested(data: dict[str, Any], path: tuple[str, ...]) -> Any:
@@ -377,7 +406,12 @@ def _keycloak_workload_check(
 
 def _address_in(value: Any, network: str) -> bool:
     try:
-        return ipaddress.ip_address(value) in ipaddress.ip_network(network, strict=False)
+        address = (
+            ipaddress.ip_interface(value).ip
+            if isinstance(value, str) and "/" in value
+            else ipaddress.ip_address(value)
+        )
+        return address in ipaddress.ip_network(network, strict=False)
     except (ValueError, TypeError):
         return False
 
@@ -453,7 +487,18 @@ def _workload_value_checks(
                 results.append(_result("workload.ingress_address_network", "workload", "CCI-MOC/oac-apps", path, "value_mismatch", "blocking", expected_pool, pool, "The ingress pool address is on the wrong network."))
 
         hostnames = [record.get("hostname") for record in (_nested(values, ("dns", "records")) or []) if isinstance(record, dict)]
-        invalid = [name for name in hostnames if not isinstance(name, str) or not name.endswith(base_domain)]
+        external_domain = (hub_values_file or {}).get("hcpExternalDomain")
+        valid_domains = tuple(
+            domain
+            for domain in (base_domain, external_domain)
+            if isinstance(domain, str) and domain
+        )
+        invalid = [
+            name
+            for name in hostnames
+            if not isinstance(name, str)
+            or not any(name.endswith(domain) for domain in valid_domains)
+        ]
         if not invalid:
             results.append(_result("workload.dns_base_domain", "workload", "CCI-MOC/oac-apps", path, "declared_in_main", "info", {"baseDomain": base_domain}, hostnames, "All DNS record hostnames use the hub base domain."))
         else:
@@ -468,7 +513,44 @@ def _workload_value_checks(
                 continue
             selector = pool_item.get("agentLabelSelector") or {}
             replicas = int(pool_item.get("replicas") or 0)
-            matching = sum(1 for host in hosts if all(host.get(key) == value or (key == "resource_class" and host.get("resource_class") == value) for key, value in selector.items() if isinstance(value, str)))
+            documented = infra.hardware_resource_classes.value
+
+            def selector_values(host: dict[str, Any], key: str) -> tuple[Any, ...]:
+                if key == "massopen.cloud/cluster":
+                    return (host.get("cluster"),)
+                if key in {"resource_class", "openstack/resource-class"}:
+                    return tuple(
+                        value
+                        for value in (
+                            host.get("resource_class"),
+                            documented.get(host.get("node_name")),
+                        )
+                        if value is not None
+                    )
+                return (host.get(key),)
+
+            def selector_matches(
+                host: dict[str, Any], selector: dict[str, Any]
+            ) -> bool:
+                return all(
+                    any(
+                        value == expected
+                        or (
+                            isinstance(value, str)
+                            and isinstance(expected, str)
+                            and expected.endswith(value)
+                        )
+                        for value in selector_values(host, key)
+                    )
+                    for key, expected in selector.items()
+                    if isinstance(expected, str)
+                )
+
+            matching = sum(
+                1
+                for host in hosts
+                if selector_matches(host, selector)
+            )
             pool_results.append({"name": pool_item.get("name"), "replicas": replicas, "matching_hosts": matching})
         if all(item["matching_hosts"] >= item["replicas"] for item in pool_results):
             results.append(_result("workload.node_pool_hosts", "workload", "CCI-MOC/oac-infra", "infra/inventory/00hosts.yaml", "declared_in_main", "info", pools, pool_results, "Every node pool has enough matching inventory hosts."))

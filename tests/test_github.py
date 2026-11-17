@@ -157,6 +157,60 @@ class GitHubClientTest(unittest.TestCase):
         self.assertNotIn("Authorization", cache_text)
         self.assertNotIn(token, cache_text)
 
+    def test_get_file_uses_raw_download_at_commit_sha(self) -> None:
+        class RawResponse:
+            headers = Message()
+
+            def read(self) -> bytes:
+                return b"file body"
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+        client = GitHubClient()
+        client.record_source("CCI-MOC/oac-infra", "main", "2222222")
+        with patch(
+            "moc_env.github.urlopen", return_value=RawResponse()
+        ) as request:
+            body = client.get_file(
+                "CCI-MOC/oac-infra", "hub-images/inventory.yml"
+            )
+
+        self.assertEqual(body, "file body")
+        raw_url = request.call_args.args[0].full_url
+        self.assertEqual(
+            raw_url,
+            "https://raw.githubusercontent.com/CCI-MOC/oac-infra/2222222/hub-images/inventory.yml",
+        )
+        self.assertNotIn("Authorization", request.call_args.args[0].headers)
+
+    def test_reserve_quota_stops_before_spending_calls(self) -> None:
+        client = GitHubClient()
+        client.rate_limit_remaining = 11
+        with patch("moc_env.github.urlopen") as request:
+            with self.assertRaisesRegex(
+                RateLimitError, "12 calls needed, 11 available"
+            ):
+                client.reserve_quota(12)
+            request.assert_not_called()
+
+    def test_zero_quota_unauthenticated_run_uses_cached_api_response(self) -> None:
+        url = "https://api.github.com/repos/example/repo/git/trees/main"
+        with patch(
+            "moc_env.github.urlopen",
+            return_value=self._response({"value": "cached"}, '"etag-1"'),
+        ):
+            GitHubClient().get_json(url)
+
+        client = GitHubClient()
+        client.rate_limit_remaining = 0
+        with patch("moc_env.github.urlopen") as request:
+            self.assertEqual(client.get_json(url), {"value": "cached"})
+            request.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

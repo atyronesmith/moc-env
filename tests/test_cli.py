@@ -13,6 +13,7 @@ from unittest.mock import patch
 import yaml
 
 from moc_env import cli
+from moc_env.github import RateLimitError
 
 from fakes import (
     CrossRepoFakeGitHubClient,
@@ -60,6 +61,41 @@ class CliDispatchTest(unittest.TestCase):
             stdout,
         )
         self.assertEqual(stderr, "")
+
+    def test_diff_complete_and_incomplete_fixture_exits_zero(self) -> None:
+        class AlternatingDiffClient(FullyConfiguredFakeGitHubClient):
+            def __init__(self, *args, **kwargs) -> None:
+                super().__init__(*args, **kwargs)
+                self.report_count = 0
+
+            def get_json(self, path_or_url):
+                self.report_count += 1
+                return super().get_json(path_or_url)
+
+            @property
+            def complete_report(self) -> bool:
+                return self.report_count == 1
+
+            def get_tree(self, repository: str, ref: str = "main"):
+                tree = super().get_tree(repository, ref)
+                if (
+                    repository == "CCI-MOC/oac-apps"
+                    and not self.complete_report
+                ):
+                    return {}
+                return tree
+
+        exit_code, stdout, stderr = self.run_cli(
+            ["diff", "bu-ist-demo", "bu-ist-demo"],
+            client_class=AlternatingDiffClient,
+        )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stderr, "")
+        self.assertIn("bu-ist-demo → bu-ist-demo", stdout)
+        self.assertIn("Passing only in bu-ist-demo:", stdout)
+        self.assertIn("Files only in bu-ist-demo:", stdout)
+        self.assertIn("hub.component_values", stdout)
 
     def test_top_level_help_lists_every_command(self) -> None:
         rendered = cli.build_parser().format_help()
@@ -211,7 +247,34 @@ class CliDispatchTest(unittest.TestCase):
         self.assertIn("Step 14:", stderr)
         self.assertNotIn("Step 15:", stderr)
         self.assertNotIn("Action:", stderr)
-        self.assertLessEqual(len(stdout.splitlines()), 60)
+        self.assertLessEqual(len(stdout.splitlines()), 85)
+
+    def test_status_fail_on_severity(self) -> None:
+        cases = (
+            ("never", 0),
+            ("blocking", 1),
+            ("advisory", 1),
+        )
+        for severity, expected_exit_code in cases:
+            with self.subTest(severity=severity):
+                exit_code, _, _ = self.run_cli(
+                    ["status", "bu-ist-demo", "--no-prs", "--fail-on", severity]
+                )
+                self.assertEqual(exit_code, expected_exit_code)
+
+        exit_code, _, _ = self.run_cli(
+            ["status", "bu-ist-demo", "--no-prs", "--fail-on", "advisory"],
+            client_class=FullyConfiguredFakeGitHubClient,
+        )
+        self.assertEqual(exit_code, 0)
+
+    def test_status_without_environment_prints_fleet_view(self) -> None:
+        exit_code, stdout, stderr = self.run_cli(["status"])
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("bu-ist-demo", stdout)
+        self.assertIn("moc-env status-hub bu-ist-demo", stdout)
+        self.assertEqual(stderr, "")
 
     def test_text_golden_files(self) -> None:
         fixed_clock = lambda: datetime(
@@ -257,7 +320,7 @@ class CliDispatchTest(unittest.TestCase):
 
     def test_open_pull_request_fix_is_shown_with_action(self) -> None:
         exit_code, stdout, _ = self.run_cli(
-            ["status", "bu-ist-demo", "--format", "text"],
+            ["status", "bu-ist-demo", "--format", "text", "--prs"],
             client_class=CrossRepoFakeGitHubClient,
         )
 
@@ -342,7 +405,8 @@ class CliDispatchTest(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertIn(("CCI-MOC/oac-apps", "pull/246/head"), calls)
         self.assertIn("NOT A REPORT ON MAIN", stdout)
-        self.assertIn("oac-apps@3333333@pull/246/head", stdout)
+        self.assertIn("oac-apps", stdout)
+        self.assertIn("pull/246/head", stdout)
 
         exit_code, markdown, _ = self.run_cli(
             [
@@ -358,7 +422,7 @@ class CliDispatchTest(unittest.TestCase):
         )
         self.assertEqual(exit_code, 0)
         self.assertIn("This is not a report on main", markdown)
-        self.assertIn("CCI-MOC/oac-apps@3333333@pull/246/head", markdown)
+        self.assertIn("pull/246/head", markdown)
 
     def test_work_status_text_dispatch(self) -> None:
         exit_code, stdout, stderr = self.run_cli(
@@ -373,6 +437,7 @@ class CliDispatchTest(unittest.TestCase):
         )
         self.assertEqual(exit_code, 0)
         self.assertIn("bu-ist-demo · workload ·", stdout)
+        self.assertIn("WORKLOAD PHASES", stdout)
         self.assertIn("WORKLOAD bu-ist-demo-workload0", stdout)
         self.assertNotIn("HUB bu-ist-demo-infra", stdout)
         self.assertIn("Step 1:", stderr)
@@ -400,6 +465,66 @@ class CliDispatchTest(unittest.TestCase):
         self.assertIn("oac-dev-workload0 host inventory", checks)
         self.assertIn("oac-dev-workload1 host inventory", checks)
         self.assertIn("Workload hosted-cluster values", checks)
+
+    def test_full_status_without_prs_uses_at_most_twelve_api_calls(self) -> None:
+        class CountingClient(FakeGitHubClient):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.api_requests = 0
+
+            def get_json(self, path_or_url):
+                self.api_requests += 1
+                return super().get_json(path_or_url)
+
+            def get_tree(self, repository, ref="main"):
+                self.api_requests += 1
+                return super().get_tree(repository, ref)
+
+        client_class = CountingClient
+        instances = []
+        original = client_class
+
+        class CountingClientWithInstances(original):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                instances.append(self)
+
+        exit_code, stdout, stderr = self.run_cli(
+            ["status", "bu-ist-demo", "--format", "json", "--no-prs"],
+            client_class=CountingClientWithInstances,
+        )
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stderr, "")
+        self.assertTrue(instances)
+        self.assertLessEqual(instances[0].api_requests, 12)
+
+    def test_unauthenticated_status_skips_pull_requests_by_default(self) -> None:
+        exit_code, stdout, _ = self.run_cli(
+            ["status", "bu-ist-demo", "--format", "text"],
+            client_class=FakeGitHubClient,
+        )
+        self.assertEqual(exit_code, 0)
+        self.assertIn(
+            "Pull requests: skipped because this run is unauthenticated", stdout
+        )
+
+    def test_mid_run_rate_limit_renders_unknown_checks_and_exits_two(self) -> None:
+        class RateLimitedClient(FakeGitHubClient):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.rate_limit_remaining = 100
+
+            def get_json(self, path_or_url):
+                raise RateLimitError("GitHub API rate limit exhausted")
+
+        exit_code, stdout, stderr = self.run_cli(
+            ["status", "bu-ist-demo", "--format", "text", "--no-prs", "--details"],
+            client_class=RateLimitedClient,
+        )
+        self.assertEqual(exit_code, 2)
+        self.assertIn("UNKNOWN:", stdout)
+        self.assertIn("unknown (rate limited)", stdout)
+        self.assertIn("rate limit", stderr)
 
     def test_hub_without_workload_reports_no_workload_checks(self) -> None:
         exit_code, stdout, _ = self.run_cli(

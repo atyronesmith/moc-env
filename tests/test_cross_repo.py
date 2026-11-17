@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from moc_env.checks import StatusChecker
+from moc_env.cross_repo import _dns_records_check
 from moc_env.github import GitHubError
 from moc_env.model import Environment
 
@@ -50,6 +51,33 @@ class UnavailableEverpureClient(CrossRepoFakeGitHubClient):
         return super().get_tree(repository, ref)
 
 
+class ZoneSuffixClient(CrossRepoFakeGitHubClient):
+    def get_tree(self, repository: str, ref: str = "main"):
+        tree = super().get_tree(repository, ref)
+        if repository == "CCI-MOC/moc-dns":
+            tree.update(
+                {
+                    "zonefiles/ocp.massopen.cloud.zone": {
+                        "path": "zonefiles/ocp.massopen.cloud.zone"
+                    },
+                    "zonefiles/massopen.cloud.zone": {
+                        "path": "zonefiles/massopen.cloud.zone"
+                    },
+                    "zonefiles/cloud.zone": {"path": "zonefiles/cloud.zone"},
+                }
+            )
+        return tree
+
+    def get_file(self, repository: str, path: str, ref: str = "main") -> str:
+        if repository == "CCI-MOC/moc-dns" and path == "zonefiles/ocp.massopen.cloud.zone":
+            return """
+api.infra.oac.ocp.massopen.cloud. 300 IN A 10.20.9.11
+api-int.infra.oac.ocp.massopen.cloud. 300 IN A 10.20.9.11
+*.apps.infra.oac.ocp.massopen.cloud. 300 IN A 10.20.9.12
+"""
+        return super().get_file(repository, path, ref)
+
+
 class CrossRepositoryChecksTest(unittest.TestCase):
     def report(self, client):
         return StatusChecker(client, include_prs=False).run(
@@ -66,6 +94,7 @@ class CrossRepositoryChecksTest(unittest.TestCase):
             for item in report["checks"]
             if item["stage"] == "Cross-repository prerequisites"
         }
+
         expected = {
             "hub.pure_storage_realm",
             "workload.pure_storage_realm",
@@ -87,6 +116,23 @@ class CrossRepositoryChecksTest(unittest.TestCase):
         for check_id in expected:
             with self.subTest(check_id=check_id):
                 self.assertEqual(self.check(report, check_id)["state"], "declared_in_main")
+
+    def test_dns_zonefile_uses_longest_domain_suffix(self) -> None:
+        check = _dns_records_check(
+            ZoneSuffixClient(),
+            Environment(name="oac-prod"),
+            {
+                "cluster_domain_name": "infra",
+                "base_domain": "oac.ocp.massopen.cloud",
+                "api_ip": "10.20.9.11",
+                "ingress_ip": "10.20.9.12",
+            },
+            None,
+        )
+
+        self.assertEqual(check.state, "declared_in_main")
+        self.assertEqual(check.path, "zonefiles/ocp.massopen.cloud.zone")
+        self.assertEqual(check.evidence["zone"], "ocp.massopen.cloud")
 
     def test_each_check_has_a_failing_fixture(self) -> None:
         realms = CrossRepoFakeGitHubClient().get_file(

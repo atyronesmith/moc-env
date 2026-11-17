@@ -10,7 +10,7 @@ from typing import Any
 
 import yaml
 
-from .github import GitHubClient, github_url
+from .github import GitHubClient, RateLimitError, github_url
 from .cross_repo import cross_repository_checks
 from .model import (
     CheckResult,
@@ -103,10 +103,6 @@ _NEXT_ACTIONS = {
         "Create the workload component-values directory, starting with "
         "hcp-config.yaml and only the shared components this workload needs."
     ),
-    "pull_requests": (
-        "Review the relevant pull requests; merge or close any open PR after "
-        "confirming it is the intended repository change."
-    ),
 }
 
 
@@ -121,6 +117,13 @@ def _package_version() -> str:
         return version("moc-env")
     except PackageNotFoundError:
         return "unknown"
+
+
+def _safe_yaml_value(text: str) -> Any:
+    try:
+        return yaml.safe_load(text)
+    except yaml.YAMLError:
+        return None
 
 
 def list_environments(client: GitHubClient) -> list[dict[str, Any]]:
@@ -246,41 +249,147 @@ class StatusChecker:
         environment: Environment,
         path_scope: str = "environment",
     ) -> StatusReport:
-        checks: list[CheckResult] = []
-        observation = read_environment_observation(
-            self.client,
-            environment,
-            progress=self._emit_progress,
-            include_pull_requests=self.include_prs,
-            path_scope=path_scope,
-            keycloak_client_name=self.registry.keycloak_client_name(
-                environment.name
-            ),
-        )
-        environment = observation.environment
-        if observation.issue is not None:
-            checks.extend(self._issue_checks(observation.issue))
-        infra_checks, environment = self._infra_checks(environment, observation.infra)
-        checks.extend(infra_checks)
-        checks.extend(self._keycloak_checks(environment, observation.keycloak))
-        checks.extend(self._apps_checks(environment, observation.apps))
-        checks.extend(
-            cross_repository_checks(
+        try:
+            checks: list[CheckResult] = []
+            observation = read_environment_observation(
                 self.client,
                 environment,
-                observation.infra,
-                observation.apps,
-                self._emit_progress,
+                progress=self._emit_progress,
+                include_pull_requests=self.include_prs,
+                path_scope=path_scope,
+                keycloak_client_name=self.registry.keycloak_client_name(
+                    environment.name
+                ),
             )
-        )
-        self._apply_boot_image_severities(checks)
+            environment = observation.environment
+            if observation.issue is not None:
+                checks.extend(self._issue_checks(observation.issue))
+            infra_checks, environment = self._infra_checks(
+                environment, observation.infra
+            )
+            checks.extend(infra_checks)
+            checks.extend(self._keycloak_checks(environment, observation.keycloak))
+            checks.extend(self._apps_checks(environment, observation.apps))
+            checks.extend(
+                cross_repository_checks(
+                    self.client,
+                    environment,
+                    observation.infra,
+                    observation.apps,
+                    self._emit_progress,
+                )
+            )
+            self._apply_boot_image_severities(checks)
+        except RateLimitError:
+            checks = annotate_and_sort_checks(
+                self._rate_limited_checks(environment, path_scope)
+            )
+            return StatusReport(
+                environment=environment,
+                checks=checks,
+                overall_state="UNKNOWN",
+                metadata=self._metadata(),
+                rate_limited=True,
+            )
         checks = annotate_and_sort_checks(checks)
+        checks = self._apply_blocked_states(checks)
         return StatusReport(
             environment=environment,
             checks=checks,
             overall_state=self._overall_state(checks),
             metadata=self._metadata(),
+            pull_requests=self._pull_request_evidence(observation.apps.pull_requests),
         )
+
+    @staticmethod
+    def _apply_blocked_states(checks: list[CheckResult]) -> list[CheckResult]:
+        by_id = {check.id: check for check in checks}
+        results = []
+        for check in checks:
+            blockers = [
+                by_id[item]
+                for item in check.blocked_by
+                if item in by_id and by_id[item].state == "missing"
+            ]
+            if blockers and check.state == "unknown":
+                blocker_names = ", ".join(blocker.check for blocker in blockers)
+                results.append(
+                    replace(
+                        check,
+                        state="blocked",
+                        severity="advisory",
+                        next_action=None,
+                        reason=f"Blocked until {blocker_names} is complete.",
+                    )
+                )
+            else:
+                results.append(check)
+        return results
+
+    def _rate_limited_checks(
+        self, environment: Environment, path_scope: str
+    ) -> list[CheckResult]:
+        definitions = {
+            "shared": (
+                ("request.issue", "MOC issue", "CCI-MOC/MOC-issues", "issues"),
+            ),
+            "hub": (
+                ("hub.inventory", "Hub host inventory", "CCI-MOC/oac-infra", "infra/inventory/00hosts.yaml"),
+                ("hub.image_inventory", "Hub image inventory", "CCI-MOC/oac-infra", "hub-images/inventory.yml"),
+                ("hub.image_vars", "Hub image variables", "CCI-MOC/oac-infra", "hub-images/group_vars"),
+                ("hub.boot_image", "Hub discovery image", "CCI-MOC/oac-infra", "infra/inventory/00hosts.yaml"),
+                ("hub.oidc_client", "Hub OIDC client", "CCI-MOC/moc-keycloak", "main.tf"),
+                ("hub.hosted_cluster_defaults", "Hub hosted-cluster defaults", "CCI-MOC/oac-apps", "hosted-clusters"),
+                ("hub.component_values", "Hub-wide component values", "CCI-MOC/oac-apps", "values"),
+                ("hub.local_cluster_values", "Hub local-cluster values", "CCI-MOC/oac-apps", "values"),
+                ("hub.argocd_apps", "Hub ArgoCD applications", "CCI-MOC/oac-apps", "apps"),
+                ("hub.pure_storage_realm", "Hub Pure storage realm", "CCI-MOC/everpure-moc", "ansible/group_vars/all/realms.yaml"),
+                ("hub.moc_aws_oidc_cluster", "Hub moc-aws OIDC cluster", "CCI-MOC/moc-aws", "main.tf"),
+                ("hub.moc_aws_cert_manager_policy", "Hub moc-aws cert-manager policy", "CCI-MOC/moc-aws", "cert-manager-policies.tf"),
+                ("hub.moc_aws_hosted_secret_prefix", "Hub hosted-cluster secret prefix", "CCI-MOC/moc-aws", "main.tf"),
+                ("hub.moc_dns_records", "Hub moc-dns records", "CCI-MOC/moc-dns", "zonefiles"),
+            ),
+            "workload": (
+                ("workload.inventory", "Workload host inventory", "CCI-MOC/oac-infra", "infra/inventory/00hosts.yaml"),
+                ("workload.boot_image", "Workload discovery image", "CCI-MOC/oac-infra", "infra/inventory/00hosts.yaml"),
+                ("workload.agent_labels_inputs", "Workload agent-label inputs", "CCI-MOC/oac-infra", "infra/update-agents.yaml"),
+                ("workload.hosted_cluster_values", "Workload hosted-cluster values", "CCI-MOC/oac-apps", "hosted-clusters"),
+                ("workload.component_values", "Workload component values", "CCI-MOC/oac-apps", "values"),
+                ("workload.pure_storage_realm", "Workload Pure storage realm", "CCI-MOC/everpure-moc", "ansible/group_vars/all/realms.yaml"),
+                ("workload.moc_aws_oidc_cluster", "Workload moc-aws OIDC cluster", "CCI-MOC/moc-aws", "main.tf"),
+                ("workload.moc_aws_cert_manager_policy", "Workload moc-aws cert-manager policy", "CCI-MOC/moc-aws", "cert-manager-policies.tf"),
+                ("workload.keycloak_oidc_client", "Workload Keycloak OIDC client", "CCI-MOC/moc-keycloak", "main.tf"),
+                ("workload.api_address_network", "Workload API address network", "CCI-MOC/oac-apps", "hosted-clusters"),
+                ("workload.ingress_address_network", "Workload ingress address network", "CCI-MOC/ansible-switches", "group_vars/all/vlans.yaml"),
+                ("workload.address_uniqueness", "Workload address uniqueness", "CCI-MOC/oac-apps", "hosted-clusters"),
+                ("workload.dns_base_domain", "Workload DNS base domain", "CCI-MOC/oac-apps", "hosted-clusters"),
+                ("workload.node_pool_hosts", "Workload node-pool host capacity", "CCI-MOC/oac-infra", "infra/inventory/00hosts.yaml"),
+                ("workload.gpu_without_hosts", "Workload GPU feature support", "CCI-MOC/oac-apps", "hosted-clusters"),
+            ),
+        }
+        scopes = ("shared", "hub") if path_scope == "hub" else (
+            ("shared", "workload") if path_scope == "workload" else definitions
+        )
+        results = []
+        for scope in scopes:
+            for check_id, name, repository, path in definitions[scope]:
+                results.append(
+                    CheckResult(
+                        id=check_id,
+                        stage="Rate limited",
+                        check=name,
+                        scope=scope,
+                        repository=repository,
+                        path=path,
+                        ref="main",
+                        state="unknown",
+                        severity="advisory",
+                        expected=None,
+                        actual=None,
+                        reason="unknown (rate limited)",
+                    )
+                )
+        return results
 
     def _metadata(self) -> ReportMetadata:
         generated_at = self.clock().astimezone(timezone.utc).isoformat().replace(
@@ -343,6 +452,28 @@ class StatusChecker:
             overall_state=self._overall_state(checks),
             scope="workload",
         )
+
+    @staticmethod
+    def _pull_request_evidence(
+        pull_requests: tuple[Any, ...]
+    ) -> tuple[dict[str, Any], ...]:
+        evidence = []
+        for item in pull_requests:
+            evidence.append(
+                {
+                    "number": item.number.value,
+                    "title": item.title.to_dict(),
+                    "state": item.state.to_dict(),
+                    "merged": item.merged.to_dict(),
+                    "classification": item.classification.to_dict(),
+                    "head_ref": item.head_ref.to_dict(),
+                    "head_sha": item.head_sha.to_dict(),
+                    "html_url": item.url.to_dict(),
+                    "repository": item.repository.to_dict(),
+                    "changed_files": list(item.changed_files.value),
+                }
+            )
+        return tuple(evidence)
 
     def _issue_checks(self, observation: IssueObservation) -> list[CheckResult]:
         repository = f"{ORG}/MOC-issues"
@@ -448,7 +579,7 @@ class StatusChecker:
                         "info" if state == "declared_in_main" else "blocking"
                     ),
                     expected=f"Inventory group for {cluster}",
-                    actual={"found": group is not None, "host_count": len(hosts)},
+                    actual={"cluster_group": cluster if group else None, "host_count": len(hosts)},
                     reason=reason,
                     present=present,
                     missing=missing,
@@ -652,7 +783,9 @@ class StatusChecker:
                 state=hub_state,
                 severity="info" if hub_state == "declared_in_main" else "blocking",
                 expected=f"Hub-image inventory entry for {environment.infra_cluster}",
-                actual={"found": hub_found},
+                actual={
+                    "inventory_key": environment.infra_cluster if hub_found else None
+                },
                 reason=hub_reason,
                 present=hub_present,
                 missing=hub_missing,
@@ -983,7 +1116,7 @@ class StatusChecker:
             CheckResult(
                 id="hub.oidc_client",
                 stage="Identity",
-                check="Infra OIDC client",
+                check="Hub OIDC client",
                 scope="hub",
                 repository=repository,
                 path=path,
@@ -1058,7 +1191,7 @@ class StatusChecker:
             (
                 "hub.hosted_cluster_defaults",
                 "hub",
-                "Infra hosted-cluster defaults",
+                "Hub hosted-cluster defaults",
                 infra_defaults,
                 None,
                 [infra_defaults],
@@ -1076,7 +1209,7 @@ class StatusChecker:
             (
                 "hub.local_cluster_values",
                 "hub",
-                "Infra local-cluster values",
+                "Hub local-cluster values",
                 None,
                 local_prefix,
                 [
@@ -1088,7 +1221,7 @@ class StatusChecker:
             (
                 "hub.argocd_apps",
                 "hub",
-                "Infra ArgoCD applications",
+                "Hub ArgoCD applications",
                 None,
                 apps_prefix,
                 [apps_prefix + "keycloak-oauth.yaml"],
@@ -1208,6 +1341,14 @@ class StatusChecker:
                         "expected_paths": expected_paths,
                         "optional_paths": optional_paths,
                         "paths": found,
+                        **(
+                            {"values": _safe_yaml_value(
+                                observation.files.get(exact, "")
+                            )}
+                            if check_id == "hub.hosted_cluster_defaults"
+                            and exact in observation.files
+                            else {}
+                        ),
                     },
                     url=github_url(repository, exact or (prefix or "").rstrip("/")),
                     next_action=_next_action(check_id, state),
@@ -1215,117 +1356,6 @@ class StatusChecker:
                 )
             )
 
-        if not self.include_prs:
-            return results
-
-        pull_requests = observation.pull_requests
-
-        if not pull_requests:
-            results.append(
-                CheckResult(
-                    id="pull_requests",
-                    stage="GitOps configuration",
-                    check="Relevant pull requests",
-                    scope="shared",
-                    repository=repository,
-                    path="pulls",
-                    ref="all",
-                    state="missing",
-                    expected="No open PR changing an environment-owned path",
-                    actual={"matching_pr_count": 0},
-                    reason=(
-                        "No open, merged, or closed-unmerged PR changes a file "
-                        "under this environment's oac-apps paths."
-                    ),
-                    present={"matching_pr_count": 0},
-                    missing={"matching_pull_requests": 1},
-                    evidence={},
-                    next_action=_next_action("pull_requests", "missing"),
-                    severity="info",
-                )
-            )
-            return results
-
-        open_prs = [
-            item for item in pull_requests if item.classification.value == "open"
-        ]
-        merged_prs = [
-            item for item in pull_requests if item.classification.value == "merged"
-        ]
-        closed_unmerged_prs = [
-            item
-            for item in pull_requests
-            if item.classification.value == "closed_unmerged"
-        ]
-        repository_counts: dict[str, int] = {}
-        for item in pull_requests:
-            repository = item.repository.value
-            repository_counts[repository] = repository_counts.get(repository, 0) + 1
-        state = "pr_open" if open_prs else "declared_in_main"
-        evidence = []
-        for item in pull_requests:
-            pull = item
-            evidence.append(
-                {
-                    "number": pull.number.value,
-                    "title": pull.title.to_dict(),
-                    "state": pull.state.to_dict(),
-                    "merged": pull.merged.to_dict(),
-                    "classification": pull.classification.to_dict(),
-                    "head_ref": pull.head_ref.to_dict(),
-                    "head_sha": pull.head_sha.to_dict(),
-                    "html_url": pull.url.to_dict(),
-                    "repository": pull.repository.to_dict(),
-                    "changed_files": list(pull.changed_files.value),
-                }
-            )
-
-        if open_prs:
-            reason = (
-                f"{len(open_prs)} relevant PRs are still open; their changes "
-                "are not declared in main."
-            )
-            missing = {"open_prs_to_merge": len(open_prs)}
-        else:
-            reason = (
-                f"No relevant PRs are open; {len(merged_prs)} merged and "
-                f"{len(closed_unmerged_prs)} closed-unmerged PRs are listed "
-                "as history."
-            )
-            missing = None
-
-        results.append(
-            CheckResult(
-                id="pull_requests",
-                stage="GitOps configuration",
-                check="Relevant pull requests",
-                scope="shared",
-                repository=repository,
-                path="pulls",
-                ref="all",
-                state=state,
-                expected="No open PR changing an environment-owned path",
-                actual={
-                    "matching_pr_count": len(pull_requests),
-                    "open_count": len(open_prs),
-                    "merged_count": len(merged_prs),
-                    "closed_unmerged_count": len(closed_unmerged_prs),
-                    "repository_counts": dict(sorted(repository_counts.items())),
-                },
-                reason=reason,
-                present={
-                    "matching_pr_count": len(pull_requests),
-                    "merged_pr_count": len(merged_prs),
-                    "open_pr_count": len(open_prs),
-                    "closed_unmerged_pr_count": len(closed_unmerged_prs),
-                    "repository_counts": dict(sorted(repository_counts.items())),
-                },
-                missing=missing,
-                evidence={"pull_requests": evidence},
-                next_action=_next_action("pull_requests", state),
-                severity="blocking" if open_prs else "info",
-            )
-        )
         return results
 
     def _apply_boot_image_severities(self, checks: list[CheckResult]) -> None:

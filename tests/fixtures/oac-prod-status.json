@@ -1,0 +1,1007 @@
+{
+  "checks": [
+    {
+      "actual": {
+        "cluster_group": "oac-prod-infra",
+        "host_count": 6
+      },
+      "blocked_by": [],
+      "check": "oac-prod-infra host inventory",
+      "evidence": {
+        "hosts": [
+          {
+            "bmc_addr": "10.2.13.171",
+            "boot_image_url": "http://10.2.0.82/boot/oac-prod-infra-agent.x86_64.iso",
+            "name": "oac-prod-infra-control-0",
+            "node_name": "MOC-R4PAC10U33-S1A"
+          },
+          {
+            "bmc_addr": "10.2.13.186",
+            "boot_image_url": "http://10.2.0.82/boot/oac-prod-infra-agent.x86_64.iso",
+            "name": "oac-prod-infra-control-1",
+            "node_name": "MOC-R4PAC10U35-S3B"
+          },
+          {
+            "bmc_addr": "10.2.13.197",
+            "boot_image_url": "http://10.2.0.82/boot/oac-prod-infra-agent.x86_64.iso",
+            "name": "oac-prod-infra-control-2",
+            "node_name": "MOC-R4PAC10U37-S3C"
+          },
+          {
+            "bmc_addr": "10.2.13.62",
+            "boot_image_url": "http://10.2.0.82/boot/oac-prod-infra-agent.x86_64.iso",
+            "name": "oac-prod-infra-compute-temp-0",
+            "node_name": "MOC-R4PAC10U11-S3"
+          },
+          {
+            "bmc_addr": "10.2.13.52",
+            "boot_image_url": "http://10.2.0.82/boot/oac-prod-infra-agent.x86_64.iso",
+            "name": "oac-prod-infra-compute-temp-1",
+            "node_name": "MOC-R4PAC10U09-S3"
+          },
+          {
+            "bmc_addr": "10.2.13.101",
+            "boot_image_url": "http://10.2.0.82/boot/oac-prod-infra-agent.x86_64.iso",
+            "name": "oac-prod-infra-compute-temp-2",
+            "node_name": "MOC-R4PAC10U19-S1"
+          }
+        ]
+      },
+      "expected": "Inventory group for oac-prod-infra",
+      "gaps": [],
+      "id": "hub.inventory",
+      "next_action": null,
+      "observed": [
+        {
+          "name": "cluster_group",
+          "value": "oac-prod-infra"
+        },
+        {
+          "name": "host_count",
+          "value": 6
+        }
+      ],
+      "path": "infra/inventory/00hosts.yaml",
+      "phase": 1,
+      "phase_title": "Host inventory entry",
+      "present": {
+        "cluster_group": "oac-prod-infra",
+        "host_count": 6
+      },
+      "reason": "The inventory contains a oac-prod-infra group with 6 hosts.",
+      "ref": "main",
+      "repository": "CCI-MOC/oac-infra",
+      "scope": "hub",
+      "severity": "info",
+      "stage": "Hardware and inventory",
+      "state": "declared_in_main",
+      "url": "https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml"
+    },
+    {
+      "actual": {
+        "inventory_key": "oac-prod-infra"
+      },
+      "blocked_by": [
+        "hub.inventory"
+      ],
+      "check": "Hub image inventory",
+      "evidence": {
+        "path_present": true
+      },
+      "expected": "Hub-image inventory entry for oac-prod-infra",
+      "gaps": [],
+      "id": "hub.image_inventory",
+      "next_action": null,
+      "observed": [
+        {
+          "name": "inventory_key",
+          "value": "oac-prod-infra"
+        }
+      ],
+      "path": "hub-images/inventory.yml",
+      "phase": 2,
+      "phase_title": "Hub image inventory and vars",
+      "present": {
+        "inventory_key": "oac-prod-infra"
+      },
+      "reason": "The hub-image inventory contains the all.children.oac-prod-infra key.",
+      "ref": "main",
+      "repository": "CCI-MOC/oac-infra",
+      "scope": "hub",
+      "severity": "info",
+      "stage": "Cluster build",
+      "state": "declared_in_main",
+      "url": "https://github.com/CCI-MOC/oac-infra/blob/main/hub-images/inventory.yml"
+    },
+    {
+      "actual": [
+        "cluster_domain_name",
+        "base_domain",
+        "machine_network",
+        "api_ip",
+        "ingress_ip",
+        "dns_ip"
+      ],
+      "blocked_by": [
+        "hub.image_inventory"
+      ],
+      "check": "Hub image variables",
+      "evidence": {
+        "path_present": true,
+        "values": {
+          "api_ip": "10.20.9.11",
+          "base_domain": "oac.ocp.massopen.cloud",
+          "cluster_domain_name": "infra",
+          "dns_ip": "8.8.8.8",
+          "ingress_ip": "10.20.9.12",
+          "machine_network": "10.20.8.0/23"
+        }
+      },
+      "expected": [
+        "cluster_domain_name",
+        "base_domain",
+        "machine_network",
+        "api_ip",
+        "ingress_ip",
+        "dns_ip"
+      ],
+      "gaps": [],
+      "id": "hub.image_vars",
+      "next_action": null,
+      "observed": [
+        {
+          "name": "0",
+          "value": "cluster_domain_name"
+        },
+        {
+          "name": "1",
+          "value": "base_domain"
+        },
+        {
+          "name": "2",
+          "value": "machine_network"
+        },
+        {
+          "name": "3",
+          "value": "api_ip"
+        },
+        {
+          "name": "4",
+          "value": "ingress_ip"
+        },
+        {
+          "name": "5",
+          "value": "dns_ip"
+        }
+      ],
+      "path": "hub-images/group_vars/oac-prod-infra/vars.yml",
+      "phase": 2,
+      "phase_title": "Hub image inventory and vars",
+      "present": {
+        "fields": [
+          "cluster_domain_name",
+          "base_domain",
+          "machine_network",
+          "api_ip",
+          "ingress_ip",
+          "dns_ip"
+        ],
+        "values": {
+          "api_ip": "10.20.9.11",
+          "base_domain": "oac.ocp.massopen.cloud",
+          "cluster_domain_name": "infra",
+          "dns_ip": "8.8.8.8",
+          "ingress_ip": "10.20.9.12",
+          "machine_network": "10.20.8.0/23"
+        }
+      },
+      "reason": "All required hub-image variables are present in main.",
+      "ref": "main",
+      "repository": "CCI-MOC/oac-infra",
+      "scope": "hub",
+      "severity": "info",
+      "stage": "Cluster build",
+      "state": "declared_in_main",
+      "url": "https://github.com/CCI-MOC/oac-infra/blob/main/hub-images/group_vars/oac-prod-infra/vars.yml"
+    },
+    {
+      "actual": {
+        "*.apps.infra.oac.ocp.massopen.cloud": "10.20.9.12",
+        "api-int.infra.oac.ocp.massopen.cloud": "10.20.9.11",
+        "api.infra.oac.ocp.massopen.cloud": "10.20.9.11"
+      },
+      "blocked_by": [
+        "hub.image_vars"
+      ],
+      "check": "Hub moc-dns records",
+      "evidence": {
+        "records": {
+          "*.apps.infra.oac.ocp.massopen.cloud": "10.20.9.12",
+          "api-int.infra.oac.ocp.massopen.cloud": "10.20.9.11",
+          "api.infra.oac.ocp.massopen.cloud": "10.20.9.11"
+        },
+        "zone": "ocp.massopen.cloud",
+        "zonefile": "zonefiles/ocp.massopen.cloud.zone"
+      },
+      "expected": {
+        "*.apps.infra.oac.ocp.massopen.cloud": "10.20.9.12",
+        "api-int.infra.oac.ocp.massopen.cloud": "10.20.9.11",
+        "api.infra.oac.ocp.massopen.cloud": "10.20.9.11"
+      },
+      "gaps": [],
+      "id": "hub.moc_dns_records",
+      "next_action": null,
+      "observed": [
+        {
+          "name": "api.infra.oac.ocp.massopen.cloud",
+          "value": "10.20.9.11"
+        },
+        {
+          "name": "api-int.infra.oac.ocp.massopen.cloud",
+          "value": "10.20.9.11"
+        },
+        {
+          "name": "*.apps.infra.oac.ocp.massopen.cloud",
+          "value": "10.20.9.12"
+        }
+      ],
+      "path": "zonefiles/ocp.massopen.cloud.zone",
+      "phase": 2,
+      "phase_title": "Hub image inventory and vars",
+      "reason": "All required hub DNS records in zonefiles/ocp.massopen.cloud.zone match the hub-image variables.",
+      "ref": "main",
+      "repository": "CCI-MOC/moc-dns",
+      "scope": "hub",
+      "severity": "info",
+      "stage": "Cross-repository prerequisites",
+      "state": "declared_in_main",
+      "url": "https://github.com/CCI-MOC/moc-dns/blob/main/zonefiles/ocp.massopen.cloud.zone"
+    },
+    {
+      "actual": [
+        "http://10.2.0.82/boot/oac-prod-infra-agent.x86_64.iso"
+      ],
+      "blocked_by": [
+        "hub.image_inventory",
+        "hub.image_vars"
+      ],
+      "check": "oac-prod-infra boot image",
+      "evidence": {
+        "check_rule": "The boot-image filename must contain the full cluster name `oac-prod-infra` (or the oac-shortened name `prod-infra`); generic `discovery.iso` does not satisfy this rule.",
+        "generic_discovery_iso": false
+      },
+      "expected": "Cluster-specific discovery image for oac-prod-infra",
+      "gaps": [],
+      "id": "hub.boot_image",
+      "next_action": null,
+      "observed": [
+        {
+          "name": "0",
+          "value": "http://10.2.0.82/boot/oac-prod-infra-agent.x86_64.iso"
+        }
+      ],
+      "path": "infra/inventory/00hosts.yaml",
+      "phase": 3,
+      "phase_title": "Discovery image reference",
+      "present": {
+        "boot_image_url": "http://10.2.0.82/boot/oac-prod-infra-agent.x86_64.iso"
+      },
+      "reason": "The boot image URL is specific to oac-prod-infra.",
+      "ref": "main",
+      "repository": "CCI-MOC/oac-infra",
+      "scope": "hub",
+      "severity": "info",
+      "stage": "Hardware and inventory",
+      "state": "declared_in_main",
+      "url": "https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml"
+    },
+    {
+      "actual": {
+        "client": "oac-prod-infra",
+        "redirect_uri": "https://oauth-openshift.apps.infra.oac.ocp.massopen.cloud/oauth2callback/mocsso",
+        "secret_name": "cluster/oac-prod-infra/keycloak-oidc"
+      },
+      "blocked_by": [
+        "hub.boot_image"
+      ],
+      "check": "Hub OIDC client",
+      "evidence": {
+        "client": {
+          "block_name": {
+            "confidence": "exact",
+            "provenance": {
+              "path": "main.tf",
+              "ref": "main",
+              "repository": "CCI-MOC/moc-keycloak"
+            },
+            "value": "oac_prod_infra"
+          },
+          "cluster_name": {
+            "confidence": "exact",
+            "provenance": {
+              "path": "main.tf",
+              "ref": "main",
+              "repository": "CCI-MOC/moc-keycloak"
+            },
+            "value": "oac-prod-infra"
+          },
+          "redirect_uri": {
+            "confidence": "exact",
+            "provenance": {
+              "path": "main.tf",
+              "ref": "main",
+              "repository": "CCI-MOC/moc-keycloak"
+            },
+            "value": "https://oauth-openshift.apps.infra.oac.ocp.massopen.cloud/oauth2callback/mocsso"
+          },
+          "secret_name": {
+            "confidence": "exact",
+            "provenance": {
+              "path": "main.tf",
+              "ref": "main",
+              "repository": "CCI-MOC/moc-keycloak"
+            },
+            "value": "cluster/oac-prod-infra/keycloak-oidc"
+          }
+        },
+        "fields": {
+          "client": {
+            "expected": "oac-prod-infra",
+            "observed": "oac-prod-infra",
+            "status": "match"
+          },
+          "redirect_uri": {
+            "expected": "https://oauth-openshift.apps.infra.oac.ocp.massopen.cloud/oauth2callback/mocsso",
+            "observed": "https://oauth-openshift.apps.infra.oac.ocp.massopen.cloud/oauth2callback/mocsso",
+            "status": "match"
+          },
+          "secret_name": {
+            "expected": "cluster/oac-prod-infra/keycloak-oidc",
+            "observed": "cluster/oac-prod-infra/keycloak-oidc",
+            "status": "match"
+          }
+        }
+      },
+      "expected": {
+        "client": "oac-prod-infra",
+        "redirect_uri": "https://oauth-openshift.apps.infra.oac.ocp.massopen.cloud/oauth2callback/mocsso",
+        "secret_name": "cluster/oac-prod-infra/keycloak-oidc"
+      },
+      "gaps": [],
+      "id": "hub.oidc_client",
+      "next_action": null,
+      "observed": [
+        {
+          "name": "client",
+          "value": "oac-prod-infra"
+        },
+        {
+          "name": "redirect_uri",
+          "value": "https://oauth-openshift.apps.infra.oac.ocp.massopen.cloud/oauth2callback/mocsso"
+        },
+        {
+          "name": "secret_name",
+          "value": "cluster/oac-prod-infra/keycloak-oidc"
+        }
+      ],
+      "path": "main.tf",
+      "phase": 4,
+      "phase_title": "Keycloak OIDC client",
+      "present": {
+        "fields": {
+          "client": "match",
+          "redirect_uri": "match",
+          "secret_name": "match"
+        }
+      },
+      "reason": "All expected Keycloak OIDC client fields match.",
+      "ref": "main",
+      "repository": "CCI-MOC/moc-keycloak",
+      "scope": "hub",
+      "severity": "info",
+      "source": {
+        "path": "main.tf",
+        "ref": "main",
+        "repository": "CCI-MOC/moc-keycloak"
+      },
+      "stage": "Identity",
+      "state": "declared_in_main",
+      "url": "https://github.com/CCI-MOC/moc-keycloak/blob/main/main.tf"
+    },
+    {
+      "actual": {
+        "matched_file_count": 1
+      },
+      "blocked_by": [
+        "hub.boot_image"
+      ],
+      "check": "Hub hosted-cluster defaults",
+      "evidence": {
+        "expected_path_count": 1,
+        "expected_paths": [
+          "hosted-clusters/oac-prod-infra/values.yaml"
+        ],
+        "optional_paths": [],
+        "path_count": 1,
+        "paths": [
+          "hosted-clusters/oac-prod-infra/values.yaml"
+        ],
+        "values": {
+          "baseDomain": "hcp.oac.massopen.cloud",
+          "hcpExternalDomain": "hcp.oac.massopen.cloud",
+          "hcpInternalDomain": "hcp-int.oac.massopen.cloud",
+          "managementCluster": "oac-prod-infra"
+        }
+      },
+      "expected": {
+        "file_count": 1,
+        "scope": "hosted-clusters/oac-prod-infra/values.yaml"
+      },
+      "gaps": [],
+      "id": "hub.hosted_cluster_defaults",
+      "next_action": null,
+      "observed": [
+        {
+          "name": "matched_file_count",
+          "value": 1
+        }
+      ],
+      "path": "hosted-clusters/oac-prod-infra/values.yaml",
+      "phase": 5,
+      "phase_title": "GitOps values and apps",
+      "present": {
+        "file_count": 1
+      },
+      "reason": "All expected files for the default values for hosted clusters on this hub cluster are present in main.",
+      "ref": "main",
+      "repository": "CCI-MOC/oac-apps",
+      "scope": "hub",
+      "severity": "info",
+      "stage": "GitOps configuration",
+      "state": "declared_in_main",
+      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/oac-prod-infra/values.yaml"
+    },
+    {
+      "actual": {
+        "matched_file_count": 1
+      },
+      "blocked_by": [
+        "hub.hosted_cluster_defaults"
+      ],
+      "check": "Hub-wide component values",
+      "evidence": {
+        "expected_path_count": 1,
+        "expected_paths": [
+          "values/oac-prod-infra/hcp-config.yaml"
+        ],
+        "optional_paths": [],
+        "path_count": 1,
+        "paths": [
+          "values/oac-prod-infra/hcp-config.yaml"
+        ]
+      },
+      "expected": {
+        "file_count": 1,
+        "scope": "values/oac-prod-infra"
+      },
+      "gaps": [],
+      "id": "hub.component_values",
+      "next_action": null,
+      "observed": [
+        {
+          "name": "matched_file_count",
+          "value": 1
+        }
+      ],
+      "path": "values/oac-prod-infra",
+      "phase": 5,
+      "phase_title": "GitOps values and apps",
+      "present": {
+        "file_count": 1
+      },
+      "reason": "All expected files for hub-wide HCP and secret-selector values are present in main.",
+      "ref": "main",
+      "repository": "CCI-MOC/oac-apps",
+      "scope": "hub",
+      "severity": "info",
+      "stage": "GitOps configuration",
+      "state": "declared_in_main",
+      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/values/oac-prod-infra"
+    },
+    {
+      "actual": {
+        "matched_file_count": 17
+      },
+      "blocked_by": [
+        "hub.hosted_cluster_defaults"
+      ],
+      "check": "Hub local-cluster values",
+      "evidence": {
+        "expected_path_count": 13,
+        "expected_paths": [
+          "values/oac-prod-infra/local-cluster/acm.yaml",
+          "values/oac-prod-infra/local-cluster/acm-placements.yaml",
+          "values/oac-prod-infra/local-cluster/cert-manager.yaml",
+          "values/oac-prod-infra/local-cluster/cluster-certificates.yaml",
+          "values/oac-prod-infra/local-cluster/cluster-version.yaml",
+          "values/oac-prod-infra/local-cluster/external-dns-operator.yaml",
+          "values/oac-prod-infra/local-cluster/external-secrets.yaml",
+          "values/oac-prod-infra/local-cluster/hcp-config.yaml",
+          "values/oac-prod-infra/local-cluster/keycloak-oauth.yaml",
+          "values/oac-prod-infra/local-cluster/metallb.yaml",
+          "values/oac-prod-infra/local-cluster/openshift-gitops.yaml",
+          "values/oac-prod-infra/local-cluster/portworx.yaml",
+          "values/oac-prod-infra/local-cluster/user-workload-monitoring.yaml"
+        ],
+        "optional_paths": [],
+        "path_count": 17,
+        "paths": [
+          "values/oac-prod-infra/local-cluster/acm-placements.yaml",
+          "values/oac-prod-infra/local-cluster/acm.yaml",
+          "values/oac-prod-infra/local-cluster/cert-manager.yaml",
+          "values/oac-prod-infra/local-cluster/cluster-certificates.yaml",
+          "values/oac-prod-infra/local-cluster/cluster-version.yaml",
+          "values/oac-prod-infra/local-cluster/external-dns-operator.yaml",
+          "values/oac-prod-infra/local-cluster/external-secrets.yaml",
+          "values/oac-prod-infra/local-cluster/hcp-config.yaml",
+          "values/oac-prod-infra/local-cluster/keycloak-oauth.yaml",
+          "values/oac-prod-infra/local-cluster/lvmcluster.yaml",
+          "values/oac-prod-infra/local-cluster/metallb.yaml",
+          "values/oac-prod-infra/local-cluster/moc-metrics-collector.yaml",
+          "values/oac-prod-infra/local-cluster/oac-simple-rbac.yaml",
+          "values/oac-prod-infra/local-cluster/object-storage-proxy.yaml",
+          "values/oac-prod-infra/local-cluster/openshift-gitops.yaml",
+          "values/oac-prod-infra/local-cluster/portworx.yaml",
+          "values/oac-prod-infra/local-cluster/user-workload-monitoring.yaml"
+        ]
+      },
+      "expected": {
+        "file_count": 13,
+        "scope": "values/oac-prod-infra/local-cluster"
+      },
+      "gaps": [],
+      "id": "hub.local_cluster_values",
+      "next_action": null,
+      "observed": [
+        {
+          "name": "matched_file_count",
+          "value": 17
+        }
+      ],
+      "path": "values/oac-prod-infra/local-cluster",
+      "phase": 5,
+      "phase_title": "GitOps values and apps",
+      "present": {
+        "file_count": 17
+      },
+      "reason": "All expected files for the hub cluster's local operator and shared-service values are present in main.",
+      "ref": "main",
+      "repository": "CCI-MOC/oac-apps",
+      "scope": "hub",
+      "severity": "info",
+      "stage": "GitOps configuration",
+      "state": "declared_in_main",
+      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/values/oac-prod-infra/local-cluster"
+    },
+    {
+      "actual": {
+        "matched_file_count": 1
+      },
+      "blocked_by": [
+        "hub.hosted_cluster_defaults",
+        "hub.component_values",
+        "hub.local_cluster_values",
+        "hub.oidc_client"
+      ],
+      "check": "Hub ArgoCD applications",
+      "evidence": {
+        "expected_path_count": 1,
+        "expected_paths": [
+          "apps/oac-prod-infra/keycloak-oauth.yaml"
+        ],
+        "optional_paths": [],
+        "path_count": 1,
+        "paths": [
+          "apps/oac-prod-infra/keycloak-oauth.yaml"
+        ]
+      },
+      "expected": {
+        "file_count": 1,
+        "scope": "apps/oac-prod-infra"
+      },
+      "gaps": [],
+      "id": "hub.argocd_apps",
+      "next_action": null,
+      "observed": [
+        {
+          "name": "matched_file_count",
+          "value": 1
+        }
+      ],
+      "path": "apps/oac-prod-infra",
+      "phase": 5,
+      "phase_title": "GitOps values and apps",
+      "present": {
+        "file_count": 1
+      },
+      "reason": "All expected files for direct ArgoCD applications applied on the hub cluster are present in main.",
+      "ref": "main",
+      "repository": "CCI-MOC/oac-apps",
+      "scope": "hub",
+      "severity": "info",
+      "stage": "GitOps configuration",
+      "state": "declared_in_main",
+      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/apps/oac-prod-infra"
+    },
+    {
+      "actual": {
+        "s3_endpoint": "s3.infra.oac.ocp.massopen.cloud",
+        "subnet_prefix": "10.9.1.0/24",
+        "subnet_vlan": 2311
+      },
+      "blocked_by": [
+        "hub.hosted_cluster_defaults"
+      ],
+      "check": "Hub Pure storage realm",
+      "evidence": {
+        "realm": {
+          "s3_endpoint": "s3.infra.oac.ocp.massopen.cloud",
+          "subnet_prefix": "10.9.1.0/24",
+          "subnet_vlan": 2311
+        }
+      },
+      "expected": {
+        "fields": [
+          "subnet_vlan",
+          "subnet_prefix",
+          "s3_endpoint"
+        ],
+        "name": "oac-prod-infra"
+      },
+      "gaps": [],
+      "id": "hub.pure_storage_realm",
+      "next_action": null,
+      "observed": [
+        {
+          "name": "subnet_vlan",
+          "value": 2311
+        },
+        {
+          "name": "subnet_prefix",
+          "value": "10.9.1.0/24"
+        },
+        {
+          "name": "s3_endpoint",
+          "value": "s3.infra.oac.ocp.massopen.cloud"
+        }
+      ],
+      "path": "ansible/group_vars/all/realms.yaml",
+      "phase": 5,
+      "phase_title": "GitOps values and apps",
+      "reason": "The oac-prod-infra Pure storage realm is complete.",
+      "ref": "main",
+      "repository": "CCI-MOC/everpure-moc",
+      "scope": "hub",
+      "severity": "info",
+      "stage": "Cross-repository prerequisites",
+      "state": "declared_in_main",
+      "url": "https://github.com/CCI-MOC/everpure-moc/blob/main/ansible/group_vars/all/realms.yaml"
+    },
+    {
+      "actual": {
+        "cluster_name": "oac-prod-infra",
+        "eso_writable_secret_prefixes": [
+          "cluster/oac-prod-infra/hostedcluster/"
+        ]
+      },
+      "blocked_by": [
+        "hub.hosted_cluster_defaults"
+      ],
+      "check": "Hub moc-aws OIDC cluster",
+      "evidence": {},
+      "expected": {
+        "cluster_name": "oac-prod-infra"
+      },
+      "gaps": [],
+      "id": "hub.moc_aws_oidc_cluster",
+      "next_action": null,
+      "observed": [
+        {
+          "name": "cluster_name",
+          "value": "oac-prod-infra"
+        },
+        {
+          "name": "eso_writable_secret_prefixes",
+          "value": [
+            "cluster/oac-prod-infra/hostedcluster/"
+          ]
+        }
+      ],
+      "path": "main.tf",
+      "phase": 5,
+      "phase_title": "GitOps values and apps",
+      "reason": "The moc-aws OIDC cluster entry for oac-prod-infra is present.",
+      "ref": "main",
+      "repository": "CCI-MOC/moc-aws",
+      "scope": "hub",
+      "severity": "info",
+      "stage": "Cross-repository prerequisites",
+      "state": "declared_in_main",
+      "url": "https://github.com/CCI-MOC/moc-aws/blob/main/main.tf"
+    },
+    {
+      "actual": "cert_manager_policy_oac_prod_infra",
+      "blocked_by": [
+        "hub.hosted_cluster_defaults"
+      ],
+      "check": "Hub moc-aws cert-manager policy",
+      "evidence": {
+        "block": "\n      zone_name          = \"ocp.massopen.cloud\"\n      cluster_subdomain  = \"infra.oac.ocp.massopen.cloud\"\n      policy_name        = \"cert-manager-oac-prod-infra\"\n      policy_description = \"modify records in infra.oac.ocp.massopen.cloud for dns01 challenges.\"\n      # The hcp/hcp-int records live in their own delegated hosted zones;\n      # listing them here grants record changes in those zones and implicitly\n      # permits _acme-challenge.*.<zone> challenges for each.\n      additional_zone_names = [\n        \"hcp.oac.massopen.cloud\",\n        \"hcp-int.oac.massopen.cloud\"\n      ]"
+      },
+      "expected": {
+        "cluster": "oac-prod-infra"
+      },
+      "gaps": [],
+      "id": "hub.moc_aws_cert_manager_policy",
+      "next_action": null,
+      "observed": [
+        {
+          "name": "value",
+          "value": "cert_manager_policy_oac_prod_infra"
+        }
+      ],
+      "path": "cert-manager-policies.tf",
+      "phase": 5,
+      "phase_title": "GitOps values and apps",
+      "reason": "The cert-manager policy entry cert_manager_policy_oac_prod_infra covers oac-prod-infra.",
+      "ref": "main",
+      "repository": "CCI-MOC/moc-aws",
+      "scope": "hub",
+      "severity": "info",
+      "stage": "Cross-repository prerequisites",
+      "state": "declared_in_main",
+      "url": "https://github.com/CCI-MOC/moc-aws/blob/main/cert-manager-policies.tf"
+    },
+    {
+      "actual": {
+        "eso_writable_secret_prefix": [
+          "cluster/oac-prod-infra/hostedcluster/"
+        ]
+      },
+      "blocked_by": [
+        "hub.moc_aws_oidc_cluster"
+      ],
+      "check": "Hub hosted-cluster secret prefix",
+      "evidence": {},
+      "expected": {
+        "eso_writable_secret_prefix": "cluster/oac-prod-infra/hostedcluster/"
+      },
+      "gaps": [],
+      "id": "hub.moc_aws_hosted_secret_prefix",
+      "next_action": null,
+      "observed": [
+        {
+          "name": "eso_writable_secret_prefix",
+          "value": [
+            "cluster/oac-prod-infra/hostedcluster/"
+          ]
+        }
+      ],
+      "path": "main.tf",
+      "phase": 5,
+      "phase_title": "GitOps values and apps",
+      "reason": "The hub can write hosted-cluster secrets at cluster/oac-prod-infra/hostedcluster/.",
+      "ref": "main",
+      "repository": "CCI-MOC/moc-aws",
+      "scope": "hub",
+      "severity": "info",
+      "stage": "Cross-repository prerequisites",
+      "state": "declared_in_main",
+      "url": "https://github.com/CCI-MOC/moc-aws/blob/main/main.tf"
+    }
+  ],
+  "current_phase": "complete",
+  "environment": {
+    "domain": "infra.oac.ocp.massopen.cloud",
+    "domain_source": "repository",
+    "infra_cluster": "oac-prod-infra",
+    "issue_number": null,
+    "name": "oac-prod",
+    "workload_cluster": "oac-prod-workload0",
+    "workload_clusters": [
+      "oac-prod-workload0"
+    ]
+  },
+  "metadata": {
+    "authenticated": true,
+    "command": [
+      "status-hub",
+      "oac-prod",
+      "--no-prs",
+      "--format",
+      "json",
+      "--output",
+      "tests/fixtures/oac-prod-status.json"
+    ],
+    "generated_at": "2026-11-17T14:29:09.272608Z",
+    "rate_limit_remaining": 4961,
+    "schema_version": 2,
+    "sources": [
+      {
+        "ref": "main",
+        "repository": "CCI-MOC/ansible-switches",
+        "sha": "be513efed9e4081b2a7c9ebff62c20f08d23bfb6"
+      },
+      {
+        "ref": "main",
+        "repository": "CCI-MOC/everpure-moc",
+        "sha": "72852f08a01d617806326b1038dc2150db7ffa23"
+      },
+      {
+        "ref": "main",
+        "repository": "CCI-MOC/moc-aws",
+        "sha": "04d53709e228bf0ff06967d9b8bdf77135d75bb1"
+      },
+      {
+        "ref": "main",
+        "repository": "CCI-MOC/moc-dns",
+        "sha": "9780c370dfdfd1d6dc1c40085bde1d9cfff9ff88"
+      },
+      {
+        "ref": "main",
+        "repository": "CCI-MOC/moc-keycloak",
+        "sha": "fb8c9a6afd206e8b8b0aea9b7d7f6536fc02a2ab"
+      },
+      {
+        "ref": "main",
+        "repository": "CCI-MOC/oac-apps",
+        "sha": "0fec6ea412b048decfe27bb928ffd8751118a88f"
+      },
+      {
+        "ref": "main",
+        "repository": "CCI-MOC/oac-infra",
+        "sha": "c0b7fd329b85d56d05e4098c7bdc47155ab39cd1"
+      }
+    ],
+    "tool_version": "0.1.0"
+  },
+  "not_checked": [
+    {
+      "phase": 1,
+      "title": "Configure cluster and storage networks and firewalls for oac-prod-infra",
+      "where": {
+        "document": "docs/infra-cluster-deployment.md",
+        "heading": "Infrastructure Configuration"
+      },
+      "why": "The repositories read by this tool do not describe the switch, network, or firewall state required for oac-prod-infra."
+    },
+    {
+      "phase": 2,
+      "title": "Store the oac-prod-infra SSH key and kubeadmin credentials in AWS Secrets Manager",
+      "where": {
+        "document": "docs/infra-cluster-deployment.md",
+        "heading": "Cluster Deployment"
+      },
+      "why": "Secrets Manager is outside the public repositories read by this tool, so it cannot verify cluster/oac-prod-infra/sshkey or cluster/oac-prod-infra/kubeadmin."
+    },
+    {
+      "phase": 2,
+      "title": "Place the pull secret and SSH key under hub-images/credentials/oac-prod-infra",
+      "where": {
+        "document": "docs/infra-cluster-deployment.md",
+        "heading": "Cluster Deployment"
+      },
+      "why": "The documented credential directory is intentionally not committed, so repository state cannot prove that its files exist for oac-prod-infra."
+    },
+    {
+      "phase": 3,
+      "title": "Run create_agent_install_media and copy the oac-prod-infra ISO to the bastion host",
+      "where": {
+        "document": "docs/infra-cluster-deployment.md",
+        "heading": "Cluster Deployment"
+      },
+      "why": "Running the playbook and copying the generated discovery ISO leave no trace that this tool can verify in the repositories it reads."
+    },
+    {
+      "phase": 5,
+      "title": "Bootstrap Argo CD for oac-prod-infra",
+      "where": {
+        "document": "docs/infra-cluster-deployment.md",
+        "heading": "Cluster Configuration"
+      },
+      "why": "Running setup-gitops.sh and applying the bootstrap Helm template changes live cluster state, which this repository-only report cannot verify."
+    }
+  ],
+  "overall_state": "DECLARED IN MAIN",
+  "phases": [
+    {
+      "guide": {
+        "document": "docs/infra-cluster-deployment.md",
+        "heading": "Infrastructure Configuration"
+      },
+      "phase": 1,
+      "title": "Host inventory entry"
+    },
+    {
+      "guide": {
+        "document": "docs/infra-cluster-deployment.md",
+        "heading": "Cluster Deployment"
+      },
+      "phase": 2,
+      "title": "Hub image inventory and vars"
+    },
+    {
+      "guide": {
+        "document": "docs/infra-cluster-deployment.md",
+        "heading": "Cluster Deployment"
+      },
+      "phase": 3,
+      "title": "Discovery image reference"
+    },
+    {
+      "guide": {
+        "document": "docs/infra-cluster-deployment.md",
+        "heading": "Cluster Configuration"
+      },
+      "phase": 4,
+      "title": "Keycloak OIDC client"
+    },
+    {
+      "guide": {
+        "document": "docs/infra-cluster-deployment.md",
+        "heading": "Cluster Configuration"
+      },
+      "phase": 5,
+      "title": "GitOps values and apps"
+    }
+  ],
+  "pull_requests": [],
+  "scope": "hub",
+  "summary": {
+    "advisory_count": 0,
+    "check_count": 14,
+    "severity_counts": {
+      "info": 14
+    },
+    "stages": [
+      {
+        "check_count": 2,
+        "stage": "Hardware and inventory",
+        "state_counts": {
+          "declared_in_main": 2
+        }
+      },
+      {
+        "check_count": 2,
+        "stage": "Cluster build",
+        "state_counts": {
+          "declared_in_main": 2
+        }
+      },
+      {
+        "check_count": 5,
+        "stage": "Cross-repository prerequisites",
+        "state_counts": {
+          "declared_in_main": 5
+        }
+      },
+      {
+        "check_count": 1,
+        "stage": "Identity",
+        "state_counts": {
+          "declared_in_main": 1
+        }
+      },
+      {
+        "check_count": 4,
+        "stage": "GitOps configuration",
+        "state_counts": {
+          "declared_in_main": 4
+        }
+      }
+    ],
+    "state_counts": {
+      "declared_in_main": 14
+    }
+  }
+}

@@ -84,17 +84,17 @@ _WORKLOAD_CLUSTER_CONFIGURATION = PhaseGuide(
 HUB_PHASES: tuple[DeploymentPhase, ...] = (
     DeploymentPhase(
         1,
-        "Host inventory entry in oac-infra",
+        "Host inventory entry",
         _INFRASTRUCTURE_CONFIGURATION,
     ),
     DeploymentPhase(
         2,
-        "Hub-image inventory entry and group variables",
+        "Hub image inventory and vars",
         _CLUSTER_DEPLOYMENT,
     ),
     DeploymentPhase(
         3,
-        "Cluster discovery image published and referenced by the inventory",
+        "Discovery image reference",
         _CLUSTER_DEPLOYMENT,
     ),
     DeploymentPhase(
@@ -104,7 +104,7 @@ HUB_PHASES: tuple[DeploymentPhase, ...] = (
     ),
     DeploymentPhase(
         5,
-        "GitOps values and applications in oac-apps",
+        "GitOps values and apps",
         _CLUSTER_CONFIGURATION,
     ),
 )
@@ -112,27 +112,27 @@ HUB_PHASES: tuple[DeploymentPhase, ...] = (
 WORKLOAD_PHASES: tuple[DeploymentPhase, ...] = (
     DeploymentPhase(
         1,
-        "Host inventory entry in oac-infra",
+        "Host inventory entry",
         _WORKLOAD_INFRASTRUCTURE_CONFIGURATION,
     ),
     DeploymentPhase(
         2,
-        "Obtain the agent discovery ISO from the hub's InfraEnv and publish it on the bastion",
+        "Hub agent discovery ISO",
         _WORKLOAD_INFRASTRUCTURE_CONFIGURATION,
     ),
     DeploymentPhase(
         3,
-        "Boot nodes with the agent discovery ISO",
+        "Agent ISO boot",
         _WORKLOAD_INFRASTRUCTURE_CONFIGURATION,
     ),
     DeploymentPhase(
         4,
-        "Agents appear in the hub's hardware-inventory namespace",
+        "Agent visibility",
         _WORKLOAD_INFRASTRUCTURE_CONFIGURATION,
     ),
     DeploymentPhase(
         5,
-        "Label and approve agents with update-agents.yaml",
+        "Agent labels and approval",
         _WORKLOAD_INFRASTRUCTURE_CONFIGURATION,
     ),
     DeploymentPhase(
@@ -152,7 +152,7 @@ NOT_CHECKED: tuple[NotChecked, ...] = (
         "hub",
         1,
         "Configure cluster and storage networks and firewalls for <cluster>",
-        "The four repositories read by this tool do not describe the switch, "
+        "The repositories read by this tool do not describe the switch, "
         "network, or firewall state required for <cluster>.",
         _INFRASTRUCTURE_CONFIGURATION,
     ),
@@ -178,7 +178,7 @@ NOT_CHECKED: tuple[NotChecked, ...] = (
         3,
         "Run create_agent_install_media and copy the <cluster> ISO to the bastion host",
         "Running the playbook and copying the generated discovery ISO leave no "
-        "trace that this tool can verify in the four repositories it reads.",
+        "trace that this tool can verify in the repositories it reads.",
         _CLUSTER_DEPLOYMENT,
     ),
     NotChecked(
@@ -206,50 +206,39 @@ NOT_CHECKED: tuple[NotChecked, ...] = (
         "hub cluster state that repository configuration cannot prove.",
         _WORKLOAD_INFRASTRUCTURE_CONFIGURATION,
     ),
-    NotChecked(
-        "workload",
-        7,
-        "Additional workload prerequisites are not yet documented upstream",
-        "The upstream workload deployment guide lists observability (TBD) and "
-        "?? as open prerequisite items.",
-        _WORKLOAD_CLUSTER_CONFIGURATION,
-    ),
 )
 
 CHECK_PHASES: dict[str, CheckPhase] = {
     "request.issue": CheckPhase(0, "Environment request"),
-    "pull_requests": CheckPhase(
-        5, "GitOps values and applications in oac-apps"
-    ),
     "hub.inventory": CheckPhase(
-        1, "Host inventory entry in oac-infra"
+        1, "Host inventory entry"
     ),
     "workload.inventory": CheckPhase(
-        1, "Host inventory entry in oac-infra"
+        1, "Host inventory entry"
     ),
     "hub.image_inventory": CheckPhase(
         2,
-        "Hub-image inventory entry and group variables",
+        "Hub image inventory and vars",
         ("hub.inventory",),
     ),
     "hub.image_vars": CheckPhase(
         2,
-        "Hub-image inventory entry and group variables",
+        "Hub image inventory and vars",
         ("hub.image_inventory",),
     ),
     "hub.boot_image": CheckPhase(
         3,
-        "Cluster discovery image published and referenced by the inventory",
+        "Discovery image reference",
         ("hub.image_inventory", "hub.image_vars"),
     ),
     "workload.boot_image": CheckPhase(
         2,
-        "Obtain the agent discovery ISO from the hub's InfraEnv and publish it on the bastion",
+        "Hub agent discovery ISO",
         ("workload.inventory", "hub.boot_image"),
     ),
     "workload.agent_labels_inputs": CheckPhase(
         5,
-        "Label and approve agents with update-agents.yaml",
+        "Agent labels and approval",
         ("workload.inventory",),
     ),
     "hub.oidc_client": CheckPhase(
@@ -257,22 +246,22 @@ CHECK_PHASES: dict[str, CheckPhase] = {
     ),
     "hub.hosted_cluster_defaults": CheckPhase(
         5,
-        "GitOps values and applications in oac-apps",
+        "GitOps values and apps",
         ("hub.boot_image",),
     ),
     "hub.component_values": CheckPhase(
         5,
-        "GitOps values and applications in oac-apps",
+        "GitOps values and apps",
         ("hub.hosted_cluster_defaults",),
     ),
     "hub.local_cluster_values": CheckPhase(
         5,
-        "GitOps values and applications in oac-apps",
+        "GitOps values and apps",
         ("hub.hosted_cluster_defaults",),
     ),
     "hub.argocd_apps": CheckPhase(
         5,
-        "GitOps values and applications in oac-apps",
+        "GitOps values and apps",
         (
             "hub.hosted_cluster_defaults",
             "hub.component_values",
@@ -290,15 +279,15 @@ CHECK_PHASES: dict[str, CheckPhase] = {
         "oac-apps values",
         ("workload.hosted_cluster_values",),
     ),
-    "hub.pure_storage_realm": CheckPhase(5, "GitOps values and applications in oac-apps", ("hub.hosted_cluster_defaults",)),
+    "hub.pure_storage_realm": CheckPhase(5, "GitOps values and apps", ("hub.hosted_cluster_defaults",)),
     "workload.pure_storage_realm": CheckPhase(7, "Shared-service prerequisites", ("workload.component_values",)),
-    "hub.moc_aws_oidc_cluster": CheckPhase(5, "GitOps values and applications in oac-apps", ("hub.hosted_cluster_defaults",)),
+    "hub.moc_aws_oidc_cluster": CheckPhase(5, "GitOps values and apps", ("hub.hosted_cluster_defaults",)),
     "workload.moc_aws_oidc_cluster": CheckPhase(7, "Shared-service prerequisites", ("workload.component_values",)),
-    "hub.moc_aws_cert_manager_policy": CheckPhase(5, "GitOps values and applications in oac-apps", ("hub.hosted_cluster_defaults",)),
+    "hub.moc_aws_cert_manager_policy": CheckPhase(5, "GitOps values and apps", ("hub.hosted_cluster_defaults",)),
     "workload.moc_aws_cert_manager_policy": CheckPhase(7, "Shared-service prerequisites", ("workload.component_values",)),
-    "hub.moc_aws_hosted_secret_prefix": CheckPhase(5, "GitOps values and applications in oac-apps", ("hub.moc_aws_oidc_cluster",)),
+    "hub.moc_aws_hosted_secret_prefix": CheckPhase(5, "GitOps values and apps", ("hub.moc_aws_oidc_cluster",)),
     "workload.keycloak_oidc_client": CheckPhase(7, "Shared-service prerequisites", ("workload.hosted_cluster_values",)),
-    "hub.moc_dns_records": CheckPhase(2, "Hub-image inventory entry and group variables", ("hub.image_vars",)),
+    "hub.moc_dns_records": CheckPhase(2, "Hub image inventory and vars", ("hub.image_vars",)),
     "workload.api_address_network": CheckPhase(6, "oac-apps values", ("workload.hosted_cluster_values",)),
     "workload.ingress_address_network": CheckPhase(6, "oac-apps values", ("workload.hosted_cluster_values",)),
     "workload.address_uniqueness": CheckPhase(6, "oac-apps values", ("workload.hosted_cluster_values",)),

@@ -161,6 +161,9 @@ class StatusReport:
     overall_state: str
     scope: str = "environment"
     metadata: ReportMetadata | None = None
+    pull_requests: tuple[dict[str, Any], ...] = ()
+    pull_requests_skipped: bool = False
+    rate_limited: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         state_counts: dict[str, int] = {}
@@ -204,6 +207,9 @@ class StatusReport:
                 ],
             },
             "checks": [check.to_dict() for check in self.checks],
+            "pull_requests": list(self.pull_requests),
+            "pull_requests_skipped": self.pull_requests_skipped,
+            "rate_limited": self.rate_limited,
         }
 
     def _current_phase(self) -> int | str | dict[str, int | str]:

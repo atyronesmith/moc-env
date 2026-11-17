@@ -1,0 +1,202 @@
+# SAMPLE — generated from a synthetic fixture, not a live environment.
+
+apiVersion: moc-env/v1alpha1
+kind: InfraCluster
+metadata:
+  environment:
+    confidence: inferred
+    provenance:
+      path: infra/inventory/00hosts.yaml
+      ref: main
+      repository: CCI-MOC/oac-infra
+    value: example-env
+  name:
+    confidence: inferred
+    provenance:
+      path: infra/inventory/00hosts.yaml
+      ref: main
+      repository: CCI-MOC/oac-infra
+    value: example-env-infra
+schemaVersion: '1'
+spec:
+  domain:
+    confidence: inferred
+    provenance:
+      path: hub-images/group_vars/example-env-infra/vars.yml
+      ref: main
+      repository: CCI-MOC/oac-infra
+    value: example-env.int.massopen.cloud
+  hubInventory:
+    clusterKeyPresent:
+      confidence: exact
+      provenance:
+        path: hub-images/inventory.yml
+        ref: main
+        repository: CCI-MOC/oac-infra
+      value: true
+    inventoryPresent:
+      confidence: exact
+      provenance:
+        path: hub-images/inventory.yml
+        ref: main
+        repository: CCI-MOC/oac-infra
+      value: true
+    path:
+      confidence: inferred
+      provenance:
+        path: hub-images/inventory.yml
+        ref: main
+        repository: CCI-MOC/oac-infra
+      value: hub-images/inventory.yml
+    present:
+      confidence: exact
+      provenance:
+        path: hub-images/inventory.yml
+        ref: main
+        repository: CCI-MOC/oac-infra
+      value: true
+  inventory:
+    clusters:
+      example-env-infra:
+        bootImage:
+          ambiguous: false
+          selected:
+            confidence: exact
+            provenance:
+              path: infra/inventory/00hosts.yaml
+              ref: main
+              repository: CCI-MOC/oac-infra
+            value: http://10.2.0.82/boot/discovery.iso
+          urls:
+          - confidence: exact
+            provenance:
+              path: infra/inventory/00hosts.yaml
+              ref: main
+              repository: CCI-MOC/oac-infra
+            value: http://10.2.0.82/boot/discovery.iso
+        groupPresent:
+          confidence: exact
+          provenance:
+            path: infra/inventory/00hosts.yaml
+            ref: main
+            repository: CCI-MOC/oac-infra
+          value: true
+        hosts:
+          confidence: exact
+          provenance:
+            path: infra/inventory/00hosts.yaml
+            ref: main
+            repository: CCI-MOC/oac-infra
+          value:
+          - boot_image_url: http://10.2.0.82/boot/discovery.iso
+            cluster: example-env-infra
+            name: control-0
+            node_name: MOC-R4PAC10U31-S1A
+        name:
+          confidence: inferred
+          provenance:
+            path: infra/inventory/00hosts.yaml
+            ref: main
+            repository: CCI-MOC/oac-infra
+          value: example-env-infra
+      example-env-workload0:
+        groupPresent:
+          confidence: exact
+          provenance:
+            path: infra/inventory/00hosts.yaml
+            ref: main
+            repository: CCI-MOC/oac-infra
+          value: true
+        hosts:
+          confidence: exact
+          provenance:
+            path: infra/inventory/00hosts.yaml
+            ref: main
+            repository: CCI-MOC/oac-infra
+          value:
+          - bm_management: ipmi
+            boot_image_url: http://10.2.0.82/boot/discovery.iso
+            cluster: example-env-workload0
+            mac_addr: 00:11:22:33:44:55
+            name: compute-0
+            node_name: MOC-R4PAC10U31-S1B
+            resource_class: example-env-worker
+        name:
+          confidence: inferred
+          provenance:
+            path: infra/inventory/00hosts.yaml
+            ref: main
+            repository: CCI-MOC/oac-infra
+          value: example-env-workload0
+    path:
+      confidence: inferred
+      provenance:
+        path: infra/inventory/00hosts.yaml
+        ref: main
+        repository: CCI-MOC/oac-infra
+      value: infra/inventory/00hosts.yaml
+    present:
+      confidence: exact
+      provenance:
+        path: infra/inventory/00hosts.yaml
+        ref: main
+        repository: CCI-MOC/oac-infra
+      value: true
+  variables:
+    fields:
+      api_ip:
+        confidence: exact
+        provenance:
+          path: hub-images/group_vars/example-env-infra/vars.yml
+          ref: main
+          repository: CCI-MOC/oac-infra
+        value: 10.20.27.11
+      base_domain:
+        confidence: exact
+        provenance:
+          path: hub-images/group_vars/example-env-infra/vars.yml
+          ref: main
+          repository: CCI-MOC/oac-infra
+        value: int.massopen.cloud
+      cluster_domain_name:
+        confidence: exact
+        provenance:
+          path: hub-images/group_vars/example-env-infra/vars.yml
+          ref: main
+          repository: CCI-MOC/oac-infra
+        value: example-env
+      dns_ip:
+        confidence: exact
+        provenance:
+          path: hub-images/group_vars/example-env-infra/vars.yml
+          ref: main
+          repository: CCI-MOC/oac-infra
+        value: 8.8.8.8
+      ingress_ip:
+        confidence: exact
+        provenance:
+          path: hub-images/group_vars/example-env-infra/vars.yml
+          ref: main
+          repository: CCI-MOC/oac-infra
+        value: 10.20.27.12
+      machine_network:
+        confidence: exact
+        provenance:
+          path: hub-images/group_vars/example-env-infra/vars.yml
+          ref: main
+          repository: CCI-MOC/oac-infra
+        value: 10.20.26.0/23
+    path:
+      confidence: inferred
+      provenance:
+        path: hub-images/group_vars/example-env-infra/vars.yml
+        ref: main
+        repository: CCI-MOC/oac-infra
+      value: hub-images/group_vars/example-env-infra/vars.yml
+    present:
+      confidence: exact
+      provenance:
+        path: hub-images/group_vars/example-env-infra/vars.yml
+        ref: main
+        repository: CCI-MOC/oac-infra
+      value: true

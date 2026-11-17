@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import unittest
+from pathlib import Path
 
 from moc_env.checks import StatusChecker
 from moc_env.registry import EnvironmentRegistry
@@ -34,11 +35,73 @@ class StatusCheckerTest(unittest.TestCase):
         self.assertIn(("bu-ist-demo-workload0 host inventory", "declared_in_main"), states)
         self.assertIn(("bu-ist-demo-infra boot image", "partial"), states)
         self.assertIn(("Hub image variables", "declared_in_main"), states)
-        self.assertIn(("Infra OIDC client", "declared_in_main"), states)
-        self.assertIn(("Relevant pull requests", "pr_open"), states)
+        self.assertIn(("Hub OIDC client", "declared_in_main"), states)
+        self.assertTrue(report["pull_requests"])
+        self.assertNotIn("pull_requests", {check["id"] for check in report["checks"]})
         self.assertEqual(report["overall_state"], "CONFIGURATION IN PROGRESS")
         for check in report["checks"]:
             self.assertNotIn("expected_paths", check.get("present") or {})
+
+    def test_oac_prod_fixture_has_zero_gaps_and_no_unknowns(self) -> None:
+        with Path("tests/fixtures/oac-prod-status.json").open(
+            encoding="utf-8"
+        ) as fixture:
+            report = json.load(fixture)
+
+        self.assertEqual(report["overall_state"], "DECLARED IN MAIN")
+        self.assertEqual(
+            report["summary"]["severity_counts"], {"info": 14}
+        )
+        self.assertNotIn("unknown", report["summary"]["state_counts"])
+        self.assertEqual(report["summary"]["check_count"], 14)
+
+    def test_full_oac_prod_fixture_has_zero_gaps_and_no_unknowns(self) -> None:
+        with Path("tests/fixtures/oac-prod-full-status.json").open(
+            encoding="utf-8"
+        ) as fixture:
+            report = json.load(fixture)
+
+        self.assertIn(
+            "oac-prod-workload0", report["environment"]["workload_clusters"]
+        )
+        self.assertEqual(report["overall_state"], "DECLARED IN MAIN")
+        self.assertNotIn("unknown", report["summary"]["state_counts"])
+        self.assertEqual(
+            report["summary"]["severity_counts"],
+            {"info": report["summary"]["check_count"]},
+        )
+
+    def test_workload_checks_are_mapped_to_workload_phase_rows(self) -> None:
+        report = StatusChecker(FakeGitHubClient(), include_prs=False).run(
+            Environment(name="bu-ist-demo", issue_number=666)
+        ).to_dict()
+        workload_phases = {
+            phase["phase"] for phase in report["phases"]["workload"]
+        }
+        workload_checks = [
+            check for check in report["checks"] if check["scope"] == "workload"
+        ]
+        self.assertTrue(workload_checks)
+        self.assertTrue(
+            all(check["phase"] in workload_phases for check in workload_checks)
+        )
+        rendered = render_text(report)
+        workload_table = rendered.split("WORKLOAD PHASES", 1)[1].split(
+            "NEXT", 1
+        )[0]
+        for phase in workload_phases:
+            phase_checks = [
+                check
+                for check in workload_checks
+                if check["phase"] == phase
+            ]
+            row = next(
+                line for line in workload_table.splitlines()
+                if line.startswith(f"{phase} ")
+            )
+            if phase_checks:
+                self.assertNotIn("–", row)
+                self.assertNotIn("[--]", row)
 
     def test_boot_image_checks_state_the_matching_rule(self) -> None:
         report = StatusChecker(FakeGitHubClient()).run(
@@ -66,9 +129,9 @@ class StatusCheckerTest(unittest.TestCase):
         self.assertIn("bu-ist-demo-infra host inventory", checks)
         self.assertIn("bu-ist-demo-infra boot image", checks)
         self.assertIn("Hub image variables", checks)
-        self.assertIn("Infra OIDC client", checks)
-        self.assertIn("Infra local-cluster values", checks)
-        self.assertIn("Relevant pull requests", checks)
+        self.assertIn("Hub OIDC client", checks)
+        self.assertIn("Hub local-cluster values", checks)
+        self.assertNotIn("pull_requests", {check["id"] for check in report["checks"]})
         self.assertNotIn("bu-ist-demo-workload0 host inventory", checks)
         self.assertNotIn("Workload hosted-cluster values", checks)
 
@@ -84,10 +147,10 @@ class StatusCheckerTest(unittest.TestCase):
         self.assertIn("bu-ist-demo-workload0 boot image", checks)
         self.assertIn("Workload hosted-cluster values", checks)
         self.assertIn("Workload component values", checks)
-        self.assertIn("Relevant pull requests", checks)
+        self.assertNotIn("pull_requests", {check["id"] for check in report["checks"]})
         self.assertNotIn("bu-ist-demo-infra host inventory", checks)
         self.assertNotIn("Hub image variables", checks)
-        self.assertNotIn("Infra OIDC client", checks)
+        self.assertNotIn("Hub OIDC client", checks)
 
     def test_check_metadata_and_next_actions_are_machine_readable(self) -> None:
         report = StatusChecker(FakeGitHubClient()).run(
@@ -186,10 +249,6 @@ class StatusCheckerTest(unittest.TestCase):
         workload_titles = [entry["title"] for entry in workload["not_checked"]]
         self.assertIn("Agents visible in hardware-inventory", workload_titles)
         self.assertIn("Agents labelled and approved", workload_titles)
-        self.assertIn(
-            "Additional workload prerequisites are not yet documented upstream",
-            workload_titles,
-        )
         for entry in workload["not_checked"]:
             with self.subTest(workload_entry=entry["title"]):
                 self.assertEqual(
@@ -220,11 +279,11 @@ class StatusCheckerTest(unittest.TestCase):
         self.assertEqual(
             [phase["title"] for phase in phases],
             [
-                "Host inventory entry in oac-infra",
-                "Obtain the agent discovery ISO from the hub's InfraEnv and publish it on the bastion",
-                "Boot nodes with the agent discovery ISO",
-                "Agents appear in the hub's hardware-inventory namespace",
-                "Label and approve agents with update-agents.yaml",
+                "Host inventory entry",
+                "Hub agent discovery ISO",
+                "Agent ISO boot",
+                "Agent visibility",
+                "Agent labels and approval",
                 "oac-apps values",
                 "Shared-service prerequisites",
             ],
@@ -367,7 +426,7 @@ bu_ist_demo_infra = {
             Environment(name="bu-ist-demo", issue_number=666)
         ).to_dict()
         check = next(
-            item for item in report["checks"] if item["check"] == "Infra OIDC client"
+            item for item in report["checks"] if item["check"] == "Hub OIDC client"
         )
         self.assertEqual(check["state"], "partial")
         self.assertEqual(
@@ -397,7 +456,7 @@ bu_ist_demo_infra = {
             Environment(name="bu-ist-demo", issue_number=666)
         ).to_dict()
         check = next(
-            item for item in report["checks"] if item["check"] == "Infra OIDC client"
+            item for item in report["checks"] if item["check"] == "Hub OIDC client"
         )
 
         self.assertEqual(check["state"], "declared_in_main")
@@ -424,7 +483,7 @@ dizzy = {
             Environment(name="dizzy", workload_clusters=())
         ).to_dict()
         check = next(
-            item for item in report["checks"] if item["check"] == "Infra OIDC client"
+            item for item in report["checks"] if item["check"] == "Hub OIDC client"
         )
 
         self.assertEqual(check["state"], "partial")
@@ -472,12 +531,12 @@ dizzy = {
         self.assertEqual(states["bu-ist-demo-infra host inventory"], "missing")
         self.assertEqual(states["Hub image inventory"], "missing")
         self.assertEqual(states["Hub image variables"], "missing")
-        self.assertEqual(states["Infra OIDC client"], "missing")
-        self.assertEqual(states["Infra hosted-cluster defaults"], "missing")
+        self.assertEqual(states["Hub OIDC client"], "missing")
+        self.assertEqual(states["Hub hosted-cluster defaults"], "missing")
         self.assertEqual(states["Hub-wide component values"], "missing")
-        self.assertEqual(states["Infra local-cluster values"], "missing")
-        self.assertEqual(states["Infra ArgoCD applications"], "missing")
-        self.assertEqual(states["Relevant pull requests"], "missing")
+        self.assertEqual(states["Hub local-cluster values"], "missing")
+        self.assertEqual(states["Hub ArgoCD applications"], "missing")
+        self.assertEqual(report["pull_requests"], [])
         self.assertEqual(
             report["environment"]["workload_notice"],
             "No workload cluster is declared for this hub.",
@@ -528,8 +587,8 @@ all:
         self.assertEqual(states["bu-ist-demo-workload0 host inventory"], "partial")
         self.assertEqual(states["Hub image inventory"], "partial")
         self.assertEqual(states["Hub image variables"], "partial")
-        self.assertEqual(states["Infra local-cluster values"], "partial")
-        self.assertEqual(states["Relevant pull requests"], "pr_open")
+        self.assertEqual(states["Hub local-cluster values"], "partial")
+        self.assertTrue(report["pull_requests"])
 
     def test_infra_observation_accepts_inventory_without_all_root(self) -> None:
         class DirectInventoryClient(FakeGitHubClient):
@@ -624,11 +683,10 @@ bu_ist_demo_infra:
         report = StatusChecker(MergedPullRequestClient()).run(
             Environment(name="bu-ist-demo", issue_number=666)
         ).to_dict()
-        check = next(
-            item for item in report["checks"] if item["check"] == "Relevant pull requests"
+        self.assertEqual(len(report["pull_requests"]), 1)
+        self.assertEqual(
+            report["pull_requests"][0]["classification"]["value"], "merged"
         )
-        self.assertEqual(check["state"], "declared_in_main")
-        self.assertEqual(check["actual"]["merged_count"], 1)
 
     def test_pull_request_body_match_alone_is_not_relevant(self) -> None:
         class UnrelatedPullRequestClient(FakeGitHubClient):
@@ -652,12 +710,7 @@ bu_ist_demo_infra:
         report = StatusChecker(UnrelatedPullRequestClient()).run(
             Environment(name="oac-prod", workload_clusters=())
         ).to_dict()
-        check = next(
-            item for item in report["checks"] if item["check"] == "Relevant pull requests"
-        )
-
-        self.assertEqual(check["state"], "missing")
-        self.assertEqual(check["actual"]["matching_pr_count"], 0)
+        self.assertEqual(report["pull_requests"], [])
         self.assertNotIn("pr_open", report["summary"]["state_counts"])
 
     def test_pull_requests_classify_closed_unmerged_and_counts_add_up(self) -> None:
@@ -704,23 +757,10 @@ bu_ist_demo_infra:
         report = StatusChecker(ClassifiedPullRequestClient()).run(
             Environment(name="bu-ist-demo", issue_number=666)
         ).to_dict()
-        check = next(
-            item for item in report["checks"] if item["check"] == "Relevant pull requests"
-        )
-
-        actual = check["actual"]
-        self.assertEqual(actual["matching_pr_count"], 3)
-        self.assertEqual(actual["open_count"], 1)
-        self.assertEqual(actual["merged_count"], 1)
-        self.assertEqual(actual["closed_unmerged_count"], 1)
+        pulls = report["pull_requests"]
+        self.assertEqual(len(pulls), 3)
         self.assertEqual(
-            actual["open_count"]
-            + actual["merged_count"]
-            + actual["closed_unmerged_count"],
-            actual["matching_pr_count"],
-        )
-        self.assertEqual(
-            [item["classification"]["value"] for item in check["evidence"]["pull_requests"]],
+            [item["classification"]["value"] for item in pulls],
             ["open", "merged", "closed_unmerged"],
         )
 
@@ -756,18 +796,11 @@ bu_ist_demo_infra:
         hub_report = checker.run_hub(environment).to_dict()
         workload_report = checker.run_workload(environment).to_dict()
 
-        hub_check = next(
-            item
-            for item in hub_report["checks"]
-            if item["check"] == "Relevant pull requests"
+        self.assertEqual(hub_report["pull_requests"], [])
+        self.assertEqual(len(workload_report["pull_requests"]), 1)
+        self.assertEqual(
+            workload_report["pull_requests"][0]["classification"]["value"], "open"
         )
-        workload_check = next(
-            item
-            for item in workload_report["checks"]
-            if item["check"] == "Relevant pull requests"
-        )
-        self.assertEqual(hub_check["state"], "missing")
-        self.assertEqual(workload_check["state"], "pr_open")
 
     def test_closed_pull_request_file_fetches_are_limited_to_recent_twenty(self) -> None:
         class LimitedPullRequestClient(FakeGitHubClient):
@@ -836,10 +869,7 @@ bu_ist_demo_infra:
             "CCI-MOC/oac-infra": list(range(5, 25)),
             "CCI-MOC/moc-keycloak": list(range(5, 25)),
         })
-        check = next(
-            item for item in report["checks"] if item["check"] == "Relevant pull requests"
-        )
-        self.assertEqual(check["actual"]["matching_pr_count"], 60)
+        self.assertEqual(len(report["pull_requests"]), 60)
 
     def test_infra_pull_request_for_other_environment_is_not_relevant(self) -> None:
         class OtherEnvironmentInfraPullClient(FakeGitHubClient):
@@ -876,19 +906,12 @@ bu_ist_demo_infra:
         report = StatusChecker(OtherEnvironmentInfraPullClient()).run(
             Environment(name="bu-ist-demo", issue_number=666)
         ).to_dict()
-        check = next(
-            item for item in report["checks"]
-            if item["check"] == "Relevant pull requests"
-        )
         numbers = [
             item["number"]
-            for item in check["evidence"]["pull_requests"]
+            for item in report["pull_requests"]
         ]
         self.assertNotIn(27, numbers)
-        self.assertEqual(
-            check["actual"]["repository_counts"],
-            {"CCI-MOC/oac-apps": 1},
-        )
+        self.assertEqual(len(report["pull_requests"]), 1)
 
     def test_issue_link_and_multi_repository_pull_request_counts(self) -> None:
         issue_url = "https://github.com/CCI-MOC/MOC-issues/issues/666"
@@ -944,37 +967,22 @@ bu_ist_demo_infra:
         report = StatusChecker(MultiRepositoryPullClient()).run(
             Environment(name="bu-ist-demo", issue_number=666)
         ).to_dict()
-        check = next(
-            item for item in report["checks"]
-            if item["check"] == "Relevant pull requests"
-        )
-        actual = check["actual"]
+        pulls = report["pull_requests"]
         expected_repository_counts = {
             "CCI-MOC/moc-keycloak": 1,
             "CCI-MOC/oac-apps": 1,
             "CCI-MOC/oac-infra": 1,
         }
-        self.assertEqual(actual["matching_pr_count"], 3)
-        self.assertEqual(actual["repository_counts"], expected_repository_counts)
-        self.assertEqual(
-            sum(actual["repository_counts"].values()),
-            actual["matching_pr_count"],
-        )
-        self.assertEqual(
-            actual["open_count"]
-            + actual["merged_count"]
-            + actual["closed_unmerged_count"],
-            actual["matching_pr_count"],
-        )
+        self.assertEqual(len(pulls), 3)
         evidence_repositories = {
             item["repository"]["value"]
-            for item in check["evidence"]["pull_requests"]
+            for item in pulls
         }
         self.assertEqual(evidence_repositories, set(expected_repository_counts))
         text_report = render_text(report, details=True)
         markdown_report = render_markdown(report)
-        self.assertIn("Pull requests by repository:", text_report)
-        self.assertIn("CCI-MOC/oac-infra: 1", text_report)
+        self.assertIn("PULL REQUESTS", text_report)
+        self.assertIn("open PRs touch this environment", text_report)
         self.assertIn("## Pull requests", markdown_report)
         self.assertIn("CCI-MOC/oac-infra", markdown_report)
 
@@ -1003,10 +1011,10 @@ bu_ist_demo_infra:
             Environment(name="bu-ist-demo", issue_number=666)
         ).to_dict()
         states = {check["check"]: check["state"] for check in report["checks"]}
-        self.assertEqual(states["Infra hosted-cluster defaults"], "declared_in_main")
+        self.assertEqual(states["Hub hosted-cluster defaults"], "declared_in_main")
         self.assertEqual(states["Hub-wide component values"], "declared_in_main")
-        self.assertEqual(states["Infra local-cluster values"], "declared_in_main")
-        self.assertEqual(states["Infra ArgoCD applications"], "declared_in_main")
+        self.assertEqual(states["Hub local-cluster values"], "declared_in_main")
+        self.assertEqual(states["Hub ArgoCD applications"], "declared_in_main")
         self.assertEqual(states["Workload hosted-cluster values"], "declared_in_main")
         self.assertEqual(states["Workload component values"], "declared_in_main")
 
@@ -1080,7 +1088,7 @@ bu_ist_demo_infra:
         ).run(Environment(name="bu-ist-demo", issue_number=666)).to_dict()
         check = next(
             item for item in report["checks"]
-            if item["check"] == "Infra local-cluster values"
+            if item["check"] == "Hub local-cluster values"
         )
         self.assertEqual(check["state"], "partial")
         self.assertEqual(check["severity"], "advisory")
@@ -1136,7 +1144,7 @@ other_infra = {
         report = StatusChecker(OtherKeycloakClient()).run(
             Environment(name="bu-ist-demo", issue_number=666)
         ).to_dict()
-        check = next(item for item in report["checks"] if item["check"] == "Infra OIDC client")
+        check = next(item for item in report["checks"] if item["check"] == "Hub OIDC client")
         self.assertEqual(check["state"], "missing")
         self.assertEqual(check["reason"], "No Keycloak OIDC client block exists for this hub.")
         self.assertEqual(
@@ -1180,7 +1188,7 @@ custom_client = {
             registry=registry,
         ).run(Environment(name="bu-ist-demo", issue_number=666)).to_dict()
         check = next(
-            item for item in report["checks"] if item["check"] == "Infra OIDC client"
+            item for item in report["checks"] if item["check"] == "Hub OIDC client"
         )
         self.assertEqual(check["state"], "declared_in_main")
         self.assertEqual(check["expected"]["client"], "custom-oidc-client")

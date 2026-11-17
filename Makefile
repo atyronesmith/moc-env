@@ -33,7 +33,7 @@ RUN_ARGS := status $(ENV) --format $(FORMAT) $(PRS_FLAG) $(ARGS)
         check-workload-markdown run run-text run-json run-markdown \
         run-no-prs report-markdown \
         report-gist-secret report-gist-public build compile \
-        diff-check pii-check check lock \
+        diff-check pii-check check lock sample-reports \
         clean clean-all
 
 help: ## Show available targets and common variables
@@ -167,6 +167,9 @@ pii-check: ## Check tracked files for personal identifiers
 	$(UV) run --locked python tools/check_pii.py
 
 check: test compile diff-check pii-check build ## Run tests, compilation, checks, and build
+
+sample-reports: ## Regenerate deterministic offline sample reports
+	$(UV) run --locked python tools/generate_sample_reports.py
 
 lock: ## Refresh uv.lock
 	$(UV) lock

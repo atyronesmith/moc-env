@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import base64
 import json
 import time
 from collections.abc import Iterator
 from collections.abc import Callable
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 from urllib.request import Request, urlopen
 
 from .github_cache import GitHubResponseCache
@@ -42,10 +41,12 @@ class GitHubClient:
         self.rate_limit_remaining: int | None = None
         self.on_response: Callable[[int], None] | None = None
         self._rate_limit_warning_sent = False
+        self.api_calls_used = 0
         self.offline = offline
         self.refresh = refresh
         self.response_cache = GitHubResponseCache()
         self._responses: dict[str, tuple[Any, Any]] = {}
+        self._raw_responses: dict[str, str] = {}
 
     @property
     def authenticated(self) -> bool:
@@ -93,6 +94,10 @@ class GitHubClient:
                 body = response.read().decode("utf-8")
                 self._record_headers(response.headers)
                 data = json.loads(body)
+                if getattr(response, "status", 200) != 304 and not url.endswith(
+                    "/rate_limit"
+                ):
+                    self.api_calls_used += 1
                 response_etag = response.headers.get("ETag")
                 if response_etag:
                     self._store_response(url, response_etag, body)
@@ -125,6 +130,33 @@ class GitHubClient:
         url = path_or_url if path_or_url.startswith("https://") else self.base_url + path_or_url
         return self._get_response(url)[0]
 
+    def reserve_quota(
+        self, estimated_calls: int, candidate_urls: list[str] | None = None
+    ) -> None:
+        """Stop before REST work when the known quota cannot cover it."""
+
+        if self.offline or self.rate_limit_remaining is None:
+            data = self.get_json("/rate_limit")
+            resources = data.get("resources", {}).get("core", {}) if isinstance(data, dict) else {}
+            remaining = resources.get("remaining")
+            if isinstance(remaining, int):
+                self.rate_limit_remaining = remaining
+        cached_candidates = sum(
+            1
+            for url in candidate_urls or []
+            if self.response_cache.read(url) is not None
+        )
+        effective_calls = max(0, estimated_calls - cached_candidates)
+        if (
+            self.rate_limit_remaining is not None
+            and self.rate_limit_remaining < effective_calls
+        ):
+            raise RateLimitError(
+                f"GitHub API quota is too small for this run: "
+                f"{effective_calls} calls needed, {self.rate_limit_remaining} available. "
+                "Pull-request discovery is skipped by default when unauthenticated."
+            )
+
     def _get_response(self, url: str) -> tuple[Any, Any]:
         if url in self._responses:
             return self._responses[url]
@@ -141,6 +173,14 @@ class GitHubClient:
             return response
 
         cached = None if self.refresh else self.response_cache.read(url)
+        if (
+            not self.authenticated
+            and self.rate_limit_remaining == 0
+            and cached is not None
+        ):
+            response = (json.loads(cached["body"]), None)
+            self._responses[url] = response
+            return response
         response = self._request(url, cached["etag"] if cached else None)
         self._responses[url] = response
         return response
@@ -188,10 +228,56 @@ class GitHubClient:
 
     def get_file(self, repository: str, path: str, ref: str = "main") -> str:
         ref = self.refs.get(repository, ref)
-        data = self.get_json(f"/repos/{repository}/contents/{path}?ref={ref}")
-        if not isinstance(data, dict) or data.get("encoding") != "base64":
-            raise GitHubError(f"Unexpected GitHub contents response for {repository}:{path}")
-        return base64.b64decode(data["content"]).decode("utf-8")
+        sha = self.source_snapshots.get((repository, ref))
+        if sha is None:
+            self.get_tree(repository, ref)
+            sha = self.source_snapshots[(repository, ref)]
+        return self._get_raw_file(repository, sha, path)
+
+    def _get_raw_file(self, repository: str, sha: str, path: str) -> str:
+        url = (
+            f"https://raw.githubusercontent.com/{repository}/{sha}/"
+            f"{quote(path)}"
+        )
+        if url in self._raw_responses:
+            return self._raw_responses[url]
+        if self.offline:
+            cached = self.response_cache.read(url)
+            if cached is None:
+                raise GitHubError(
+                    f"No cached GitHub response is available for {url}; "
+                    "run the command without --offline to populate the cache"
+                )
+            self._raw_responses[url] = cached["body"]
+            return cached["body"]
+        cached = None if self.refresh else self.response_cache.read(url)
+        body = self._raw_request(url, cached["etag"] if cached else None)
+        self._raw_responses[url] = body
+        return body
+
+    def _raw_request(self, url: str, etag: str | None) -> str:
+        headers = {"User-Agent": "moc-env"}
+        if etag:
+            headers["If-None-Match"] = etag
+        request = Request(url, headers=headers, method="GET")
+        try:
+            with urlopen(request, timeout=self.timeout) as response:
+                body = response.read().decode("utf-8")
+                response_etag = response.headers.get("ETag")
+                if response_etag:
+                    self._store_response(url, response_etag, body)
+                return body
+        except HTTPError as exc:
+            if exc.code == 304 and etag is not None:
+                cached = self.response_cache.read(url)
+                if cached is not None:
+                    return cached["body"]
+            body = exc.read().decode("utf-8", errors="replace")
+            raise GitHubError(
+                f"GitHub raw download failed ({exc.code}) for {url}: {body[:500]}"
+            ) from exc
+        except (URLError, TimeoutError) as exc:
+            raise GitHubError(f"GitHub raw download failed for {url}") from exc
 
     def pulls(self, repository: str, state: str = "all") -> Iterator[dict[str, Any]]:
         yield from self.list(
