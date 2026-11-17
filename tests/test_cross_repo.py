@@ -1,13 +1,59 @@
 from __future__ import annotations
 
+import json
 import unittest
+from pathlib import Path
+from types import SimpleNamespace
+
+import yaml
 
 from moc_env.checks import StatusChecker
-from moc_env.cross_repo import _dns_records_check
+from moc_env.cross_repo import _dns_records_check, _workload_value_checks
 from moc_env.github import GitHubError
 from moc_env.model import Environment
+from moc_env.observed import parse_hardware_resource_classes
 
 from fakes import CrossRepoFakeGitHubClient
+
+
+class Pr246Client(CrossRepoFakeGitHubClient):
+    """Replay oac-apps PR 246 values.yaml verbatim at commit 625765a.
+
+    Source: https://github.com/CCI-MOC/oac-apps/blob/625765a/
+    hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml
+    """
+
+    WORKLOAD_PATH = (
+        "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml"
+    )
+    DEFAULTS_PATH = "hosted-clusters/bu-ist-demo-infra/values.yaml"
+    VLAN_PATH = "group_vars/all/vlans.yaml"
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.files = {
+            self.WORKLOAD_PATH: (
+                Path(__file__).parent / "fixtures/pr246-workload-values.yaml"
+            ).read_text(encoding="utf-8"),
+            self.DEFAULTS_PATH: (
+                "baseDomain: hcp.bu-ist-demo.int.massopen.cloud\n"
+                "hcpExternalDomain: hcp.bu-ist-demo.int.massopen.cloud\n"
+            ),
+            self.VLAN_PATH: yaml.safe_dump({"vlans": [
+                {"name": "OAC-PRODUCTION-WORKLOAD0", "subnet4": "10.20.12.0/23"},
+                {"name": "OAC-DEV-WORKLOAD0", "subnet4": "10.20.6.0/23"},
+                {"name": "BU-IST-DEMO-WORKLOAD", "subnet4": "10.20.28.0/23"},
+                {"name": "PureStorage-BU-IST-DEMO-WORKLOAD", "subnet4": "10.9.16.0/24"},
+            ]}),
+        }
+
+    def get_file(self, repository: str, path: str, ref: str = "main") -> str:
+        if (
+            repository == "CCI-MOC/oac-apps"
+            and path in {self.WORKLOAD_PATH, self.DEFAULTS_PATH}
+        ) or (repository == "CCI-MOC/ansible-switches" and path == self.VLAN_PATH):
+            return self.files[path]
+        return super().get_file(repository, path, ref)
 
 
 class ModifiedFileClient(CrossRepoFakeGitHubClient):
@@ -241,7 +287,7 @@ class CrossRepositoryChecksTest(unittest.TestCase):
             "workload.gpu_without_hosts": (
                 "CCI-MOC/oac-apps",
                 "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml",
-                values.replace('feature-gpu: "false"', 'feature-gpu: "true"'),
+                values + '\nclusterLabels:\n  massopen.cloud/feature-gpu: "true"\n',
                 "value_mismatch",
             ),
         }
@@ -255,6 +301,123 @@ class CrossRepositoryChecksTest(unittest.TestCase):
                 check = self.check(self.report(client), check_id)
                 self.assertEqual(check["state"], state)
                 self.assertIn(check["severity"], {"blocking", "advisory"})
+
+    def test_pr246_copied_dns_domain_is_a_blocking_gap(self) -> None:
+        check = self.check(self.report(Pr246Client()), "workload.dns_base_domain")
+        self.assertEqual(check["state"], "value_mismatch")
+        self.assertEqual(check["severity"], "blocking")
+        self.assertEqual(check["expected"]["baseDomain"], "hcp.bu-ist-demo.int.massopen.cloud")
+        self.assertIn(
+            "s3.bu-ist-demo-workload0.hcp.oac.int.massopen.cloud",
+            check["missing"]["hostnames"],
+        )
+
+    def test_pr246_gpu_label_without_hosts_is_advisory(self) -> None:
+        check = self.check(self.report(Pr246Client()), "workload.gpu_without_hosts")
+        self.assertEqual(check["state"], "value_mismatch")
+        self.assertEqual(check["severity"], "advisory")
+        self.assertEqual(check["actual"]["gpu_host_count"], 0)
+        self.assertEqual(check["actual"]["clusterLabels.massopen.cloud/feature-gpu"], "true")
+
+    def test_pr246_ingress_uses_its_environment_vlan(self) -> None:
+        check = self.check(self.report(Pr246Client()), "workload.ingress_address_network")
+        self.assertEqual(check["state"], "value_mismatch")
+        self.assertEqual(check["severity"], "blocking")
+        self.assertEqual(check["expected"]["vlan_subnet"], "10.20.28.0/23")
+        self.assertIn("BU-IST-DEMO-WORKLOAD", check["reason"])
+        client = Pr246Client()
+        client.files[client.WORKLOAD_PATH] = client.files[client.WORKLOAD_PATH].replace(
+            "10.20.7.10/32", "10.20.29.10/32"
+        )
+        self.assertEqual(
+            self.check(self.report(client), "workload.ingress_address_network")["state"],
+            "declared_in_main",
+        )
+
+    def test_unmatched_vlan_checks_only_outside_hub_network(self) -> None:
+        client = Pr246Client()
+        client.files[client.VLAN_PATH] = "vlans:\n  - name: OAC-PRODUCTION-WORKLOAD0\n    subnet4: 10.20.12.0/23\n"
+        check = self.check(self.report(client), "workload.ingress_address_network")
+        self.assertEqual(check["state"], "declared_in_main")
+        self.assertIsNone(check["expected"]["vlan_subnet"])
+        self.assertIn("No VLAN matches", check["reason"])
+        client.files[client.WORKLOAD_PATH] = client.files[client.WORKLOAD_PATH].replace(
+            "10.20.7.10/32", "10.20.26.10/32"
+        )
+        self.assertEqual(
+            self.check(self.report(client), "workload.ingress_address_network")["state"],
+            "value_mismatch",
+        )
+
+    def test_dns_uses_hosted_defaults_and_hostname_boundary(self) -> None:
+        client = Pr246Client()
+        client.files[client.DEFAULTS_PATH] = "baseDomain: cluster.example\nhcpExternalDomain: public.example\n"
+        for hostname, expected_state in (
+            ("s3.cluster.example", "declared_in_main"),
+            ("s3.public.example.", "declared_in_main"),
+            ("s3.notcluster.example", "value_mismatch"),
+            ("s3.int.massopen.cloud", "value_mismatch"),
+        ):
+            with self.subTest(hostname=hostname):
+                client.files[client.WORKLOAD_PATH] = yaml.safe_dump({
+                    "dns": {"records": [{"hostname": hostname}]},
+                })
+                self.assertEqual(
+                    self.check(self.report(client), "workload.dns_base_domain")["state"],
+                    expected_state,
+                )
+
+    def test_corrected_checks_replay_live_oac_prod_evidence(self) -> None:
+        """Re-run the changed checks, not just assertions on saved verdicts."""
+
+        fixture = json.loads((
+            Path(__file__).parent / "fixtures/oac-prod-full-status.json"
+        ).read_text(encoding="utf-8"))
+        checks = {check["id"]: check for check in fixture["checks"]}
+        resource_classes = parse_hardware_resource_classes((
+            Path(__file__).parent / "fixtures/oac-prod-gpu-hardware.md"
+        ).read_text(encoding="utf-8"))
+        environment = Environment(name="oac-prod", workload_clusters=("oac-prod-workload0",))
+        path = "hosted-clusters/oac-prod-infra/oac-prod-workload0/values.yaml"
+        values = {
+            "services": {"APIServer": {"ipAddress": "10.20.9.13"}},
+            "ingress": {"poolAddress": checks["workload.ingress_address_network"]["actual"]},
+            "dns": {"records": [
+                {"hostname": name} for name in checks["workload.dns_base_domain"]["actual"]
+            ]},
+            "clusterLabels": {"massopen.cloud/feature-gpu": "true"},
+        }
+        client = ModifiedFileClient(
+            "CCI-MOC/ansible-switches", "group_vars/all/vlans.yaml",
+            "vlans:\n  - name: BU-IST-DEMO-WORKLOAD\n    subnet4: 10.20.28.0/23\n"
+            "  - name: OAC-PRODUCTION-WORKLOAD0\n    subnet4: 10.20.12.0/23\n",
+        )
+        results = _workload_value_checks(
+            client, environment,
+            SimpleNamespace(
+                clusters={"oac-prod-workload0": SimpleNamespace(hosts=SimpleNamespace(
+                    value=checks["workload.inventory"]["evidence"]["hosts"]
+                ))},
+                hardware_resource_classes=SimpleNamespace(value=resource_classes),
+            ),
+            SimpleNamespace(paths=SimpleNamespace(value=[path]), files={path: yaml.safe_dump(values)}),
+            checks["hub.image_vars"]["evidence"]["values"],
+            checks["hub.hosted_cluster_defaults"]["evidence"]["values"],
+            None,
+        )
+        by_id = {check.id: check for check in results}
+        for check_id in (
+            "workload.dns_base_domain", "workload.gpu_without_hosts",
+            "workload.ingress_address_network",
+        ):
+            with self.subTest(check_id=check_id):
+                self.assertEqual(by_id[check_id].state, "declared_in_main")
+                self.assertEqual(by_id[check_id].severity, "info")
+        self.assertEqual(by_id["workload.gpu_without_hosts"].actual["gpu_host_count"], 7)
+        self.assertIn(
+            "oac-prod-workload0-gpu-sxm-1",
+            by_id["workload.gpu_without_hosts"].evidence["gpu_hosts"],
+        )
 
     def test_duplicate_ip_names_the_other_cluster(self) -> None:
         check = self.check(self.report(AddedFileClient()), "workload.address_uniqueness")

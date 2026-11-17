@@ -1705,6 +1705,7 @@
     ]
   },
   "pull_requests": [],
+  "pull_requests_skip_reason": "skipped because this run is unauthenticated; use --prs to inspect them",
   "pull_requests_skipped": true,
   "rate_limited": false,
   "scope": "environment",

@@ -89,6 +89,12 @@ unauthenticated, and stops without spending calls if the quota is too small.
 If unauthenticated quota is already exhausted but the repository trees are
 cached, the cached snapshots are used so a read-only report can still complete.
 
+GitHub server errors (`5xx`) and connection failures are retried three times
+with increasing delays. Pull-request lookup is optional: if it still fails,
+the status report prints `Pull requests: unavailable (<reason>)` and continues
+with the configuration checks. With the default `--fail-on never`, that report
+exits `0`; a missing PR listing is not a configuration failure.
+
 ### GitHub response cache
 
 GitHub-reading commands cache response bodies and ETags by URL under the
@@ -101,6 +107,47 @@ Pass `--offline` to serve only cached responses; a miss fails clearly with exit
 code `2`. Pass `--refresh` to ignore the disk cache and request current data;
 per-process request deduplication still applies. These options are mutually
 exclusive.
+
+When any response is served from disk cache without revalidation, the report
+header identifies the repository with `from cache, fetched <time>`. The time
+is the original fetch time, not the report-generation time; if several cached
+responses from a repository are used, the oldest fetch time is shown. A
+successfully revalidated `304` response does not trigger this stale-cache
+notice. Older cache entries without a recorded fetch time say `unknown`.
+
+Every command that creates a GitHub client ends on stderr with an accounting
+line in this form:
+
+```text
+GitHub API: <n> requests, <m> counted against quota, <k> from cache
+```
+
+`requests` counts HTTP attempts to both `api.github.com` and
+`raw.githubusercontent.com`, including raw-file downloads. `counted against
+quota` counts only non-`304` GitHub REST API responses; the `/rate_limit`
+preflight is free, and immutable-SHA raw downloads do not consume REST quota.
+`from cache` counts response bodies served from the local cache, including
+offline reads and successful `304` revalidation. Commands that do not create a
+GitHub client, such as completion when its environment cache is already warm,
+do not print this line.
+
+For a reproducible measurement, on 2026-11-17 an authenticated run was made
+with an isolated response cache. The counts below are observations for those
+repository snapshots, not a fixed request budget:
+
+| Command and mode | HTTP requests | Counted against quota | From cache |
+|---|---:|---:|---:|
+| `status oac-prod --no-prs` (cold) | 36 | 14 | 0 |
+| `status oac-prod --no-prs` (warm) | 36 | 0 | 35 |
+| `diff oac-prod bu-ist-demo` (cold) | 123 | 17 | 0 |
+| `diff oac-prod bu-ist-demo` (warm) | 123 | 0 | 123 |
+| `diff oac-prod bu-ist-demo --offline` | 0 | 0 | 123 |
+
+The warm status run's one non-cached request was the free `/rate_limit`
+preflight; `diff` does not make that preflight. Offline mode performs no
+credential lookup or quota preflight and fails with code `2` on any cache miss.
+Use the final accounting line, rather than an old rule-of-thumb quota estimate,
+when planning a run.
 
 The token needs access to public repositories and these read-only permissions:
 
@@ -290,8 +337,9 @@ that identifies it as synthetic.
 example-env · hub + workload · repo config as of 2026-11-16 12:34 UTC
 
 RESULT: 8 blocking gaps (workload 3) · 0 advisories · 15 of 28 checks pass
-5 checks blocked until Create the missing hosted-cluster values file from the closest existing environment; set the cluster name, parent hub, networking, and node pools before adding components.
-Pull requests: skipped because this run is unauthenticated; use --prs to inspect them.
+5 checks blocked by action 7
+Pull requests: skipped (--no-prs)
+
 
 HUB PHASES
 PHASE                        HUB example-env-infra
@@ -305,34 +353,79 @@ WORKLOAD PHASES
 PHASE                        WORKLOAD example-env-workload0
 1 Host inventory entry       ✅ 1/1 checks
 2 Hub agent discovery ISO    🟡 0/1 checks
-3 Agent ISO boot             –
-4 Agent visibility           –
+3 Agent ISO boot             verify by hand
+4 Agent visibility           verify by hand
 5 Agent labels and approval  ✅ 1/1 checks
 6 oac-apps values            ❌ 0/7 checks, 5 blocked
-7 Shared-service…            –
+7 Shared-service…            ✅ 3/3 checks
 
 NEXT
-  1. [oac-infra] Generate and publish the parent hub's agent discovery ISO, then replace the
-  generic boot_image_url for every host in the workload cluster group. (after 2)
-       guide: docs/workload-cluster-deployment.md → Infrastructure Configuration
-  2. [oac-infra] Generate and publish a hub-specific discovery ISO, then replace the generic
-  boot_image_url for every host in the hub cluster group.
+  1. [oac-infra] Generate and publish a hub-specific discovery ISO, then replace the generic
+  boot_image_url for every host in the hub cluster group. boot_image_url is
+  http://10.2.0.82/boot/discovery.iso; expected cluster_specific_image
+  example-env-infra-agent-discovery.iso.
        guide: docs/infra-cluster-deployment.md → Cluster Deployment
-  3. [oac-apps] Create or complete the hub hosted-cluster defaults file at
-  hosted-clusters/example-env-infra/values.yaml in CCI-MOC/oac-infra. (after 1)
+  2. [oac-apps] Create or complete the hub hosted-cluster defaults file at
+  hosted-clusters/example-env-infra/values.yaml in CCI-MOC/oac-infra.
+  hosted-clusters/example-env-infra/values.yaml is missing; expected present. (after 1)
        guide: docs/infra-cluster-deployment.md → Cluster Configuration
+  3. [oac-apps] Copy the required local-cluster component files from an existing hub environment
+  and adjust cluster-specific names and addresses.
+  values/example-env-infra/local-cluster/acm.yaml is missing; expected present.
+  values/example-env-infra/local-cluster/acm-placements.yaml is missing; expected present.
+  values/example-env-infra/local-cluster/cert-manager.yaml is missing; expected present.
+  values/example-env-infra/local-cluster/cluster-certificates.yaml is missing; expected present.
+  values/example-env-infra/local-cluster/cluster-version.yaml is missing; expected present.
+  values/example-env-infra/local-cluster/external-dns-operator.yaml is missing; expected
+  present. values/example-env-infra/local-cluster/external-secrets.yaml is missing; expected
+  present. values/example-env-infra/local-cluster/hcp-config.yaml is missing; expected present.
+  values/example-env-infra/local-cluster/keycloak-oauth.yaml is missing; expected present.
+  values/example-env-infra/local-cluster/metallb.yaml is missing; expected present.
+  values/example-env-infra/local-cluster/openshift-gitops.yaml is missing; expected present.
+  values/example-env-infra/local-cluster/portworx.yaml is missing; expected present.
+  values/example-env-infra/local-cluster/user-workload-monitoring.yaml is missing; expected
+  present. (after 2)
+       guide: docs/infra-cluster-deployment.md → Cluster Configuration
+  4. [oac-apps] Create or complete values/example-env-infra/hcp-config.yaml in CCI-MOC/oac-infra
+  for hub-wide HCP and secret-selector values. values/example-env-infra/hcp-config.yaml is
+  missing; expected present. (after 2)
+       guide: docs/infra-cluster-deployment.md → Cluster Configuration
+  5. [oac-apps] Add Argo CD application manifests for the hub after its hosted-cluster, hub-wide
+  component, and local-cluster values are present, and reference the correct clusters.
+  apps/example-env-infra/keycloak-oauth.yaml is missing; expected present. (after 2, 4, 3)
+       guide: docs/infra-cluster-deployment.md → Cluster Configuration
+  6. [oac-infra] Generate and publish the parent hub's agent discovery ISO, then replace the
+  generic boot_image_url for every host in the workload cluster group. boot_image_url is
+  http://10.2.0.82/boot/discovery.iso; expected cluster_specific_image
+  example-env-infra-agent-discovery.iso. (after 1)
+       guide: docs/workload-cluster-deployment.md → Infrastructure Configuration
+  7. [oac-apps] Create the missing hosted-cluster values file from the closest existing
+  environment; set the cluster name, parent hub, networking, and node pools before adding
+  components. hosted-clusters/example-env-infra/example-env-workload0/values.yaml is missing;
+  expected present. (after 2)
+       guide: docs/workload-cluster-deployment.md → Cluster Deployment and Configuration
+  8. [oac-apps] Create the workload component-values directory, starting with hcp-config.yaml
+  and only the shared components this workload needs. matched_file_count is 0; expected At least
+  one matching path. (after 7)
+       guide: docs/workload-cluster-deployment.md → Cluster Deployment and Configuration
 
 NOT CHECKED — verify by hand:
   Configure cluster and storage networks and firewalls for example-env-infra; Store the
   example-env-infra SSH key and kubeadmin credentials in AWS Secrets Manager; Place the pull
   secret and SSH key under hub-images/credentials/example-env-infra; Run
-  create_agent_install_media and copy the example-env-infra ISO to the bastion host
-
-PULL REQUESTS
-0 open PRs touch this environment.
+  create_agent_install_media and copy the example-env-infra ISO to the bastion host; Bootstrap
+  Argo CD for example-env-infra; Agents visible in hardware-inventory; Agents labelled and
+  approved
 
 Sources
-Sources: MOC-issues@main@1111111, ansible-switches@main@8888888, everpure-moc@5555555, moc-aws@main@6666666, moc-dns@main@7777777, moc-keycloak@4444444, oac-apps@main@3333333, oac-infra@main@2222222
+Repository                 Ref      Commit
+CCI-MOC/ansible-switches    main     8888888
+CCI-MOC/everpure-moc        main     5555555
+CCI-MOC/moc-aws             main     6666666
+CCI-MOC/moc-dns             main     7777777
+CCI-MOC/moc-keycloak        main     4444444
+CCI-MOC/oac-apps            main     3333333
+CCI-MOC/oac-infra           main     2222222
 
 Details:  moc-env status example-env --details
 Markdown: moc-env status example-env --format markdown --output report.md
@@ -347,31 +440,90 @@ continuously monitored state.
 advisory, and how many checks pass. For an environment report, the parenthetical
 workload count shows how many blocking gaps belong to workload scopes. An
 `UNKNOWN` line names at most two checks whose evidence was absent or could not
-be normalized, then reports how many more exist. A blocked line names the input
-that must be completed before dependent checks can run; blocked checks are not
-unknown and are not counted as gaps.
+be normalized, then reports how many more exist. `N checks blocked by action K`
+points to the numbered action that must be completed before dependent checks
+can run; blocked checks are not unknown and are not counted as gaps.
 
 Pull requests are context, not a check. They do not affect pass/gap counts,
 severity, or next actions; the pull-request section states how many open PRs
-touch the environment and lists them separately.
+touch the environment and lists them separately. If lookup is skipped or
+unavailable, only the corresponding `Pull requests: ...` line is printed, not
+an unverified `0 open PRs` count.
+
+When PR inspection is enabled, changed-file overlap only selects a PR as a
+candidate. For each candidate, `moc-env` replays the relevant check at
+`pull/<number>/head` and compares its normalized expected/observed fields:
+
+- `fixed by open PR oac-apps#246` means the replay changed the check to a
+  passing state;
+- `open PR oac-apps#246 touches this but the check still fails there: ...`
+  means the replay still has the listed failing fields.
+
+An overlapping file alone never produces a “fixed” annotation. A PR whose head
+is already the selected source through `--ref REPO=REF` is excluded from
+self-annotation. These annotations are review evidence only: they do not alter
+the report's pass/gap counts and do not claim that a PR was merged or that a
+live cluster changed. PR heads are mutable, so record the resolved SHA when a
+review result matters.
+
+For example, on 2026-11-17 `oac-apps` `pull/246/head` had advanced to
+`071b4677139a893845ffa2ee70e81aad561db32b`, a child of
+`625765a730e30a689f3e7e78886b7877f05bc9c8`, and the newer head fixed four
+address/DNS issues present in the earlier snapshot. An authenticated live-head
+`status bu-ist-demo --ref oac-apps=pull/246/head --prs --details` run reported 5
+blocking and 2 advisory gaps; the explicitly pinned
+`--ref oac-apps=625765a730e30a689f3e7e78886b7877f05bc9c8` run reported 9
+blocking and 2 advisory gaps. Treat these as snapshot-specific observations;
+do not present the pinned 9/2 result as the current live result.
 
 Hub and workload phases are rendered as separate tables so each scope keeps its
 own numbering and titles. Each cell counts every check in that phase as
 `passing/total checks`; unknown and blocked counts are shown separately. The
 worst known state sets the symbol, but unknown checks never hide the passes.
-`–` means that phase has no repository check.
+`verify by hand` identifies a phase whose steps cannot be verified from the
+repositories.
 
 `NEXT` is the work list. Actions are sorted topologically so no action appears
 before one it depends on; within that order, hub actions precede workload
 actions and blocking actions precede advisories. `(after N)` records an
 explicit dependency, and Markdown guide links point to the upstream
-documentation section. The list contains repository actions only.
+documentation section. Each action includes the check's observed and expected
+values; advisory actions are marked `(advisory)`. For example, a copied API
+address names both the observed address and the hub machine network it must
+be inside. Duplicate-address actions list the conflicting addresses and the
+other clusters using them. The list contains repository actions only.
 
 `NOT CHECKED` names required deployment steps that cannot be proven from the
 public repositories, such as live cluster state and credentials stored outside
 Git. The final lines give the commands for full details and a Markdown file.
-Use `--details` when you need every check's expected value, observed value,
-source path, and reason.
+Use `--details` when you need one row per field with separate expected and
+observed columns, source paths, and reasons. Source lines include the commit
+SHA and actual ref read; URLs use that ref, including `--ref` overrides.
+
+### Workload value checks
+
+`workload.dns_base_domain` checks every explicit `dns.records` hostname against
+`baseDomain` or `hcpExternalDomain` from
+`hosted-clusters/<hub>/values.yaml`. It does not use the hub-image
+`base_domain`. For `bu-ist-demo`, the hosted domain is
+`hcp.bu-ist-demo.int.massopen.cloud`; a copied hostname such as
+`s3.bu-ist-demo-workload0.hcp.oac.int.massopen.cloud` is a blocking gap.
+
+`workload.gpu_without_hosts` reads
+`clusterLabels["massopen.cloud/feature-gpu"]`. A value of `"true"` with no GPU
+hosts in that workload's inventory produces an advisory gap, not a blocking
+gap. A top-level `feature-gpu` value is not the cluster label.
+GPU inventory evidence includes an explicit `gpu: true` flag or GPU/A100/H100
+resource-class or flavor descriptors, including node resource classes recorded
+in the upstream hardware documentation. Hosts from another cluster do not
+satisfy the check.
+
+`workload.ingress_address_network` selects the workload VLAN by its full
+environment/workload name, not a generic `WORKLOAD` or `PRODUCTION` substring.
+The `BU-IST-DEMO-WORKLOAD` VLAN supplies `10.20.28.0/23`; documented naming
+variants such as `OAC-PRODUCTION-WORKLOAD0` are also recognized. If no VLAN
+matches, the report says so and checks only that the ingress address is
+outside the hub machine network.
 
 ### 3. Enable shell completion
 
@@ -716,6 +868,20 @@ Status-specific options:
 comparison. It reports checks, files, components, and structural facts; it does
 not compare addresses, cluster-specific names, or MAC addresses.
 
+File paths are normalized before comparison: hub names become `<hub>` and
+workload names become `<workload>`. Equivalent environment-specific layouts
+therefore do not appear as differences. Remaining file differences are printed
+one path per line. Structural values use plain text, for example
+`bmc 3, openstack 7`, rather than Python dictionary or tuple representations.
+
+The `hosted_cluster_zone_delegation` fact names where hosted-zone delegation
+records are declared, such as `moc-dns zonefile` or
+`moc-aws hosted-zones.tf`. `hosted_cluster_wildcard_records` separately locates
+the `*.hcp` / `*.hcp-int` wildcard declarations. A zone name or zone creation
+alone is not evidence of delegation or wildcard records. If no declaration is
+found, the fact says `not found in any repository`; unreadable evidence is
+reported as unavailable.
+
 GitHub-reading commands also accept the mutually exclusive `--offline` and
 `--refresh` cache options described in [Authentication](#authentication).
 `--no-prs` is available for status, comparison, and planning commands.
@@ -793,8 +959,9 @@ are partial, are missing, or are unknown.
 
 The JSON `current_phase` value is the lowest phase with a blocking gap. For an
 environment report it is a hub/workload mapping; scoped reports return one
-value. The text and Markdown `NEXT` lists sort blocking gaps first, then
-advisories, and then order each group by phase and dependencies.
+value. The text and Markdown `NEXT` lists respect dependencies first, then
+prefer hub before workload actions, blocking before advisory actions, and
+earlier phases within those groups.
 
 Overall status states are:
 

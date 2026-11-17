@@ -1,7 +1,7 @@
 bu-ist-demo · hub + workload · repo config as of 2026-11-16 12:34 UTC
 
 RESULT: No deployment gaps in repository configuration.
-Pull requests: skipped because this run is unauthenticated; use --prs to inspect them.
+Pull requests: skipped (--no-prs)
 
 
 HUB PHASES
@@ -16,8 +16,8 @@ WORKLOAD PHASES
 PHASE                        WORKLOAD bu-ist-demo-workload0
 1 Host inventory entry       ✅ 1/1 checks
 2 Hub agent discovery ISO    ✅ 1/1 checks
-3 Agent ISO boot             –
-4 Agent visibility           –
+3 Agent ISO boot             verify by hand
+4 Agent visibility           verify by hand
 5 Agent labels and approval  ✅ 1/1 checks
 6 oac-apps values            ✅ 7/7 checks
 7 Shared-service…            ✅ 4/4 checks
@@ -32,9 +32,6 @@ NOT CHECKED — verify by hand:
   create_agent_install_media and copy the bu-ist-demo-infra ISO to the bastion host; Bootstrap
   Argo CD for bu-ist-demo-infra; Agents visible in hardware-inventory; Agents labelled and
   approved
-
-PULL REQUESTS
-0 open PRs touch this environment.
 
 Sources
 Repository                 Ref      Commit

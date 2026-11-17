@@ -197,7 +197,7 @@ class InfraChangePlanTest(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertIn("Overall:        NO CHANGES REQUIRED", stdout)
         self.assertIn("Open pull requests, if any, still require separate review.", stdout)
-        self.assertEqual(stderr, "")
+        self.assertEqual(stderr, "GitHub API: 0 requests, 0 counted against quota, 0 from cache\n")
 
     def test_cli_plan_infra_json_returns_zero_for_planned_change(self) -> None:
         document = copy.deepcopy(self.document)

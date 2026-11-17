@@ -117,7 +117,9 @@ def add_banner(path: Path) -> None:
 
 
 def main() -> None:
-    samples = ROOT / "docs" / "samples"
+    # CLI provenance must be portable, including the validation input paths.
+    os.chdir(ROOT)
+    samples = Path("docs/samples")
     samples.mkdir(parents=True, exist_ok=True)
     for path in samples.iterdir():
         if path.is_file():

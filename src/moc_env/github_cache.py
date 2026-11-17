@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -36,11 +37,19 @@ class GitHubResponseCache:
             or not isinstance(entry.get("body"), str)
         ):
             return None
-        return {"etag": entry["etag"], "body": entry["body"]}
+        return {
+            "etag": entry["etag"],
+            "body": entry["body"],
+            "fetched_at": entry.get("fetched_at", "unknown"),
+        }
 
     def write(self, url: str, etag: str, body: str) -> None:
         document = self._read_document() or {}
-        document[url] = {"etag": etag, "body": body}
+        document[url] = {
+            "etag": etag,
+            "body": body,
+            "fetched_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        }
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.NamedTemporaryFile(
             "w",

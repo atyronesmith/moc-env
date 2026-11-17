@@ -416,6 +416,30 @@ def _address_in(value: Any, network: str) -> bool:
         return False
 
 
+def _workload_vlan(vlans: list[Any], workload: str) -> dict[str, Any] | None:
+    """Match a full workload name, allowing documented network-name aliases."""
+
+    def normalized(name: str) -> str:
+        return "-".join(
+            "PROD" if part == "PRODUCTION" else part
+            for part in name.upper().split("-")
+        )
+
+    exact_name = normalized(workload)
+    shared_name = re.sub(r"(?<=WORKLOAD)\d+$", "", exact_name)
+    for name in dict.fromkeys((exact_name, shared_name)):
+        matches = [
+            item
+            for item in vlans
+            if isinstance(item, dict)
+            and isinstance(item.get("name"), str)
+            and normalized(item["name"]) == name
+        ]
+        if len(matches) == 1:
+            return matches[0]
+    return None
+
+
 def _workload_value_checks(
     client: GitHubClient,
     environment: Environment,
@@ -427,7 +451,7 @@ def _workload_value_checks(
 ) -> list[CheckResult]:
     results: list[CheckResult] = []
     machine_network = hub_values.get("machine_network")
-    base_domain = hub_values.get("base_domain")
+    base_domain = (hub_values_file or {}).get("baseDomain")
     vlans_text, vlans_error = _read_file(client, ANSIBLE_SWITCHES_REPOSITORY, ANSIBLE_SWITCHES_VLANS, progress)
     vlans_data, vlans_parse = _parse_yaml(vlans_text, vlans_error)
     vlans = vlans_data.get("vlans", []) if isinstance(vlans_data, dict) and isinstance(vlans_data.get("vlans"), list) else []
@@ -478,13 +502,19 @@ def _workload_value_checks(
             results.append(_unknown("workload.ingress_address_network", "workload", ANSIBLE_SWITCHES_REPOSITORY, ANSIBLE_SWITCHES_VLANS, vlans_error or vlans_parse or "vlans.yaml does not contain a vlans list.", {}))
         else:
             pool = _nested(values, ("ingress", "poolAddress"))
-            vlan = next((item for item in vlans if isinstance(item, dict) and workload.removeprefix(environment.base_name + "-").upper() in str(item.get("name", "")).upper()), None)
+            vlan = _workload_vlan(vlans, workload)
             expected_pool = {"poolAddress": pool, "machine_network": machine_network, "vlan_subnet": vlan.get("subnet4") if vlan else None}
-            valid = not _address_in(pool, machine_network) and (vlan is None or _address_in(pool, vlan["subnet4"]))
+            valid = not _address_in(pool, machine_network) and (vlan is None or _address_in(pool, vlan.get("subnet4")))
+            vlan_reason = (
+                f" No VLAN matches {workload}; only the address being outside "
+                "the hub machine network was checked."
+                if vlan is None
+                else f" Selected VLAN {vlan['name']} ({vlan.get('subnet4')})."
+            )
             if valid:
-                results.append(_result("workload.ingress_address_network", "workload", "CCI-MOC/oac-apps", path, "declared_in_main", "info", expected_pool, pool, "The ingress pool address is on the expected network."))
+                results.append(_result("workload.ingress_address_network", "workload", "CCI-MOC/oac-apps", path, "declared_in_main", "info", expected_pool, pool, "The ingress pool address is on the expected network." + vlan_reason))
             else:
-                results.append(_result("workload.ingress_address_network", "workload", "CCI-MOC/oac-apps", path, "value_mismatch", "blocking", expected_pool, pool, "The ingress pool address is on the wrong network."))
+                results.append(_result("workload.ingress_address_network", "workload", "CCI-MOC/oac-apps", path, "value_mismatch", "blocking", expected_pool, pool, "The ingress pool address is on the wrong network." + vlan_reason))
 
         hostnames = [record.get("hostname") for record in (_nested(values, ("dns", "records")) or []) if isinstance(record, dict)]
         external_domain = (hub_values_file or {}).get("hcpExternalDomain")
@@ -497,12 +527,18 @@ def _workload_value_checks(
             name
             for name in hostnames
             if not isinstance(name, str)
-            or not any(name.endswith(domain) for domain in valid_domains)
+            or not any(
+                name.rstrip(".").lower().endswith("." + domain.rstrip(".").lower())
+                for domain in valid_domains
+            )
         ]
-        if not invalid:
-            results.append(_result("workload.dns_base_domain", "workload", "CCI-MOC/oac-apps", path, "declared_in_main", "info", {"baseDomain": base_domain}, hostnames, "All DNS record hostnames use the hub base domain."))
+        expected_domains = {"baseDomain": base_domain, "hcpExternalDomain": external_domain}
+        if not valid_domains:
+            results.append(_unknown("workload.dns_base_domain", "workload", "CCI-MOC/oac-apps", path, "Hosted-cluster baseDomain and hcpExternalDomain are unavailable from the hub hosted-cluster defaults.", expected_domains))
+        elif not invalid:
+            results.append(_result("workload.dns_base_domain", "workload", "CCI-MOC/oac-apps", path, "declared_in_main", "info", expected_domains, hostnames, "All DNS record hostnames use the hub hosted-cluster domains."))
         else:
-            results.append(_result("workload.dns_base_domain", "workload", "CCI-MOC/oac-apps", path, "value_mismatch", "blocking", {"baseDomain": base_domain}, hostnames, "Some DNS record hostnames do not use the hub base domain.", {"hostnames": invalid}))
+            results.append(_result("workload.dns_base_domain", "workload", "CCI-MOC/oac-apps", path, "value_mismatch", "blocking", expected_domains, hostnames, "Some DNS record hostnames do not use the hub hosted-cluster domains.", {"hostnames": invalid}))
 
         cluster_observation = infra.clusters.get(workload)
         hosts = cluster_observation.hosts.value if cluster_observation else []
@@ -557,12 +593,29 @@ def _workload_value_checks(
         else:
             results.append(_result("workload.node_pool_hosts", "workload", "CCI-MOC/oac-infra", "infra/inventory/00hosts.yaml", "value_mismatch", "blocking", pools, pool_results, "At least one node pool lacks matching inventory hosts."))
 
-        gpu_enabled = str(values.get("feature-gpu")).lower() == "true"
-        gpu_hosts = [host for host in hosts if host.get("gpu") is True or "gpu" in str(host.get("resource_class", "")).lower()]
+        gpu_enabled = str(_nested(values, ("clusterLabels", "massopen.cloud/feature-gpu"))).lower() == "true"
+        gpu_hosts = [
+            host
+            for host in hosts
+            if host.get("gpu") is True
+            or any(
+                re.search(r"(?:^|[-_])(?:gpu|a100|h100)(?:[-_]|\d|$)", str(value).lower())
+                for value in (
+                    host.get("resource_class"),
+                    host.get("flavor"),
+                    infra.hardware_resource_classes.value.get(host.get("node_name")),
+                )
+            )
+        ]
+        gpu_observed = {
+            "clusterLabels.massopen.cloud/feature-gpu": str(gpu_enabled).lower(),
+            "gpu_host_count": len(gpu_hosts),
+        }
+        gpu_evidence = {"gpu_hosts": [host.get("name") for host in gpu_hosts]}
         if not gpu_enabled or gpu_hosts:
-            results.append(_result("workload.gpu_without_hosts", "workload", "CCI-MOC/oac-apps", path, "declared_in_main", "info", {"feature-gpu": str(gpu_enabled).lower()}, {"gpu_host_count": len(gpu_hosts)}, "GPU configuration is consistent with the inventory."))
+            results.append(_result("workload.gpu_without_hosts", "workload", "CCI-MOC/oac-apps", path, "declared_in_main", "info", {"gpu_host_count": "At least 1 when clusterLabels.massopen.cloud/feature-gpu is true"}, gpu_observed, "GPU configuration is consistent with the inventory.", evidence=gpu_evidence))
         else:
-            results.append(_result("workload.gpu_without_hosts", "workload", "CCI-MOC/oac-apps", path, "value_mismatch", "advisory", {"feature-gpu": "true"}, {"gpu_host_count": 0}, "feature-gpu is enabled, but no GPU hosts were found in the inventory."))
+            results.append(_result("workload.gpu_without_hosts", "workload", "CCI-MOC/oac-apps", path, "value_mismatch", "advisory", {"gpu_host_count": "At least 1 when clusterLabels.massopen.cloud/feature-gpu is true"}, gpu_observed, "clusterLabels.massopen.cloud/feature-gpu is true, but no GPU hosts were found in the inventory.", evidence=gpu_evidence))
 
         keycloak = _keycloak_workload_check(client, environment, workload, values, hub_values_file, progress)
         if keycloak:

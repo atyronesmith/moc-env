@@ -1,54 +1,76 @@
 bu-ist-demo · hub + workload · repo config as of 2026-11-16 12:34 UTC
 
 RESULT: 8 blocking gaps (workload 3) · 0 advisories · 16 of 29 checks pass
-5 checks blocked until Create the missing hosted-cluster values file from the closest existing environment; set the cluster name, parent hub, networking, and node pools before adding components.
-Pull requests: skipped because this run is unauthenticated; use --prs to inspect them.
+5 checks blocked by action 7
+Pull requests: skipped (--no-prs)
 
 
 HUB PHASES
 PHASE                        HUB bu-ist-demo-infra
 1 Host inventory entry       [ok] 1/1 checks
 2 Hub image inventory and…   [ok] 3/3 checks
-3 Discovery image reference  [warn] 0/1 checks
+3 Discovery image reference  [fail] 0/1 checks
 4 Keycloak OIDC client       [ok] 1/1 checks
 5 GitOps values and apps     [fail] 4/8 checks
 
 WORKLOAD PHASES
 PHASE                        WORKLOAD bu-ist-demo-workload0
 1 Host inventory entry       [ok] 1/1 checks
-2 Hub agent discovery ISO    [warn] 0/1 checks
-3 Agent ISO boot             [--]
-4 Agent visibility           [--]
+2 Hub agent discovery ISO    [fail] 0/1 checks
+3 Agent ISO boot             verify by hand
+4 Agent visibility           verify by hand
 5 Agent labels and approval  [ok] 1/1 checks
 6 oac-apps values            [fail] 0/7 checks, 5 blocked
 7 Shared-service…            [ok] 3/3 checks
 
 NEXT
   1. [oac-infra] Generate and publish a hub-specific discovery ISO, then replace the generic
-  boot_image_url for every host in the hub cluster group.
+  boot_image_url for every host in the hub cluster group. boot_image_url is
+  http://10.2.0.82/boot/discovery.iso; expected cluster_specific_image
+  bu-ist-demo-infra-agent-discovery.iso.
        guide: docs/infra-cluster-deployment.md → Cluster Deployment
   2. [oac-apps] Create or complete the hub hosted-cluster defaults file at
-  hosted-clusters/bu-ist-demo-infra/values.yaml in CCI-MOC/oac-infra. (after 1)
+  hosted-clusters/bu-ist-demo-infra/values.yaml in CCI-MOC/oac-infra.
+  hosted-clusters/bu-ist-demo-infra/values.yaml is missing; expected present. (after 1)
        guide: docs/infra-cluster-deployment.md → Cluster Configuration
   3. [oac-apps] Copy the required local-cluster component files from an existing hub environment
-  and adjust cluster-specific names and addresses. (after 2)
+  and adjust cluster-specific names and addresses.
+  values/bu-ist-demo-infra/local-cluster/acm.yaml is missing; expected present.
+  values/bu-ist-demo-infra/local-cluster/acm-placements.yaml is missing; expected present.
+  values/bu-ist-demo-infra/local-cluster/cert-manager.yaml is missing; expected present.
+  values/bu-ist-demo-infra/local-cluster/cluster-certificates.yaml is missing; expected present.
+  values/bu-ist-demo-infra/local-cluster/cluster-version.yaml is missing; expected present.
+  values/bu-ist-demo-infra/local-cluster/external-dns-operator.yaml is missing; expected
+  present. values/bu-ist-demo-infra/local-cluster/external-secrets.yaml is missing; expected
+  present. values/bu-ist-demo-infra/local-cluster/hcp-config.yaml is missing; expected present.
+  values/bu-ist-demo-infra/local-cluster/keycloak-oauth.yaml is missing; expected present.
+  values/bu-ist-demo-infra/local-cluster/metallb.yaml is missing; expected present.
+  values/bu-ist-demo-infra/local-cluster/openshift-gitops.yaml is missing; expected present.
+  values/bu-ist-demo-infra/local-cluster/portworx.yaml is missing; expected present.
+  values/bu-ist-demo-infra/local-cluster/user-workload-monitoring.yaml is missing; expected
+  present. (after 2)
        guide: docs/infra-cluster-deployment.md → Cluster Configuration
   4. [oac-apps] Create or complete values/bu-ist-demo-infra/hcp-config.yaml in CCI-MOC/oac-infra
-  for hub-wide HCP and secret-selector values. (after 2)
+  for hub-wide HCP and secret-selector values. values/bu-ist-demo-infra/hcp-config.yaml is
+  missing; expected present. (after 2)
        guide: docs/infra-cluster-deployment.md → Cluster Configuration
   5. [oac-apps] Add Argo CD application manifests for the hub after its hosted-cluster, hub-wide
-  component, and local-cluster values are present, and reference the correct clusters. (after 2,
-  4, 3)
+  component, and local-cluster values are present, and reference the correct clusters.
+  apps/bu-ist-demo-infra/keycloak-oauth.yaml is missing; expected present. (after 2, 4, 3)
        guide: docs/infra-cluster-deployment.md → Cluster Configuration
   6. [oac-infra] Generate and publish the parent hub's agent discovery ISO, then replace the
-  generic boot_image_url for every host in the workload cluster group. (after 1)
+  generic boot_image_url for every host in the workload cluster group. boot_image_url is
+  http://10.2.0.82/boot/discovery.iso; expected cluster_specific_image
+  bu-ist-demo-infra-agent-discovery.iso. (after 1)
        guide: docs/workload-cluster-deployment.md → Infrastructure Configuration
   7. [oac-apps] Create the missing hosted-cluster values file from the closest existing
   environment; set the cluster name, parent hub, networking, and node pools before adding
-  components. (after 2)
+  components. hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is missing;
+  expected present. (after 2)
        guide: docs/workload-cluster-deployment.md → Cluster Deployment and Configuration
   8. [oac-apps] Create the workload component-values directory, starting with hcp-config.yaml
-  and only the shared components this workload needs. (after 7)
+  and only the shared components this workload needs. matched_file_count is 0; expected At least
+  one matching path. (after 7)
        guide: docs/workload-cluster-deployment.md → Cluster Deployment and Configuration
 
 NOT CHECKED — verify by hand:
@@ -58,9 +80,6 @@ NOT CHECKED — verify by hand:
   create_agent_install_media and copy the bu-ist-demo-infra ISO to the bastion host; Bootstrap
   Argo CD for bu-ist-demo-infra; Agents visible in hardware-inventory; Agents labelled and
   approved
-
-PULL REQUESTS
-0 open PRs touch this environment.
 
 Sources
 Repository                 Ref      Commit

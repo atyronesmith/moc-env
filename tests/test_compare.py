@@ -206,7 +206,7 @@ all:
         self.assertEqual(report["environment"]["name"], "bu-ist-demo")
         self.assertIn("matches_main", report["summary"]["state_counts"])
         self.assertIn("pr_open", report["summary"]["state_counts"])
-        self.assertEqual(stderr, "")
+        self.assertEqual(stderr, "GitHub API: 0 requests, 0 counted against quota, 0 from cache\n")
 
     def test_cli_check_infra_markdown_dispatch_and_output_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -423,7 +423,7 @@ all:
         self.assertEqual(report["environment"]["name"], "bu-ist-demo")
         self.assertIn("matches_main", report["summary"]["state_counts"])
         self.assertIn("pr_open", report["summary"]["state_counts"])
-        self.assertEqual(stderr, "")
+        self.assertEqual(stderr, "GitHub API: 0 requests, 0 counted against quota, 0 from cache\n")
 
     def test_cli_check_workload_markdown_dispatch_and_output_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

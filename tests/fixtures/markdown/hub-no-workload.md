@@ -1,8 +1,8 @@
 # dizzy — environment configuration status
 
-**10 blocking gaps, 0 advisories, and 3 of 14 checks pass; 1 check blocked until Edit CCI-MOC/oac-infra at hub-images/group_vars/<hub>/vars.yml and provide cluster_domain_name, base_domain, machine_network, api_ip, ingress_ip, and dns_ip.**
+**10 blocking gaps, 0 advisories, and 3 of 14 checks pass; 1 check blocked by action 1**
 
-Generated 2026-11-16 12:34 UTC · MOC issue: not set — pass `--issue N` · Pull requests skipped because this run is unauthenticated; use --prs
+Generated 2026-11-16 12:34 UTC · MOC issue: not set — pass `--issue N`
 
 ## Phase summary
 
@@ -18,25 +18,25 @@ Generated 2026-11-16 12:34 UTC · MOC issue: not set — pass `--issue N` · Pul
 
 ## Next actions
 
-1. **oac-infra** — [`hub-images/group_vars/dizzy-infra/vars.yml`](https://github.com/CCI-MOC/oac-infra/tree/main): Edit CCI-MOC/oac-infra at hub-images/group_vars/dizzy-infra/vars.yml and provide cluster_domain_name, base_domain, machine_network, api_ip, ingress_ip, and dns_ip.
+1. **oac-infra** — [`hub-images/group_vars/dizzy-infra/vars.yml`](https://github.com/CCI-MOC/oac-infra/tree/main): Edit CCI-MOC/oac-infra at hub-images/group_vars/dizzy-infra/vars.yml and provide cluster_domain_name, base_domain, machine_network, api_ip, ingress_ip, and dns_ip. cluster_domain_name is not found; expected present. base_domain is not found; expected present. machine_network is not found; expected present. api_ip is not found; expected present. ingress_ip is not found; expected present. dns_ip is not found; expected present.
    Guide: [docs/infra-cluster-deployment.md → Cluster Deployment](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-deployment)
-2. **oac-infra** — [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/tree/main): Generate and publish a hub-specific discovery ISO, then replace the generic boot_image_url for every host in the hub cluster group. (after 1)
+2. **oac-infra** — [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/tree/main): Generate and publish a hub-specific discovery ISO, then replace the generic boot_image_url for every host in the hub cluster group. boot_image_url is none; expected cluster_specific_image dizzy-infra-agent-discovery.iso. (after 1)
    Guide: [docs/infra-cluster-deployment.md → Cluster Deployment](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-deployment)
-3. **moc-keycloak** — [`main.tf`](https://github.com/CCI-MOC/moc-keycloak/blob/main/main.tf): Edit CCI-MOC/moc-keycloak at main.tf and add the hub's OIDC client, redirect URI, and secret reference. Set cluster_name = `dizzy-infra`, openshift_redirect_uri = `https://oauth-openshift.apps.dizzy.int.massopen.cloud/oauth2callback/mocsso`, and client_secret_name = `cluster/dizzy-infra/keycloak-oidc`. (after 2)
+3. **moc-keycloak** — [`main.tf`](https://github.com/CCI-MOC/moc-keycloak/blob/main/main.tf): Edit CCI-MOC/moc-keycloak at main.tf and add the hub's OIDC client, redirect URI, and secret reference. Set cluster_name = `dizzy-infra`, openshift_redirect_uri = `https://oauth-openshift.apps.dizzy.int.massopen.cloud/oauth2callback/mocsso`, and client_secret_name = `cluster/dizzy-infra/keycloak-oidc`. client is not found; expected dizzy-infra. redirect_uri is not found; expected https://oauth-openshift.apps.dizzy.int.massopen.cloud/oauth2callback/mocsso. secret_name is not found; expected cluster/dizzy-infra/keycloak-oidc. (after 2)
    Guide: [docs/infra-cluster-deployment.md → Cluster Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-configuration)
-4. **oac-apps** — [`hosted-clusters/dizzy-infra/values.yaml`](https://github.com/CCI-MOC/oac-apps/tree/main): Create or complete the hub hosted-cluster defaults file at hosted-clusters/dizzy-infra/values.yaml in CCI-MOC/oac-infra. (after 2)
+4. **oac-apps** — [`hosted-clusters/dizzy-infra/values.yaml`](https://github.com/CCI-MOC/oac-apps/tree/main): Create or complete the hub hosted-cluster defaults file at hosted-clusters/dizzy-infra/values.yaml in CCI-MOC/oac-infra. hosted-clusters/dizzy-infra/values.yaml is missing; expected present. (after 2)
    Guide: [docs/infra-cluster-deployment.md → Cluster Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-configuration)
-5. **everpure-moc** — [`ansible/group_vars/all/realms.yaml`](https://github.com/CCI-MOC/everpure-moc/tree/main): Add or correct the hub realm in everpure-moc realms.yaml. (after 4)
+5. **everpure-moc** — [`ansible/group_vars/all/realms.yaml`](https://github.com/CCI-MOC/everpure-moc/tree/main): Add or correct the hub realm in everpure-moc realms.yaml. name is not found; expected dizzy-infra. subnet_vlan is not found; expected present. subnet_prefix is not found; expected present. s3_endpoint is not found; expected present. (after 4)
    Guide: [docs/infra-cluster-deployment.md → Cluster Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-configuration)
-6. **oac-apps** — [`values/dizzy-infra/local-cluster`](https://github.com/CCI-MOC/oac-apps/tree/main): Copy the required local-cluster component files from an existing hub environment and adjust cluster-specific names and addresses. (after 4)
+6. **oac-apps** — [`values/dizzy-infra/local-cluster`](https://github.com/CCI-MOC/oac-apps/tree/main): Copy the required local-cluster component files from an existing hub environment and adjust cluster-specific names and addresses. values/dizzy-infra/local-cluster/acm.yaml is missing; expected present. values/dizzy-infra/local-cluster/acm-placements.yaml is missing; expected present. values/dizzy-infra/local-cluster/cert-manager.yaml is missing; expected present. values/dizzy-infra/local-cluster/cluster-certificates.yaml is missing; expected present. values/dizzy-infra/local-cluster/cluster-version.yaml is missing; expected present. values/dizzy-infra/local-cluster/external-dns-operator.yaml is missing; expected present. values/dizzy-infra/local-cluster/external-secrets.yaml is missing; expected present. values/dizzy-infra/local-cluster/hcp-config.yaml is missing; expected present. values/dizzy-infra/local-cluster/keycloak-oauth.yaml is missing; expected present. values/dizzy-infra/local-cluster/metallb.yaml is missing; expected present. values/dizzy-infra/local-cluster/openshift-gitops.yaml is missing; expected present. values/dizzy-infra/local-cluster/portworx.yaml is missing; expected present. values/dizzy-infra/local-cluster/user-workload-monitoring.yaml is missing; expected present. (after 4)
    Guide: [docs/infra-cluster-deployment.md → Cluster Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-configuration)
-7. **moc-aws** — [`main.tf`](https://github.com/CCI-MOC/moc-aws/blob/main/main.tf): Add or correct the hub entry in moc-aws local.openshift_oidc_clusters. (after 4)
+7. **moc-aws** — [`main.tf`](https://github.com/CCI-MOC/moc-aws/blob/main/main.tf): Add or correct the hub entry in moc-aws local.openshift_oidc_clusters. cluster_name is not found; expected dizzy-infra. (after 4)
    Guide: [docs/infra-cluster-deployment.md → Cluster Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-configuration)
-8. **moc-aws** — [`cert-manager-policies.tf`](https://github.com/CCI-MOC/moc-aws/blob/main/cert-manager-policies.tf): Add a cert-manager policy entry for the hub. (after 4)
+8. **moc-aws** — [`cert-manager-policies.tf`](https://github.com/CCI-MOC/moc-aws/blob/main/cert-manager-policies.tf): Add a cert-manager policy entry for the hub. policy entry is not found; expected covers dizzy-infra. (after 4)
    Guide: [docs/infra-cluster-deployment.md → Cluster Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-configuration)
-9. **oac-apps** — [`values/dizzy-infra`](https://github.com/CCI-MOC/oac-apps/tree/main): Create or complete values/dizzy-infra/hcp-config.yaml in CCI-MOC/oac-infra for hub-wide HCP and secret-selector values. (after 4)
+9. **oac-apps** — [`values/dizzy-infra`](https://github.com/CCI-MOC/oac-apps/tree/main): Create or complete values/dizzy-infra/hcp-config.yaml in CCI-MOC/oac-infra for hub-wide HCP and secret-selector values. values/dizzy-infra/hcp-config.yaml is missing; expected present. (after 4)
    Guide: [docs/infra-cluster-deployment.md → Cluster Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-configuration)
-10. **oac-apps** — [`apps/dizzy-infra`](https://github.com/CCI-MOC/oac-apps/tree/main): Add Argo CD application manifests for the hub after its hosted-cluster, hub-wide component, and local-cluster values are present, and reference the correct clusters. (after 4, 9, 6, 3)
+10. **oac-apps** — [`apps/dizzy-infra`](https://github.com/CCI-MOC/oac-apps/tree/main): Add Argo CD application manifests for the hub after its hosted-cluster, hub-wide component, and local-cluster values are present, and reference the correct clusters. apps/dizzy-infra/keycloak-oauth.yaml is missing; expected present. (after 4, 9, 6, 3)
    Guide: [docs/infra-cluster-deployment.md → Cluster Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-configuration)
 
 ## Not checked — verify by hand
@@ -52,9 +52,9 @@ Generated 2026-11-16 12:34 UTC · MOC issue: not set — pass `--issue N` · Pul
 ## Details
 
 <details>
-<summary>✅ declared_in_main dizzy-infra host inventory — The inventory contains a dizzy-infra group with 1 hosts.</summary>
+<summary>✅ dizzy-infra host inventory — The inventory contains a dizzy-infra group with 1 hosts.</summary>
 
-Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml) @ 2222222
+Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml) @ main (2222222)
 
 | Field | Observed |
 |---|---|
@@ -70,9 +70,9 @@ Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com
 </details>
 
 <details>
-<summary>✅ declared_in_main Hub image inventory — The hub-image inventory contains the all.children.dizzy-infra key.</summary>
+<summary>✅ Hub image inventory — The hub-image inventory contains the all.children.dizzy-infra key.</summary>
 
-Source: CCI-MOC/oac-infra · [`hub-images/inventory.yml`](https://github.com/CCI-MOC/oac-infra/blob/main/hub-images/inventory.yml) @ 2222222
+Source: CCI-MOC/oac-infra · [`hub-images/inventory.yml`](https://github.com/CCI-MOC/oac-infra/blob/main/hub-images/inventory.yml) @ main (2222222)
 
 | Field | Observed |
 |---|---|
@@ -81,9 +81,9 @@ Source: CCI-MOC/oac-infra · [`hub-images/inventory.yml`](https://github.com/CCI
 </details>
 
 <details open>
-<summary>❌ missing Hub image variables — The hub-image variable file is absent from main.</summary>
+<summary>❌ Hub image variables — The hub-image variable file is absent from main.</summary>
 
-Source: CCI-MOC/oac-infra · [`hub-images/group_vars/dizzy-infra/vars.yml`](https://github.com/CCI-MOC/oac-infra/tree/main) @ 2222222
+Source: CCI-MOC/oac-infra · [`hub-images/group_vars/dizzy-infra/vars.yml`](https://github.com/CCI-MOC/oac-infra/tree/main) @ main (2222222)
 
 | Field | Expected | Observed |
 |---|---|---|
@@ -97,9 +97,9 @@ Source: CCI-MOC/oac-infra · [`hub-images/group_vars/dizzy-infra/vars.yml`](http
 </details>
 
 <details open>
-<summary>• blocked Hub moc-dns records — Blocked until Hub image variables is complete.</summary>
+<summary>• Hub moc-dns records — Blocked until Hub image variables is complete.</summary>
 
-Source: CCI-MOC/moc-dns · [`zonefiles/`](https://github.com/CCI-MOC/moc-dns/blob/main/zonefiles/) @ —
+Source: CCI-MOC/moc-dns · [`zonefiles/`](https://github.com/CCI-MOC/moc-dns/blob/main/zonefiles/) @ main (—)
 
 | Field | Expected | Observed |
 |---|---|---|
@@ -110,22 +110,22 @@ Source: CCI-MOC/moc-dns · [`zonefiles/`](https://github.com/CCI-MOC/moc-dns/blo
 </details>
 
 <details open>
-<summary>❌ missing dizzy-infra boot image — No boot image URL is inherited by the cluster host group.</summary>
+<summary>❌ dizzy-infra boot image — No boot image URL is inherited by the cluster host group.</summary>
 
-Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/tree/main) @ 2222222
+Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/tree/main) @ main (2222222)
 
 Status rule: The boot-image filename must contain the full cluster name `dizzy-infra`; generic `discovery.iso` does not satisfy this rule.
 
 | Field | Expected | Observed |
 |---|---|---|
-| `value` | `Cluster-specific discovery image for dizzy-infra` | `—` |
+| `boot_image_url` | `cluster_specific_image dizzy-infra-agent-discovery.iso` | `none` |
 
 </details>
 
 <details open>
-<summary>❌ missing Hub OIDC client — No Keycloak OIDC client block exists for this hub.</summary>
+<summary>❌ Hub OIDC client — No Keycloak OIDC client block exists for this hub.</summary>
 
-Source: CCI-MOC/moc-keycloak · [`main.tf`](https://github.com/CCI-MOC/moc-keycloak/blob/main/main.tf) @ 4444444
+Source: CCI-MOC/moc-keycloak · [`main.tf`](https://github.com/CCI-MOC/moc-keycloak/blob/main/main.tf) @ main (4444444)
 
 | Field | Expected | Observed |
 |---|---|---|
@@ -136,9 +136,9 @@ Source: CCI-MOC/moc-keycloak · [`main.tf`](https://github.com/CCI-MOC/moc-keycl
 </details>
 
 <details open>
-<summary>❌ missing Hub hosted-cluster defaults — No merged main paths were found for the default values for hosted clusters on this hub cluster.</summary>
+<summary>❌ Hub hosted-cluster defaults — No merged main paths were found for the default values for hosted clusters on this hub cluster.</summary>
 
-Source: CCI-MOC/oac-apps · [`hosted-clusters/dizzy-infra/values.yaml`](https://github.com/CCI-MOC/oac-apps/tree/main) @ 3333333
+Source: CCI-MOC/oac-apps · [`hosted-clusters/dizzy-infra/values.yaml`](https://github.com/CCI-MOC/oac-apps/tree/main) @ main (3333333)
 
 | Field | Expected | Observed |
 |---|---|---|
@@ -147,9 +147,9 @@ Source: CCI-MOC/oac-apps · [`hosted-clusters/dizzy-infra/values.yaml`](https://
 </details>
 
 <details open>
-<summary>❌ missing Hub-wide component values — No merged main paths were found for hub-wide HCP and secret-selector values.</summary>
+<summary>❌ Hub-wide component values — No merged main paths were found for hub-wide HCP and secret-selector values.</summary>
 
-Source: CCI-MOC/oac-apps · [`values/dizzy-infra`](https://github.com/CCI-MOC/oac-apps/tree/main) @ 3333333
+Source: CCI-MOC/oac-apps · [`values/dizzy-infra`](https://github.com/CCI-MOC/oac-apps/tree/main) @ main (3333333)
 
 | Field | Expected | Observed |
 |---|---|---|
@@ -158,9 +158,9 @@ Source: CCI-MOC/oac-apps · [`values/dizzy-infra`](https://github.com/CCI-MOC/oa
 </details>
 
 <details open>
-<summary>❌ missing Hub local-cluster values — No merged main paths were found for the hub cluster's local operator and shared-service values.</summary>
+<summary>❌ Hub local-cluster values — No merged main paths were found for the hub cluster's local operator and shared-service values.</summary>
 
-Source: CCI-MOC/oac-apps · [`values/dizzy-infra/local-cluster`](https://github.com/CCI-MOC/oac-apps/tree/main) @ 3333333
+Source: CCI-MOC/oac-apps · [`values/dizzy-infra/local-cluster`](https://github.com/CCI-MOC/oac-apps/tree/main) @ main (3333333)
 
 | Field | Expected | Observed |
 |---|---|---|
@@ -203,9 +203,9 @@ None.
 </details>
 
 <details open>
-<summary>❌ missing Hub ArgoCD applications — No merged main paths were found for direct ArgoCD applications applied on the hub cluster.</summary>
+<summary>❌ Hub ArgoCD applications — No merged main paths were found for direct ArgoCD applications applied on the hub cluster.</summary>
 
-Source: CCI-MOC/oac-apps · [`apps/dizzy-infra`](https://github.com/CCI-MOC/oac-apps/tree/main) @ 3333333
+Source: CCI-MOC/oac-apps · [`apps/dizzy-infra`](https://github.com/CCI-MOC/oac-apps/tree/main) @ main (3333333)
 
 | Field | Expected | Observed |
 |---|---|---|
@@ -214,21 +214,23 @@ Source: CCI-MOC/oac-apps · [`apps/dizzy-infra`](https://github.com/CCI-MOC/oac-
 </details>
 
 <details open>
-<summary>❌ missing Hub Pure storage realm — No Pure storage realm named dizzy-infra was found.</summary>
+<summary>❌ Hub Pure storage realm — No Pure storage realm named dizzy-infra was found.</summary>
 
-Source: CCI-MOC/everpure-moc · [`ansible/group_vars/all/realms.yaml`](https://github.com/CCI-MOC/everpure-moc/tree/main) @ 5555555
+Source: CCI-MOC/everpure-moc · [`ansible/group_vars/all/realms.yaml`](https://github.com/CCI-MOC/everpure-moc/tree/main) @ main (5555555)
 
 | Field | Expected | Observed |
 |---|---|---|
 | `name` | `dizzy-infra` | `—` |
-| `fields` | `subnet_vlan, subnet_prefix, s3_endpoint` | `—` |
+| `subnet_vlan` | `present` | `—` |
+| `subnet_prefix` | `present` | `—` |
+| `s3_endpoint` | `present` | `—` |
 
 </details>
 
 <details open>
-<summary>❌ missing Hub moc-aws OIDC cluster — No moc-aws OIDC cluster entry has cluster_name dizzy-infra.</summary>
+<summary>❌ Hub moc-aws OIDC cluster — No moc-aws OIDC cluster entry has cluster_name dizzy-infra.</summary>
 
-Source: CCI-MOC/moc-aws · [`main.tf`](https://github.com/CCI-MOC/moc-aws/blob/main/main.tf) @ 6666666
+Source: CCI-MOC/moc-aws · [`main.tf`](https://github.com/CCI-MOC/moc-aws/blob/main/main.tf) @ main (6666666)
 
 | Field | Expected | Observed |
 |---|---|---|
@@ -237,28 +239,24 @@ Source: CCI-MOC/moc-aws · [`main.tf`](https://github.com/CCI-MOC/moc-aws/blob/m
 </details>
 
 <details open>
-<summary>❌ missing Hub moc-aws cert-manager policy — No cert-manager policy entry names dizzy-infra.</summary>
+<summary>❌ Hub moc-aws cert-manager policy — No cert-manager policy entry names dizzy-infra.</summary>
 
-Source: CCI-MOC/moc-aws · [`cert-manager-policies.tf`](https://github.com/CCI-MOC/moc-aws/blob/main/cert-manager-policies.tf) @ 6666666
+Source: CCI-MOC/moc-aws · [`cert-manager-policies.tf`](https://github.com/CCI-MOC/moc-aws/blob/main/cert-manager-policies.tf) @ main (6666666)
 
 | Field | Expected | Observed |
 |---|---|---|
-| `cluster` | `dizzy-infra` | `—` |
+| `policy entry` | `covers dizzy-infra` | `—` |
 
 </details>
 
 <details>
-<summary>✅ declared_in_main Workload address uniqueness — No workload address is used by another cluster.</summary>
+<summary>✅ Workload address uniqueness — No workload address is used by another cluster.</summary>
 
-Source: CCI-MOC/oac-apps · [`hosted-clusters/`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/) @ 3333333
+Source: CCI-MOC/oac-apps · [`hosted-clusters/`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/) @ main (3333333)
 
 </details>
 
-## Pull requests
-
-**0 open PRs touch this environment.**
-
-None.
+Pull requests: skipped (--no-prs)
 
 ## Sources
 

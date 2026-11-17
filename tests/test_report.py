@@ -46,7 +46,7 @@ class ReportRenderingTest(unittest.TestCase):
             {"id": "one", "state": "declared_in_main"},
             {"id": "two", "state": "declared_in_main"},
             {"id": "three", "state": "unknown"},
-            {"id": "four", "state": "missing"},
+            {"id": "four", "state": "missing", "severity": "blocking"},
         ]
 
         self.assertEqual(
@@ -57,6 +57,75 @@ class ReportRenderingTest(unittest.TestCase):
             _phase_cell(checks[:3], ascii_mode=True),
             "[ok] 2/3 checks, 1 unknown",
         )
+
+    def test_mismatch_severity_controls_result_markers_and_detail_labels(self) -> None:
+        """Blocking mismatches fail; advisory mismatches remain warnings."""
+
+        for severity, marker, summary in (
+            ("blocking", "[fail]", "1 blocking gaps"),
+            ("advisory", "[warn]", "1 advisories"),
+        ):
+            with self.subTest(severity=severity):
+                check = {
+                    **self.report["checks"][0],
+                    "id": "workload.fixture_mismatch",
+                    "check": "Fixture mismatch",
+                    "state": "value_mismatch",
+                    "severity": severity,
+                    "reason": "Observed value differs from the declaration.",
+                    "next_action": "Correct the declaration.",
+                }
+                report = {**self.report, "checks": [check]}
+                text = render_text(report, details=True, ascii_mode=True)
+                self.assertIn(summary, text)
+                self.assertIn(marker + " Fixture mismatch", text)
+                self.assertIn("Observed value differs from the declaration.", text)
+
+                markdown = render_markdown(report)
+                self.assertIn(summary, markdown)
+                self.assertIn("Fixture mismatch", markdown)
+
+    def test_unchecked_phase_is_explicitly_manual(self) -> None:
+        self.assertEqual(_phase_cell([], ascii_mode=False), "verify by hand")
+        self.assertEqual(_phase_cell([], ascii_mode=True), "verify by hand")
+        for rendered in (render_text(self.report), render_markdown(self.report)):
+            self.assertRegex(rendered, r"3 Agent ISO boot[^\n]*verify by hand")
+
+    def test_skipped_and_unavailable_pulls_do_not_claim_zero(self) -> None:
+        for metadata, expected in (
+            ({"pull_requests_skipped": True, "pull_requests_skip_reason": "skipped (--no-prs)"}, "Pull requests: skipped (--no-prs)"),
+            ({"pull_requests_unavailable": "GitHub API request failed (503)"}, "Pull requests: unavailable (GitHub API request failed (503))"),
+        ):
+            for renderer in (render_text, render_markdown):
+                rendered = renderer({**self.report, **metadata})
+                self.assertEqual(rendered.count(expected), 1)
+                self.assertNotIn("0 open PRs", rendered)
+
+    def test_cache_header_identifies_repository_and_fetch_time(self) -> None:
+        report = {**self.report, "metadata": {"generated_at": "2026-11-17T15:00:00Z", "sources": [
+            {"repository": "CCI-MOC/oac-apps", "ref": "pull/246/head", "sha": "625765a" + "0" * 33, "from_cache": True, "fetched_at": "2026-11-16T12:00:00Z"},
+        ]}}
+        for renderer in (render_text, render_markdown):
+            rendered = renderer(report)
+            self.assertIn("oac-apps: from cache, fetched 2026-11-16T12:00:00Z", rendered)
+            self.assertIn("NOT A REPORT ON MAIN" if renderer == render_text else "not a report on main", rendered)
+
+    def test_blocked_summary_references_numbered_action(self) -> None:
+        missing = {**self.report["checks"][0], "id": "workload.hosted_cluster_values", "state": "missing", "severity": "blocking", "blocked_by": []}
+        blocked = {**missing, "id": "workload.api_address_network", "state": "blocked", "severity": "advisory", "blocked_by": [missing["id"]]}
+        report = {**self.report, "checks": [missing, blocked]}
+        for renderer in (render_text, render_markdown):
+            rendered = renderer(report)
+            self.assertIn("1 check blocked by action 1", rendered)
+            self.assertNotIn("blocked until", rendered)
+
+    def test_details_align_network_expected_and_observed_columns(self) -> None:
+        check = {**self.report["checks"][0], "id": "workload.api_address_network", "expected": {"ipAddress": "10.20.3.13", "machine_network": "10.20.26.0/23"}, "actual": "10.20.3.13"}
+        rendered = render_text({**self.report, "checks": [check]}, details=True)
+        ledger = rendered.split("DETAILED CHECKS", 1)[1]
+        self.assertRegex(ledger, r"services\.APIServer\.ipAddress\s+inside 10\.20\.26\.0/23\s+10\.20\.3\.13")
+        self.assertNotRegex(ledger, r"\n\s+value\s+")
+        self.assertIn("(advisory)", rendered)
 
     def test_rendered_actions_substitute_placeholders(self) -> None:
         check = {
