@@ -93,6 +93,13 @@ def configure_diff(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--bws-secret-id-keychain-account", help="macOS Keychain account for the Bitwarden secret UUID (default: current user)")
     parser.add_argument("--env-file", default=".env", help="Optional KEY=VALUE file for non-secret credential selectors (default: .env; absent file is ignored)")
     parser.add_argument("--timeout", type=float, default=20.0, help="GitHub request timeout in seconds")
+    parser.add_argument(
+        "--ref",
+        action="append",
+        default=[],
+        metavar="REPO=REF",
+        help="Read the second environment at a branch or pull-request head (repeatable; first environment stays on main)",
+    )
     cache_mode = parser.add_mutually_exclusive_group()
     cache_mode.add_argument("--offline", action="store_true", help="Serve GitHub responses only from the local response cache")
     cache_mode.add_argument("--refresh", action="store_true", help="Ignore cached GitHub responses and request current data")
@@ -106,6 +113,17 @@ def diff_handler(
     client_factory=GitHubClient,
     token_resolver=None,
 ) -> int:
+    repository_refs: dict[str, str] = {}
+    for repository_ref in getattr(args, "ref", ()):
+        repository, separator, ref = repository_ref.partition("=")
+        if not separator or not repository or not ref:
+            message = "--ref must have the form REPO=REF"
+            parser = getattr(args, "parser", None)
+            if parser is not None:
+                parser.error(message)
+            raise ValueError(message)
+        repository_refs[f"CCI-MOC/{repository}"] = ref
+
     client = client_factory(
         token=(token_resolver or resolve_github_token)(args),
         timeout=args.timeout,
@@ -113,7 +131,11 @@ def diff_handler(
         refresh=args.refresh,
     )
     reports = []
-    for environment_name in (args.environment_a, args.environment_b):
+    for index, environment_name in enumerate((args.environment_a, args.environment_b)):
+        # A diff compares main for the first side with the requested refs for
+        # the second side. Reuse one client so response caching and quota
+        # accounting remain shared across both observations.
+        client.refs = repository_refs if index else {}
         checker = StatusChecker(
             client=client,
             include_prs=False,
@@ -127,6 +149,24 @@ def diff_handler(
         )
         report_data = report.to_dict()
         report_data["diff_facts"] = hosted_dns_facts(client, report_data)
+        # The client retains snapshots from both observations. Keep only the
+        # refs selected for this side so the diff's source metadata cannot
+        # attribute a baseline snapshot to the candidate (or vice versa).
+        selected_sources = {
+            repository: client.ref_for(repository)
+            for repository in {
+                source.get("repository")
+                for source in (report_data.get("metadata") or {}).get("sources", [])
+                if source.get("repository")
+            }
+        }
+        metadata = report_data.get("metadata")
+        if isinstance(metadata, dict):
+            metadata["sources"] = [
+                source
+                for source in metadata.get("sources", [])
+                if source.get("ref") == selected_sources.get(source.get("repository"))
+            ]
         reports.append(report_data)
     diff = build_environment_diff(*reports)
     if args.format == "json":

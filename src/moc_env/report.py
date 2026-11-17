@@ -1794,6 +1794,8 @@ def build_environment_diff(
     scopes: list[dict[str, Any]] = []
     for scope in sorted(set(scopes_a) | set(scopes_b)):
         checks_a, checks_b = scopes_a.get(scope, []), scopes_b.get(scope, [])
+        labels_a = {check.get("id"): check.get("check") or check.get("id") for check in checks_a}
+        labels_b = {check.get("id"): check.get("check") or check.get("id") for check in checks_b}
         pass_states = {"declared_in_main", "requested", "pr_merged"}
         passing_a = {
             check.get("id")
@@ -1811,11 +1813,11 @@ def build_environment_diff(
             {
                 "scope": scope,
                 "checks_only_in_a": [
-                    {"id": check_id}
+                    {"id": check_id, "check": labels_a[check_id]}
                     for check_id in sorted(passing_a - passing_b)
                 ],
                 "checks_only_in_b": [
-                    {"id": check_id}
+                    {"id": check_id, "check": labels_b[check_id]}
                     for check_id in sorted(passing_b - passing_a)
                 ],
                 "files_only_in_a": sorted(files_a - files_b),
@@ -1834,11 +1836,18 @@ def build_environment_diff(
     return {
         "environment_a": report_a["environment"]["name"],
         "environment_b": report_b["environment"]["name"],
-        "metadata": {"sources": list({
-            (source["repository"], source["ref"]): source
-            for report in (report_a, report_b)
-            for source in (report.get("metadata") or {}).get("sources", [])
-        }.values())},
+        "comparison_sources": {
+            "a": (report_a.get("metadata") or {}).get("sources", []),
+            "b": (report_b.get("metadata") or {}).get("sources", []),
+        },
+        "metadata": {
+            "generated_at": (report_b.get("metadata") or {}).get("generated_at"),
+            "sources": list({
+                (source["repository"], source["ref"]): source
+                for report in (report_a, report_b)
+                for source in (report.get("metadata") or {}).get("sources", [])
+            }.values()),
+        },
         "scopes": scopes,
     }
 
@@ -1880,6 +1889,24 @@ def render_diff_text(diff: dict[str, Any]) -> str:
 
 def render_diff_markdown(diff: dict[str, Any]) -> str:
     lines = [f"# {diff['environment_a']} → {diff['environment_b']}", "", *_cache_header_lines(diff)]
+    for side in ("a", "b"):
+        sources = diff.get("comparison_sources", {}).get(side, [])
+        if sources:
+            overrides = [f"`{source['repository']}@{source['ref']}`" for source in sources if source["ref"] != "main"]
+            selection = "; ".join(overrides) + "; other repositories on `main`" if overrides else "all repositories on `main`"
+            lines.extend([f"**{diff[f'environment_{side}']}:** {selection}.", ""])
+    lines.extend([
+        "This report compares the configuration recorded in Git repositories for two environments. "
+        "It is not a live cluster health check or proof that either cluster is deployed.",
+        "",
+        "Environment-specific path prefixes are normalized so equivalent files can be compared. "
+        "Differences are not automatically defects: hardware, enabled components, and deployment "
+        "choices can legitimately vary. A check passing only on one side is a prompt for review; "
+        "use the individual status reports for severity, explanations, and next actions.",
+        "",
+    ])
+    if (diff.get("metadata") or {}).get("generated_at"):
+        lines.extend([f"Generated {_generated_timestamp(diff)}.", ""])
     for scope in diff["scopes"]:
         lines.extend([f"## {scope['scope']}", ""])
         lines.extend(_markdown_table(
@@ -1887,11 +1914,11 @@ def render_diff_markdown(diff: dict[str, Any]) -> str:
             [
                 [
                     f"Only in {diff['environment_a']}",
-                    ", ".join(item["id"] for item in scope["checks_only_in_a"]) or "—",
+                    ", ".join(item.get("check", item["id"]) for item in scope["checks_only_in_a"]) or "—",
                 ],
                 [
                     f"Only in {diff['environment_b']}",
-                    ", ".join(item["id"] for item in scope["checks_only_in_b"]) or "—",
+                    ", ".join(item.get("check", item["id"]) for item in scope["checks_only_in_b"]) or "—",
                 ],
             ],
         ))
@@ -1908,6 +1935,15 @@ def render_diff_markdown(diff: dict[str, Any]) -> str:
                 ["Fact", diff["environment_a"], diff["environment_b"]],
                 [[key, _diff_plain_value(values["a"]), _diff_plain_value(values["b"])] for key, values in facts.items()],
             ))
+    source_rows = [
+        [diff[f"environment_{side}"], source["repository"], source["ref"],
+         MarkdownCell(f"[{source['sha'][:7]}](https://github.com/{source['repository']}/commit/{source['sha']})")]
+        for side in ("a", "b")
+        for source in diff.get("comparison_sources", {}).get(side, [])
+    ]
+    if source_rows:
+        lines.extend(["## Compared source snapshots", ""])
+        lines.extend(_markdown_table(["Environment", "Repository", "Ref", "Commit"], source_rows))
     return "\n".join(lines).rstrip() + "\n"
 
 
