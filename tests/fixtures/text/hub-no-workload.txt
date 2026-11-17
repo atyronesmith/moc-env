@@ -1,8 +1,8 @@
 dizzy · hub · repo config as of 2026-11-16 12:34 UTC
 
 RESULT: 10 blocking gaps · 0 advisories · 3 of 14 checks pass
-1 check blocked until Edit CCI-MOC/oac-infra at hub-images/group_vars/<hub>/vars.yml and provide cluster_domain_name, base_domain, machine_network, api_ip, ingress_ip, and dns_ip.
-Pull requests: skipped because this run is unauthenticated; use --prs to inspect them.
+1 check blocked by action 1
+Pull requests: skipped (--no-prs)
 
 
 HUB PHASES
@@ -16,33 +16,59 @@ PHASE                        HUB dizzy-infra
 NEXT
   1. [oac-infra] Edit CCI-MOC/oac-infra at hub-images/group_vars/dizzy-infra/vars.yml and
   provide cluster_domain_name, base_domain, machine_network, api_ip, ingress_ip, and dns_ip.
+  cluster_domain_name is not found; expected present. base_domain is not found; expected
+  present. machine_network is not found; expected present. api_ip is not found; expected
+  present. ingress_ip is not found; expected present. dns_ip is not found; expected present.
        guide: docs/infra-cluster-deployment.md → Cluster Deployment
   2. [oac-infra] Generate and publish a hub-specific discovery ISO, then replace the generic
-  boot_image_url for every host in the hub cluster group. (after 1)
+  boot_image_url for every host in the hub cluster group. boot_image_url is none; expected
+  cluster_specific_image dizzy-infra-agent-discovery.iso. (after 1)
        guide: docs/infra-cluster-deployment.md → Cluster Deployment
   3. [moc-keycloak] Edit CCI-MOC/moc-keycloak at main.tf and add the hub's OIDC client, redirect
   URI, and secret reference. Set cluster_name = `dizzy-infra`, openshift_redirect_uri =
   `https://oauth-openshift.apps.dizzy.int.massopen.cloud/oauth2callback/mocsso`, and
-  client_secret_name = `cluster/dizzy-infra/keycloak-oidc`. (after 2)
+  client_secret_name = `cluster/dizzy-infra/keycloak-oidc`. client is not found; expected
+  dizzy-infra. redirect_uri is not found; expected
+  https://oauth-openshift.apps.dizzy.int.massopen.cloud/oauth2callback/mocsso. secret_name is
+  not found; expected cluster/dizzy-infra/keycloak-oidc. (after 2)
        guide: docs/infra-cluster-deployment.md → Cluster Configuration
   4. [oac-apps] Create or complete the hub hosted-cluster defaults file at
-  hosted-clusters/dizzy-infra/values.yaml in CCI-MOC/oac-infra. (after 2)
+  hosted-clusters/dizzy-infra/values.yaml in CCI-MOC/oac-infra.
+  hosted-clusters/dizzy-infra/values.yaml is missing; expected present. (after 2)
        guide: docs/infra-cluster-deployment.md → Cluster Configuration
-  5. [everpure-moc] Add or correct the hub realm in everpure-moc realms.yaml. (after 4)
+  5. [everpure-moc] Add or correct the hub realm in everpure-moc realms.yaml. name is not found;
+  expected dizzy-infra. subnet_vlan is not found; expected present. subnet_prefix is not found;
+  expected present. s3_endpoint is not found; expected present. (after 4)
        guide: docs/infra-cluster-deployment.md → Cluster Configuration
   6. [oac-apps] Copy the required local-cluster component files from an existing hub environment
-  and adjust cluster-specific names and addresses. (after 4)
+  and adjust cluster-specific names and addresses. values/dizzy-infra/local-cluster/acm.yaml is
+  missing; expected present. values/dizzy-infra/local-cluster/acm-placements.yaml is missing;
+  expected present. values/dizzy-infra/local-cluster/cert-manager.yaml is missing; expected
+  present. values/dizzy-infra/local-cluster/cluster-certificates.yaml is missing; expected
+  present. values/dizzy-infra/local-cluster/cluster-version.yaml is missing; expected present.
+  values/dizzy-infra/local-cluster/external-dns-operator.yaml is missing; expected present.
+  values/dizzy-infra/local-cluster/external-secrets.yaml is missing; expected present.
+  values/dizzy-infra/local-cluster/hcp-config.yaml is missing; expected present.
+  values/dizzy-infra/local-cluster/keycloak-oauth.yaml is missing; expected present.
+  values/dizzy-infra/local-cluster/metallb.yaml is missing; expected present.
+  values/dizzy-infra/local-cluster/openshift-gitops.yaml is missing; expected present.
+  values/dizzy-infra/local-cluster/portworx.yaml is missing; expected present.
+  values/dizzy-infra/local-cluster/user-workload-monitoring.yaml is missing; expected present.
+  (after 4)
        guide: docs/infra-cluster-deployment.md → Cluster Configuration
-  7. [moc-aws] Add or correct the hub entry in moc-aws local.openshift_oidc_clusters. (after 4)
+  7. [moc-aws] Add or correct the hub entry in moc-aws local.openshift_oidc_clusters.
+  cluster_name is not found; expected dizzy-infra. (after 4)
        guide: docs/infra-cluster-deployment.md → Cluster Configuration
-  8. [moc-aws] Add a cert-manager policy entry for the hub. (after 4)
+  8. [moc-aws] Add a cert-manager policy entry for the hub. policy entry is not found; expected
+  covers dizzy-infra. (after 4)
        guide: docs/infra-cluster-deployment.md → Cluster Configuration
   9. [oac-apps] Create or complete values/dizzy-infra/hcp-config.yaml in CCI-MOC/oac-infra for
-  hub-wide HCP and secret-selector values. (after 4)
+  hub-wide HCP and secret-selector values. values/dizzy-infra/hcp-config.yaml is missing;
+  expected present. (after 4)
        guide: docs/infra-cluster-deployment.md → Cluster Configuration
   10. [oac-apps] Add Argo CD application manifests for the hub after its hosted-cluster,
   hub-wide component, and local-cluster values are present, and reference the correct clusters.
-  (after 4, 9, 6, 3)
+  apps/dizzy-infra/keycloak-oauth.yaml is missing; expected present. (after 4, 9, 6, 3)
        guide: docs/infra-cluster-deployment.md → Cluster Configuration
 
 NOT CHECKED — verify by hand:
@@ -51,9 +77,6 @@ NOT CHECKED — verify by hand:
   under hub-images/credentials/dizzy-infra; Run create_agent_install_media and copy the
   dizzy-infra ISO to the bastion host; Bootstrap Argo CD for dizzy-infra; Agents visible in
   hardware-inventory; Agents labelled and approved
-
-PULL REQUESTS
-0 open PRs touch this environment.
 
 Sources
 Repository                 Ref      Commit

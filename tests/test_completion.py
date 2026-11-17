@@ -55,7 +55,7 @@ class CompletionTest(unittest.TestCase):
                 self.assertEqual(stdout, "bu-ist-demo-workload0\n")
 
         self.assertEqual(exit_code, 0)
-        self.assertEqual(stderr, "")
+        self.assertEqual(stderr, "GitHub API: 0 requests, 0 counted against quota, 0 from cache\n")
 
     def test_hidden_completion_mode_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -84,7 +84,7 @@ class CompletionTest(unittest.TestCase):
 
         self.assertEqual(exit_code, 0)
         self.assertEqual(stdout, "bu-ist-demo\n")
-        self.assertEqual(stderr, "")
+        self.assertEqual(stderr, "GitHub API: 0 requests, 0 counted against quota, 0 from cache\n")
 
     def test_completion_scripts_are_printed(self) -> None:
         for shell in ("bash", "zsh"):

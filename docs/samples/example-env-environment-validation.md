@@ -6,7 +6,7 @@ SAMPLE — generated from a synthetic fixture, not a live environment.
 
 | Field | Value |
 |---|---|
-| Document | `/Users/aasmith/Dev/moc-env/docs/samples/example-env-environment.yaml` |
+| Document | `docs/samples/example-env-environment.yaml` |
 | Error count | 0 |
 | Warning count | 0 |
 | Checks passed | 20 |

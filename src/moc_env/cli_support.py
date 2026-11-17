@@ -15,6 +15,7 @@ from .credentials import (
     load_credential_environment_file,
 )
 from .checks import Clock, StatusChecker
+from .diff_observed import hosted_dns_facts
 from .github import GitHubClient
 from .model import Environment
 from .registry import EnvironmentRegistry
@@ -103,9 +104,10 @@ def diff_handler(
     clock: Clock | None,
     arguments: list[str],
     client_factory=GitHubClient,
+    token_resolver=None,
 ) -> int:
     client = client_factory(
-        token=resolve_github_token(args),
+        token=(token_resolver or resolve_github_token)(args),
         timeout=args.timeout,
         offline=args.offline,
         refresh=args.refresh,
@@ -123,7 +125,9 @@ def diff_handler(
         report = checker.run(
             Environment(name=environment_name, issue_number=registry.issue(environment_name))
         )
-        reports.append(report.to_dict())
+        report_data = report.to_dict()
+        report_data["diff_facts"] = hosted_dns_facts(client, report_data)
+        reports.append(report_data)
     diff = build_environment_diff(*reports)
     if args.format == "json":
         rendered = render_json(diff)
@@ -187,7 +191,7 @@ def sanitize_command(arguments: list[str]) -> tuple[str, ...]:
 
 
 def resolve_github_token(args: argparse.Namespace) -> str | None:
-    if args.no_auth:
+    if args.no_auth or args.offline:
         return None
     try:
         credential_environment = load_credential_environment_file(args.env_file)

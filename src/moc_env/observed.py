@@ -257,6 +257,7 @@ class AppsObservation:
     source_repository: str
     source_ref: str = "main"
     files: dict[str, str] = field(default_factory=dict)
+    pull_requests_unavailable: str | None = None
 
 
 @dataclass(frozen=True)
@@ -744,6 +745,7 @@ def read_apps_observation(
         return path_scope != "hub" or not path.startswith(workload_path_prefixes)
 
     pull_requests: list[PullRequestObservation] = []
+    pull_request_errors: list[str] = []
     if include_pull_requests:
         pull_repositories = (
             OAC_APPS_REPOSITORY,
@@ -758,7 +760,25 @@ def read_apps_observation(
                     pull_repository,
                     "pulls?state=all",
                 )
-            all_pulls = list(client.pulls(pull_repository))
+            try:
+                all_pulls = list(client.pulls(pull_repository))
+                if any(
+                    not isinstance(pull, dict)
+                    or type(pull.get("number")) is not int
+                    or pull.get("state") not in ("open", "closed")
+                    or (pull.get("head") is not None and not isinstance(pull["head"], dict))
+                    for pull in all_pulls
+                ):
+                    raise GitHubError("Malformed pull-request record in GitHub response")
+                all_pulls = [
+                    {**pull, "head": pull.get("head") or {}}
+                    for pull in all_pulls
+                ]
+            except Exception as exc:
+                # PR context is optional: even a malformed payload or client
+                # failure must not discard repository configuration evidence.
+                pull_request_errors.append(f"{pull_repository}: {exc}")
+                continue
             closed_pulls = sorted(
                 (pull for pull in all_pulls if pull.get("state") == "closed"),
                 key=lambda pull: str(pull.get("updated_at") or ""),
@@ -776,11 +796,20 @@ def read_apps_observation(
                 or pull.get("number") in closed_numbers
             ]
             for pull in candidates:
-                file_observations = tuple(
-                    file
-                    for file in client.pr_files(pull_repository, pull["number"])
-                    if file.get("filename") is not None
-                )
+                try:
+                    file_observations = tuple(client.pr_files(pull_repository, pull["number"]))
+                    if any(
+                        not isinstance(file, dict)
+                        or not isinstance(file.get("filename"), str)
+                        or not file["filename"]
+                        for file in file_observations
+                    ):
+                        raise GitHubError("Malformed pull-request file record in GitHub response")
+                except Exception as exc:
+                    pull_request_errors.append(
+                        f"{pull_repository}#{pull['number']}: {exc}"
+                    )
+                    continue
                 files = tuple(
                     str(file["filename"]) for file in file_observations
                 )
@@ -889,6 +918,9 @@ def read_apps_observation(
         pull_requests=tuple(pull_requests),
         source_repository=repository,
         files=values_files,
+        pull_requests_unavailable=(
+            "; ".join(pull_request_errors) if pull_request_errors else None
+        ),
     )
 
 

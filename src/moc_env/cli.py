@@ -440,15 +440,18 @@ def _status_handler(
         "CCI-MOC/ansible-switches",
     )
     candidate_urls = [
-        f"https://api.github.com/repos/{repository}/git/trees/"
-        f"{client.ref_for(repository)}?recursive=1"
+        url
         for repository in repositories
+        for url in client.snapshot_request_urls(repository)
     ]
     if issue_number is not None:
+        candidate_urls.extend(client.snapshot_request_urls("CCI-MOC/MOC-issues"))
         candidate_urls.append(
             f"https://api.github.com/repos/CCI-MOC/MOC-issues/issues/{issue_number}"
         )
-    estimated_calls = 60 if include_prs else len(candidate_urls)
+    # Optional PR discovery must not prevent the configuration report merely
+    # because its speculative request budget exceeds the remaining quota.
+    estimated_calls = len(candidate_urls)
     try:
         client.reserve_quota(estimated_calls, candidate_urls)
         rows = list_environments(client)
@@ -490,7 +493,14 @@ def _status_handler(
         return 2
     report = replace(
         report,
-        pull_requests_skipped=not include_prs and not client.authenticated,
+        pull_requests_skipped=not include_prs,
+        pull_requests_skip_reason=(
+            "skipped (--no-prs)"
+            if args.no_prs
+            else "skipped because this run is unauthenticated; use --prs to inspect them"
+            if not include_prs
+            else None
+        ),
     )
     if report.rate_limited:
         print(
@@ -522,7 +532,12 @@ def _diff_handler(
     clock: Clock | None,
     arguments: list[str],
 ) -> int:
-    return diff_handler(args, registry, clock, arguments, client_factory=GitHubClient)
+    try:
+        return diff_handler(args, registry, clock, arguments, client_factory=GitHubClient,
+                            token_resolver=_resolve_github_token)
+    except GitHubError as exc:
+        print(f"moc-env: {exc}", file=sys.stderr)
+        return 2
 
 
 def _complete_environment(arguments: list[str]) -> int:
@@ -550,6 +565,24 @@ def _complete_environment(arguments: list[str]) -> int:
 
 
 def main(argv: list[str] | None = None, clock: Clock | None = None) -> int:
+    from .github import run_clients
+
+    clients: list[GitHubClient] = []
+    token = run_clients.set(clients)
+    try:
+        return _main(argv, clock)
+    finally:
+        run_clients.reset(token)
+        if clients:
+            print(
+                f"GitHub API: {sum(c.requests_made for c in clients)} requests, "
+                f"{sum(c.api_calls_used for c in clients)} counted against quota, "
+                f"{sum(c.cache_hits for c in clients)} from cache",
+                file=sys.stderr,
+            )
+
+
+def _main(argv: list[str] | None = None, clock: Clock | None = None) -> int:
     arguments = sys.argv[1:] if argv is None else argv
     try:
         registry = EnvironmentRegistry.load(DEFAULT_REGISTRY_PATH)

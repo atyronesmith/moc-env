@@ -119,12 +119,19 @@ class SourceSnapshot:
     repository: str
     ref: str
     sha: str
+    from_cache: bool = False
+    fetched_at: str | None = None
 
-    def to_dict(self) -> dict[str, str]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "repository": self.repository,
             "ref": self.ref,
             "sha": self.sha,
+            **(
+                {"from_cache": True, "fetched_at": self.fetched_at or "unknown"}
+                if self.from_cache
+                else {}
+            ),
         }
 
 
@@ -163,6 +170,8 @@ class StatusReport:
     metadata: ReportMetadata | None = None
     pull_requests: tuple[dict[str, Any], ...] = ()
     pull_requests_skipped: bool = False
+    pull_requests_skip_reason: str | None = None
+    pull_requests_unavailable: str | None = None
     rate_limited: bool = False
 
     def to_dict(self) -> dict[str, Any]:
@@ -209,6 +218,16 @@ class StatusReport:
             "checks": [check.to_dict() for check in self.checks],
             "pull_requests": list(self.pull_requests),
             "pull_requests_skipped": self.pull_requests_skipped,
+            **(
+                {"pull_requests_skip_reason": self.pull_requests_skip_reason}
+                if self.pull_requests_skip_reason
+                else {}
+            ),
+            **(
+                {"pull_requests_unavailable": self.pull_requests_unavailable}
+                if self.pull_requests_unavailable
+                else {}
+            ),
             "rate_limited": self.rate_limited,
         }
 

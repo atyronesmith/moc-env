@@ -2,7 +2,7 @@
 
 **No deployment gaps in repository configuration.**
 
-Generated 2026-11-16 12:34 UTC · MOC issue: [#666](https://github.com/CCI-MOC/MOC-issues/issues/666) (open) · Pull requests skipped because this run is unauthenticated; use --prs
+Generated 2026-11-16 12:34 UTC · MOC issue: [#666](https://github.com/CCI-MOC/MOC-issues/issues/666) (open)
 
 ## Phase summary
 
@@ -22,8 +22,8 @@ Generated 2026-11-16 12:34 UTC · MOC issue: [#666](https://github.com/CCI-MOC/M
 |---|---:|
 | 1 Host inventory entry | ✅ 1/1 checks |
 | 2 Hub agent discovery ISO | ✅ 1/1 checks |
-| 3 Agent ISO boot | – |
-| 4 Agent visibility | – |
+| 3 Agent ISO boot | verify by hand |
+| 4 Agent visibility | verify by hand |
 | 5 Agent labels and approval | ✅ 1/1 checks |
 | 6 oac-apps values | ✅ 7/7 checks |
 | 7 Shared-service prerequisites | ✅ 4/4 checks |
@@ -45,9 +45,9 @@ Nothing to do in the repositories this tool reads.
 ## Details
 
 <details>
-<summary>✅ declared_in_main bu-ist-demo-infra host inventory — The inventory contains a bu-ist-demo-infra group with 1 hosts.</summary>
+<summary>✅ bu-ist-demo-infra host inventory — The inventory contains a bu-ist-demo-infra group with 1 hosts.</summary>
 
-Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml) @ 2222222
+Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml) @ main (2222222)
 
 | Field | Observed |
 |---|---|
@@ -63,9 +63,9 @@ Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com
 </details>
 
 <details>
-<summary>✅ declared_in_main Hub image inventory — The hub-image inventory contains the all.children.bu-ist-demo-infra key.</summary>
+<summary>✅ Hub image inventory — The hub-image inventory contains the all.children.bu-ist-demo-infra key.</summary>
 
-Source: CCI-MOC/oac-infra · [`hub-images/inventory.yml`](https://github.com/CCI-MOC/oac-infra/blob/main/hub-images/inventory.yml) @ 2222222
+Source: CCI-MOC/oac-infra · [`hub-images/inventory.yml`](https://github.com/CCI-MOC/oac-infra/blob/main/hub-images/inventory.yml) @ main (2222222)
 
 | Field | Observed |
 |---|---|
@@ -74,9 +74,9 @@ Source: CCI-MOC/oac-infra · [`hub-images/inventory.yml`](https://github.com/CCI
 </details>
 
 <details>
-<summary>✅ declared_in_main Hub image variables — All required hub-image variables are present in main.</summary>
+<summary>✅ Hub image variables — All required hub-image variables are present in main.</summary>
 
-Source: CCI-MOC/oac-infra · [`hub-images/group_vars/bu-ist-demo-infra/vars.yml`](https://github.com/CCI-MOC/oac-infra/blob/main/hub-images/group_vars/bu-ist-demo-infra/vars.yml) @ 2222222
+Source: CCI-MOC/oac-infra · [`hub-images/group_vars/bu-ist-demo-infra/vars.yml`](https://github.com/CCI-MOC/oac-infra/blob/main/hub-images/group_vars/bu-ist-demo-infra/vars.yml) @ main (2222222)
 
 | Field | Observed |
 |---|---|
@@ -90,9 +90,9 @@ Source: CCI-MOC/oac-infra · [`hub-images/group_vars/bu-ist-demo-infra/vars.yml`
 </details>
 
 <details>
-<summary>✅ declared_in_main Hub moc-dns records — All required hub DNS records in zonefiles/int.massopen.cloud.zone match the hub-image variables.</summary>
+<summary>✅ Hub moc-dns records — All required hub DNS records in zonefiles/int.massopen.cloud.zone match the hub-image variables.</summary>
 
-Source: CCI-MOC/moc-dns · [`zonefiles/int.massopen.cloud.zone`](https://github.com/CCI-MOC/moc-dns/blob/main/zonefiles/int.massopen.cloud.zone) @ 7777777
+Source: CCI-MOC/moc-dns · [`zonefiles/int.massopen.cloud.zone`](https://github.com/CCI-MOC/moc-dns/blob/main/zonefiles/int.massopen.cloud.zone) @ main (7777777)
 
 | Field | Observed |
 |---|---|
@@ -103,22 +103,22 @@ Source: CCI-MOC/moc-dns · [`zonefiles/int.massopen.cloud.zone`](https://github.
 </details>
 
 <details>
-<summary>✅ declared_in_main bu-ist-demo-infra boot image — The boot image URL is specific to bu-ist-demo-infra.</summary>
+<summary>✅ bu-ist-demo-infra boot image — The boot image URL is specific to bu-ist-demo-infra.</summary>
 
-Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml) @ 2222222
+Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml) @ main (2222222)
 
 Status rule: The boot-image filename must contain the full cluster name `bu-ist-demo-infra`; generic `discovery.iso` does not satisfy this rule.
 
 | Field | Observed |
 |---|---|
-| `value` | `http://10.2.0.82/boot/bu-ist-demo-infra-agent-discovery.iso` |
+| `boot_image_url` | `http://10.2.0.82/boot/bu-ist-demo-infra-agent-discovery.iso` |
 
 </details>
 
 <details>
-<summary>✅ declared_in_main Hub OIDC client — All expected Keycloak OIDC client fields match.</summary>
+<summary>✅ Hub OIDC client — All expected Keycloak OIDC client fields match.</summary>
 
-Source: CCI-MOC/moc-keycloak · [`main.tf`](https://github.com/CCI-MOC/moc-keycloak/blob/main/main.tf) @ 4444444
+Source: CCI-MOC/moc-keycloak · [`main.tf`](https://github.com/CCI-MOC/moc-keycloak/blob/main/main.tf) @ main (4444444)
 
 | Field | Observed |
 |---|---|
@@ -129,9 +129,9 @@ Source: CCI-MOC/moc-keycloak · [`main.tf`](https://github.com/CCI-MOC/moc-keycl
 </details>
 
 <details>
-<summary>✅ declared_in_main Hub hosted-cluster defaults — All expected files for the default values for hosted clusters on this hub cluster are present in main.</summary>
+<summary>✅ Hub hosted-cluster defaults — All expected files for the default values for hosted clusters on this hub cluster are present in main.</summary>
 
-Source: CCI-MOC/oac-apps · [`hosted-clusters/bu-ist-demo-infra/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/values.yaml) @ 3333333
+Source: CCI-MOC/oac-apps · [`hosted-clusters/bu-ist-demo-infra/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/values.yaml) @ main (3333333)
 
 | Field | Observed |
 |---|---|
@@ -140,9 +140,9 @@ Source: CCI-MOC/oac-apps · [`hosted-clusters/bu-ist-demo-infra/values.yaml`](ht
 </details>
 
 <details>
-<summary>✅ declared_in_main Hub-wide component values — All expected files for hub-wide HCP and secret-selector values are present in main.</summary>
+<summary>✅ Hub-wide component values — All expected files for hub-wide HCP and secret-selector values are present in main.</summary>
 
-Source: CCI-MOC/oac-apps · [`values/bu-ist-demo-infra`](https://github.com/CCI-MOC/oac-apps/blob/main/values/bu-ist-demo-infra) @ 3333333
+Source: CCI-MOC/oac-apps · [`values/bu-ist-demo-infra`](https://github.com/CCI-MOC/oac-apps/blob/main/values/bu-ist-demo-infra) @ main (3333333)
 
 | Field | Observed |
 |---|---|
@@ -151,9 +151,9 @@ Source: CCI-MOC/oac-apps · [`values/bu-ist-demo-infra`](https://github.com/CCI-
 </details>
 
 <details>
-<summary>✅ declared_in_main Hub local-cluster values — All expected files for the hub cluster's local operator and shared-service values are present in main.</summary>
+<summary>✅ Hub local-cluster values — All expected files for the hub cluster's local operator and shared-service values are present in main.</summary>
 
-Source: CCI-MOC/oac-apps · [`values/bu-ist-demo-infra/local-cluster`](https://github.com/CCI-MOC/oac-apps/blob/main/values/bu-ist-demo-infra/local-cluster) @ 3333333
+Source: CCI-MOC/oac-apps · [`values/bu-ist-demo-infra/local-cluster`](https://github.com/CCI-MOC/oac-apps/blob/main/values/bu-ist-demo-infra/local-cluster) @ main (3333333)
 
 | Field | Observed |
 |---|---|
@@ -196,9 +196,9 @@ None.
 </details>
 
 <details>
-<summary>✅ declared_in_main Hub ArgoCD applications — All expected files for direct ArgoCD applications applied on the hub cluster are present in main.</summary>
+<summary>✅ Hub ArgoCD applications — All expected files for direct ArgoCD applications applied on the hub cluster are present in main.</summary>
 
-Source: CCI-MOC/oac-apps · [`apps/bu-ist-demo-infra`](https://github.com/CCI-MOC/oac-apps/blob/main/apps/bu-ist-demo-infra) @ 3333333
+Source: CCI-MOC/oac-apps · [`apps/bu-ist-demo-infra`](https://github.com/CCI-MOC/oac-apps/blob/main/apps/bu-ist-demo-infra) @ main (3333333)
 
 | Field | Observed |
 |---|---|
@@ -207,12 +207,13 @@ Source: CCI-MOC/oac-apps · [`apps/bu-ist-demo-infra`](https://github.com/CCI-MO
 </details>
 
 <details>
-<summary>✅ declared_in_main Hub Pure storage realm — The bu-ist-demo-infra Pure storage realm is complete.</summary>
+<summary>✅ Hub Pure storage realm — The bu-ist-demo-infra Pure storage realm is complete.</summary>
 
-Source: CCI-MOC/everpure-moc · [`ansible/group_vars/all/realms.yaml`](https://github.com/CCI-MOC/everpure-moc/blob/main/ansible/group_vars/all/realms.yaml) @ 5555555
+Source: CCI-MOC/everpure-moc · [`ansible/group_vars/all/realms.yaml`](https://github.com/CCI-MOC/everpure-moc/blob/main/ansible/group_vars/all/realms.yaml) @ main (5555555)
 
 | Field | Observed |
 |---|---|
+| `name` | `bu-ist-demo-infra` |
 | `subnet_vlan` | `2321` |
 | `subnet_prefix` | `10.9.15.0/24` |
 | `s3_endpoint` | `s3.bu-ist-demo.int.massopen.cloud` |
@@ -220,9 +221,9 @@ Source: CCI-MOC/everpure-moc · [`ansible/group_vars/all/realms.yaml`](https://g
 </details>
 
 <details>
-<summary>✅ declared_in_main Hub moc-aws OIDC cluster — The moc-aws OIDC cluster entry for bu-ist-demo-infra is present.</summary>
+<summary>✅ Hub moc-aws OIDC cluster — The moc-aws OIDC cluster entry for bu-ist-demo-infra is present.</summary>
 
-Source: CCI-MOC/moc-aws · [`main.tf`](https://github.com/CCI-MOC/moc-aws/blob/main/main.tf) @ 6666666
+Source: CCI-MOC/moc-aws · [`main.tf`](https://github.com/CCI-MOC/moc-aws/blob/main/main.tf) @ main (6666666)
 
 | Field | Observed |
 |---|---|
@@ -232,31 +233,31 @@ Source: CCI-MOC/moc-aws · [`main.tf`](https://github.com/CCI-MOC/moc-aws/blob/m
 </details>
 
 <details>
-<summary>✅ declared_in_main Hub moc-aws cert-manager policy — The cert-manager policy entry cert_manager_policies covers bu-ist-demo-infra.</summary>
+<summary>✅ Hub moc-aws cert-manager policy — The cert-manager policy entry cert_manager_policies covers bu-ist-demo-infra.</summary>
 
-Source: CCI-MOC/moc-aws · [`cert-manager-policies.tf`](https://github.com/CCI-MOC/moc-aws/blob/main/cert-manager-policies.tf) @ 6666666
+Source: CCI-MOC/moc-aws · [`cert-manager-policies.tf`](https://github.com/CCI-MOC/moc-aws/blob/main/cert-manager-policies.tf) @ main (6666666)
 
 | Field | Observed |
 |---|---|
-| `cluster` | `cert_manager_policies` |
+| `policy entry` | `cert_manager_policies` |
 
 </details>
 
 <details>
-<summary>✅ declared_in_main Hub hosted-cluster secret prefix — The hub can write hosted-cluster secrets at cluster/bu-ist-demo-infra/hostedcluster/.</summary>
+<summary>✅ Hub hosted-cluster secret prefix — The hub can write hosted-cluster secrets at cluster/bu-ist-demo-infra/hostedcluster/.</summary>
 
-Source: CCI-MOC/moc-aws · [`main.tf`](https://github.com/CCI-MOC/moc-aws/blob/main/main.tf) @ 6666666
+Source: CCI-MOC/moc-aws · [`main.tf`](https://github.com/CCI-MOC/moc-aws/blob/main/main.tf) @ main (6666666)
 
 | Field | Observed |
 |---|---|
-| `eso_writable_secret_prefix` | `cluster/bu-ist-demo-infra/hostedcluster/` |
+| `eso_writable_secret_prefixes` | `cluster/bu-ist-demo-infra/hostedcluster/` |
 
 </details>
 
 <details>
-<summary>✅ declared_in_main bu-ist-demo-workload0 host inventory — The inventory contains a bu-ist-demo-workload0 group with 1 hosts.</summary>
+<summary>✅ bu-ist-demo-workload0 host inventory — The inventory contains a bu-ist-demo-workload0 group with 1 hosts.</summary>
 
-Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml) @ 2222222
+Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml) @ main (2222222)
 
 | Field | Observed |
 |---|---|
@@ -272,32 +273,27 @@ Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com
 </details>
 
 <details>
-<summary>✅ declared_in_main bu-ist-demo-workload0 boot image — The boot image URL identifies the workload or its parent hub bu-ist-demo-infra.</summary>
+<summary>✅ bu-ist-demo-workload0 boot image — The boot image URL identifies the workload or its parent hub bu-ist-demo-infra.</summary>
 
-Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml) @ 2222222
+Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml) @ main (2222222)
 
 Status rule: The workload boot-image filename may contain the workload name `bu-ist-demo-workload0`, its oac-shortened name, the parent hub name `bu-ist-demo-infra`, or the hub's oac-shortened name. Unrecognized names are advisory because naming is not consistent across environments; generic `discovery.iso` remains a gap.
 
 | Field | Observed |
 |---|---|
-| `value` | `http://10.2.0.82/boot/bu-ist-demo-infra-agent-discovery.iso` |
+| `boot_image_url` | `http://10.2.0.82/boot/bu-ist-demo-infra-agent-discovery.iso` |
 
 </details>
 
 <details>
-<summary>✅ declared_in_main bu-ist-demo-workload0 update-agents inputs — Every non-openstack host has the mac_addr and resource_class inputs required by infra/update-agents.yaml.</summary>
+<summary>✅ bu-ist-demo-workload0 update-agents inputs — Every non-openstack host has the mac_addr and resource_class inputs required by infra/update-agents.yaml.</summary>
 
-Source: CCI-MOC/oac-infra · [`infra/update-agents.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/update-agents.yaml) @ 2222222
+Source: CCI-MOC/oac-infra · [`infra/update-agents.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/update-agents.yaml) @ main (2222222)
 
 | Field | Observed |
 |---|---|
-| `host` | `compute-0` |
-| `node_name` | `MOC-R4PAC10U31-S1B` |
-| `bm_management` | `ipmi` |
-| `mac_addr` | `00:11:22:33:44:55` |
-| `resource_class` | `bu-ist-demo-worker` |
-| `documented_resource_class` | `bu-ist-demo-worker` |
-| `item 1` | `—` |
+| `compute-0.mac_addr` | `00:11:22:33:44:55` |
+| `compute-0.resource_class` | `bu-ist-demo-worker` |
 
 **Agent label inputs**
 
@@ -308,9 +304,9 @@ Source: CCI-MOC/oac-infra · [`infra/update-agents.yaml`](https://github.com/CCI
 </details>
 
 <details>
-<summary>✅ declared_in_main Workload hosted-cluster values — All expected files for the hosted workload cluster definition are present in main.</summary>
+<summary>✅ Workload hosted-cluster values — All expected files for the hosted workload cluster definition are present in main.</summary>
 
-Source: CCI-MOC/oac-apps · [`hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml) @ 3333333
+Source: CCI-MOC/oac-apps · [`hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml) @ main (3333333)
 
 | Field | Observed |
 |---|---|
@@ -319,94 +315,93 @@ Source: CCI-MOC/oac-apps · [`hosted-clusters/bu-ist-demo-infra/bu-ist-demo-work
 </details>
 
 <details>
-<summary>✅ declared_in_main Workload component values — All expected files for component values scoped to the workload cluster are present in main.</summary>
+<summary>✅ Workload component values — All expected files for component values scoped to the workload cluster are present in main.</summary>
 
-Source: CCI-MOC/oac-apps · [`values/bu-ist-demo-infra/bu-ist-demo-workload0`](https://github.com/CCI-MOC/oac-apps/blob/main/values/bu-ist-demo-infra/bu-ist-demo-workload0) @ 3333333
+Source: CCI-MOC/oac-apps · [`values/bu-ist-demo-infra/bu-ist-demo-workload0`](https://github.com/CCI-MOC/oac-apps/blob/main/values/bu-ist-demo-infra/bu-ist-demo-workload0) @ main (3333333)
+
+| Field | Observed |
+|---|---|
+| `matched_file_count` | `1` |
 
 </details>
 
 <details>
-<summary>✅ declared_in_main Workload API address network — The API address is inside the hub machine network.</summary>
+<summary>✅ Workload API address network — The API address is inside the hub machine network.</summary>
 
-Source: CCI-MOC/oac-apps · [`hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml) @ 3333333
+Source: CCI-MOC/oac-apps · [`hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml) @ main (3333333)
 
 | Field | Observed |
 |---|---|
-| `ipAddress` | `10.20.26.10` |
-| `machine_network` | `10.20.26.10` |
+| `services.APIServer.ipAddress` | `10.20.26.10` |
 
 </details>
 
 <details>
-<summary>✅ declared_in_main Workload ingress address network — The ingress pool address is on the expected network.</summary>
+<summary>✅ Workload ingress address network — The ingress pool address is on the expected network. Selected VLAN BU-IST-DEMO-WORKLOAD0 (10.20.28.0/24).</summary>
 
-Source: CCI-MOC/oac-apps · [`hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml) @ 3333333
+Source: CCI-MOC/oac-apps · [`hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml) @ main (3333333)
 
 | Field | Observed |
 |---|---|
-| `poolAddress` | `10.20.28.10` |
-| `machine_network` | `10.20.28.10` |
-| `vlan_subnet` | `10.20.28.10` |
+| `ingress.poolAddress` | `10.20.28.10` |
 
 </details>
 
 <details>
-<summary>✅ declared_in_main Workload DNS base domain — All DNS record hostnames use the hub base domain.</summary>
+<summary>✅ Workload DNS base domain — All DNS record hostnames use the hub hosted-cluster domains.</summary>
 
-Source: CCI-MOC/oac-apps · [`hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml) @ 3333333
+Source: CCI-MOC/oac-apps · [`hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml) @ main (3333333)
 
 | Field | Observed |
 |---|---|
-| `baseDomain` | `api.bu-ist-demo-workload0.int.massopen.cloud` |
+| `dns.records[0].hostname` | `api.bu-ist-demo-workload0.int.massopen.cloud` |
 
 </details>
 
 <details>
-<summary>✅ declared_in_main Workload node-pool host capacity — Every node pool has enough matching inventory hosts.</summary>
+<summary>✅ Workload node-pool host capacity — Every node pool has enough matching inventory hosts.</summary>
 
-Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml) @ 2222222
+Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml) @ main (2222222)
 
 | Field | Observed |
 |---|---|
-| `name` | `compute` |
-| `replicas` | `1` |
-| `cluster` | `—` |
-| `resource_class` | `—` |
+| `nodePools.compute.matching_hosts` | `1` |
 
 </details>
 
 <details>
-<summary>✅ declared_in_main Workload GPU feature support — GPU configuration is consistent with the inventory.</summary>
+<summary>✅ Workload GPU feature support — GPU configuration is consistent with the inventory.</summary>
 
-Source: CCI-MOC/oac-apps · [`hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml) @ 3333333
+Source: CCI-MOC/oac-apps · [`hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml) @ main (3333333)
 
 | Field | Observed |
 |---|---|
-| `feature-gpu` | `—` |
+| `clusterLabels["massopen.cloud/feature-gpu"]` | `false` |
 | `gpu_host_count` | `0` |
 
 </details>
 
 <details>
-<summary>✅ declared_in_main Workload address uniqueness — No workload address is used by another cluster.</summary>
+<summary>✅ Workload address uniqueness — No workload address is used by another cluster.</summary>
 
-Source: CCI-MOC/oac-apps · [`hosted-clusters/`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/) @ 3333333
+Source: CCI-MOC/oac-apps · [`hosted-clusters/`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/) @ main (3333333)
 
 | Field | Observed |
 |---|---|
-| `10.20.26.10` | `bu-ist-demo-workload0, services.APIServer.ipAddress` |
-| `10.20.28.10` | `bu-ist-demo-workload0, ingress.poolAddress` |
-| `10.20.29.10` | `bu-ist-demo-workload0, services.APIServer.externalIpAddress, bu-ist-demo-workload0, ingress.externalIpAddress` |
+| `10.20.26.10` | `bu-ist-demo-workload0: services.APIServer.ipAddress` |
+| `10.20.28.10` | `bu-ist-demo-workload0: ingress.poolAddress` |
+| `10.20.29.10` | `bu-ist-demo-workload0: services.APIServer.externalIpAddress; bu-ist-demo-workload0: ingress.externalIpAddress` |
 
 </details>
 
 <details>
-<summary>✅ declared_in_main Workload Pure storage realm — The bu-ist-demo-workload0 Pure storage realm is complete.</summary>
+<summary>✅ Workload Pure storage realm — The bu-ist-demo-workload0 Pure storage realm is complete.</summary>
 
-Source: CCI-MOC/everpure-moc · [`ansible/group_vars/all/realms.yaml`](https://github.com/CCI-MOC/everpure-moc/blob/main/ansible/group_vars/all/realms.yaml) @ 5555555
+Source: CCI-MOC/everpure-moc · [`ansible/group_vars/all/realms.yaml`](https://github.com/CCI-MOC/everpure-moc/blob/main/ansible/group_vars/all/realms.yaml) @ main (5555555)
 
 | Field | Observed |
 |---|---|
+| `name` | `bu-ist-demo-workload0` |
 | `subnet_vlan` | `2322` |
 | `subnet_prefix` | `10.20.28.0/24` |
 | `s3_endpoint` | `s3.bu-ist-demo-workload0.hcp.bu-ist-demo.int.massopen.cloud` |
@@ -414,9 +409,9 @@ Source: CCI-MOC/everpure-moc · [`ansible/group_vars/all/realms.yaml`](https://g
 </details>
 
 <details>
-<summary>✅ declared_in_main Workload moc-aws OIDC cluster — The moc-aws OIDC cluster entry for bu-ist-demo-workload0 is present.</summary>
+<summary>✅ Workload moc-aws OIDC cluster — The moc-aws OIDC cluster entry for bu-ist-demo-workload0 is present.</summary>
 
-Source: CCI-MOC/moc-aws · [`main.tf`](https://github.com/CCI-MOC/moc-aws/blob/main/main.tf) @ 6666666
+Source: CCI-MOC/moc-aws · [`main.tf`](https://github.com/CCI-MOC/moc-aws/blob/main/main.tf) @ main (6666666)
 
 | Field | Observed |
 |---|---|
@@ -426,20 +421,20 @@ Source: CCI-MOC/moc-aws · [`main.tf`](https://github.com/CCI-MOC/moc-aws/blob/m
 </details>
 
 <details>
-<summary>✅ declared_in_main Workload moc-aws cert-manager policy — The cert-manager policy entry cert_manager_policy_bu_ist_demo_workload0 covers bu-ist-demo-workload0.</summary>
+<summary>✅ Workload moc-aws cert-manager policy — The cert-manager policy entry cert_manager_policy_bu_ist_demo_workload0 covers bu-ist-demo-workload0.</summary>
 
-Source: CCI-MOC/moc-aws · [`cert-manager-policies.tf`](https://github.com/CCI-MOC/moc-aws/blob/main/cert-manager-policies.tf) @ 6666666
+Source: CCI-MOC/moc-aws · [`cert-manager-policies.tf`](https://github.com/CCI-MOC/moc-aws/blob/main/cert-manager-policies.tf) @ main (6666666)
 
 | Field | Observed |
 |---|---|
-| `cluster` | `cert_manager_policy_bu_ist_demo_workload0` |
+| `policy entry` | `cert_manager_policy_bu_ist_demo_workload0` |
 
 </details>
 
 <details>
-<summary>✅ declared_in_main Workload Keycloak OIDC client — The Keycloak OIDC client for bu-ist-demo-workload0 matches.</summary>
+<summary>✅ Workload Keycloak OIDC client — The Keycloak OIDC client for bu-ist-demo-workload0 matches.</summary>
 
-Source: CCI-MOC/moc-keycloak · [`main.tf`](https://github.com/CCI-MOC/moc-keycloak/blob/main/main.tf) @ 4444444
+Source: CCI-MOC/moc-keycloak · [`main.tf`](https://github.com/CCI-MOC/moc-keycloak/blob/main/main.tf) @ main (4444444)
 
 | Field | Observed |
 |---|---|
@@ -450,21 +445,17 @@ Source: CCI-MOC/moc-keycloak · [`main.tf`](https://github.com/CCI-MOC/moc-keycl
 </details>
 
 <details>
-<summary>📝 requested MOC issue — Issue #666 is open and records the environment request.</summary>
+<summary>📝 MOC issue — Issue #666 is open and records the environment request.</summary>
 
-Source: CCI-MOC/MOC-issues · [`issues/666`](https://github.com/CCI-MOC/MOC-issues/issues/666) @ 1111111
+Source: CCI-MOC/MOC-issues · [`issues/666`](https://github.com/CCI-MOC/MOC-issues/issues/666) @ main (1111111)
 
 | Field | Observed |
 |---|---|
-| `value` | `open` |
+| `issue_state` | `open` |
 
 </details>
 
-## Pull requests
-
-**0 open PRs touch this environment.**
-
-None.
+Pull requests: skipped (--no-prs)
 
 ## Sources
 

@@ -5,12 +5,14 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import datetime, timezone
-from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
 import yaml
 
-from .github import GitHubClient, RateLimitError, github_url
+from . import __version__
+
+from .github import GitHubClient, GitHubError, RateLimitError, github_url
+from .report_fields import field_rows, failing_field_rows, plain
 from .cross_repo import cross_repository_checks
 from .model import (
     CheckResult,
@@ -30,6 +32,8 @@ from .observed import (
     SourceValue,
     UPDATE_AGENTS_PATH,
     inventory_clusters,
+    read_infra_observation,
+    read_keycloak_observation,
     read_environment_observation,
 )
 from .phases import annotate_and_sort_checks
@@ -113,10 +117,7 @@ def _next_action(check_id: str, state: str) -> str | None:
 
 
 def _package_version() -> str:
-    try:
-        return version("moc-env")
-    except PackageNotFoundError:
-        return "unknown"
+    return __version__
 
 
 def _safe_yaml_value(text: str) -> Any:
@@ -248,6 +249,8 @@ class StatusChecker:
         self,
         environment: Environment,
         path_scope: str = "environment",
+        *,
+        evaluate_prs: bool = True,
     ) -> StatusReport:
         try:
             checks: list[CheckResult] = []
@@ -284,6 +287,7 @@ class StatusChecker:
             checks = annotate_and_sort_checks(
                 self._rate_limited_checks(environment, path_scope)
             )
+            self._apply_source_refs(checks)
             return StatusReport(
                 environment=environment,
                 checks=checks,
@@ -292,14 +296,411 @@ class StatusChecker:
                 rate_limited=True,
             )
         checks = annotate_and_sort_checks(checks)
+        self._apply_source_refs(checks)
         checks = self._apply_blocked_states(checks)
+        pulls = self._pull_request_evidence(observation.apps.pull_requests)
+        if evaluate_prs and self.include_prs:
+            self._evaluate_pr_candidates(
+                environment,
+                path_scope,
+                checks,
+                pulls,
+                observation=observation,
+            )
         return StatusReport(
             environment=environment,
             checks=checks,
             overall_state=self._overall_state(checks),
             metadata=self._metadata(),
-            pull_requests=self._pull_request_evidence(observation.apps.pull_requests),
+            pull_requests=pulls,
+            pull_requests_unavailable=observation.apps.pull_requests_unavailable,
+            pull_requests_skipped=not self.include_prs,
+            pull_requests_skip_reason=(
+                "skipped (--no-prs)" if not self.include_prs else None
+            ),
         )
+
+    @staticmethod
+    def _path_matches(changed: str, expected: str) -> bool:
+        return changed == expected or changed.startswith(expected.rstrip("/") + "/")
+
+    def _candidate_input_paths(
+        self, check: CheckResult, environment: Environment
+    ) -> tuple[tuple[str, str], ...]:
+        """Return all repository paths that can change this check's inputs.
+
+        ``CheckResult.repository`` is the repository used for the primary
+        evidence, but several cross-repository checks consume values from more
+        than one repository.  Keeping this map here makes PR candidacy follow
+        the actual data flow instead of the display path alone.
+        """
+
+        paths: list[tuple[str, str]] = []
+
+        def add(repository: str, path: str | None) -> None:
+            if path:
+                item = (repository, path)
+                if item not in paths:
+                    paths.append(item)
+
+        add(check.repository, check.path)
+        for path in check.evidence.get("expected_paths", []):
+            if isinstance(path, str):
+                add(check.repository, path)
+
+        infra = OAC_INFRA_REPOSITORY
+        apps = "CCI-MOC/oac-apps"
+        switches = "CCI-MOC/ansible-switches"
+        hub = environment.infra_cluster
+        workloads = environment.workload_clusters or ()
+        workload_values = [
+            f"hosted-clusters/{hub}/{workload}/values.yaml"
+            for workload in workloads
+        ]
+        hub_defaults = f"hosted-clusters/{hub}/values.yaml"
+
+        if check.id == "workload.agent_labels_inputs":
+            add(infra, "infra/inventory/00hosts.yaml")
+            add(infra, UPDATE_AGENTS_PATH)
+            add(infra, HARDWARE_NETWORK_DOC_PATH)
+        elif check.id in {
+            "workload.api_address_network",
+            "workload.ingress_address_network",
+            "workload.dns_base_domain",
+            "workload.node_pool_hosts",
+            "workload.gpu_without_hosts",
+            "workload.keycloak_oidc_client",
+        }:
+            for path in workload_values:
+                add(apps, path)
+
+            if check.id in {
+                "workload.api_address_network",
+                "workload.ingress_address_network",
+            }:
+                add(infra, f"hub-images/group_vars/{hub}/vars.yml")
+            if check.id == "workload.ingress_address_network":
+                add(switches, "group_vars/all/vlans.yaml")
+            if check.id in {
+                "workload.dns_base_domain",
+                "workload.keycloak_oidc_client",
+            }:
+                add(apps, hub_defaults)
+            if check.id in {
+                "workload.node_pool_hosts",
+                "workload.gpu_without_hosts",
+            }:
+                add(infra, "infra/inventory/00hosts.yaml")
+                add(infra, HARDWARE_NETWORK_DOC_PATH)
+            if check.id == "workload.keycloak_oidc_client":
+                add("CCI-MOC/moc-keycloak", "main.tf")
+        elif check.id == "workload.address_uniqueness":
+            # The check compares every hosted-cluster values file to detect
+            # duplicate addresses, not only the current workload file.
+            add(apps, "hosted-clusters/")
+        elif check.id == "hub.moc_dns_records":
+            add(infra, f"hub-images/group_vars/{hub}/vars.yml")
+
+        return tuple(paths)
+
+    @staticmethod
+    def _candidate_field_rows(check: CheckResult) -> list[list[Any]]:
+        """Project comparison rows to fields consumed by this check.
+
+        Some checks expose useful context in ``actual`` that is not an input
+        to the check.  In particular, moc-aws OIDC checks include secret-prefix
+        context while validating only ``cluster_name``; a PR changing that
+        context must not produce a misleading annotation.
+        """
+
+        if check.id.endswith(".moc_aws_oidc_cluster"):
+            expected = check.expected if isinstance(check.expected, dict) else {}
+            actual = check.actual if isinstance(check.actual, dict) else {}
+            return [["cluster_name", expected.get("cluster_name"), actual.get("cluster_name")]]
+        return field_rows(check.to_dict())
+
+    def _candidate_check_results(
+        self,
+        environment,
+        path_scope,
+        repository: str,
+        affected_ids: set[str],
+        changed_files: list[str],
+        observation,
+    ) -> list[CheckResult]:
+        """Evaluate only checks affected by one candidate repository.
+
+        The baseline observations are reused for unchanged repositories.  A
+        candidate ref is read only for the repository under review, then the
+        relevant check families are recomputed from the mixed observation.
+        """
+
+        refs = self.client.refs
+        snapshots = self.client.source_snapshots.copy()
+        try:
+            # The caller installs the pull/<n>/head ref around this method.
+            infra = observation.infra
+            apps = observation.apps
+            candidate_environment = environment
+            results: list[CheckResult] = []
+
+            if repository == OAC_INFRA_REPOSITORY:
+                infra = read_infra_observation(
+                    self.client, environment, progress=self._emit_progress
+                )
+                infra_results, candidate_environment = self._infra_checks(
+                    environment, infra
+                )
+                if any(item.id in affected_ids for item in infra_results):
+                    results.extend(
+                        item for item in infra_results if item.id in affected_ids
+                    )
+
+            if repository == "CCI-MOC/oac-apps":
+                apps = self._candidate_apps_observation(
+                    candidate_environment,
+                    observation.apps,
+                    affected_ids,
+                    changed_files,
+                )
+                app_results = self._apps_checks(candidate_environment, apps)
+                results.extend(
+                    item for item in app_results if item.id in affected_ids
+                )
+
+            if repository == "CCI-MOC/moc-keycloak":
+                candidate_keycloak = read_keycloak_observation(
+                    self.client,
+                    candidate_environment,
+                    progress=self._emit_progress,
+                    client_name=self.registry.keycloak_client_name(
+                        candidate_environment.name
+                    ),
+                )
+                keycloak_results = self._keycloak_checks(
+                    candidate_environment, candidate_keycloak
+                )
+                results.extend(
+                    item for item in keycloak_results if item.id in affected_ids
+                )
+
+            cross_ids = {
+                item
+                for item in affected_ids
+                if item.startswith(("hub.", "workload."))
+                and item
+                not in {
+                    "hub.inventory",
+                    "hub.boot_image",
+                    "workload.inventory",
+                    "workload.boot_image",
+                    "workload.agent_labels_inputs",
+                    "hub.image_inventory",
+                    "hub.image_vars",
+                    "hub.hosted_cluster_defaults",
+                    "hub.component_values",
+                    "hub.local_cluster_values",
+                    "hub.argocd_apps",
+                    "workload.hosted_cluster_values",
+                    "workload.component_values",
+                    "hub.oidc_client",
+                }
+            }
+            if cross_ids:
+                cross_results = cross_repository_checks(
+                    self.client,
+                    candidate_environment,
+                    infra,
+                    apps,
+                    self._emit_progress,
+                )
+                results.extend(item for item in cross_results if item.id in cross_ids)
+
+            return results
+        finally:
+            # Candidate snapshots are evidence for the annotation only; never
+            # leak them into the report's selected source set.
+            self.client.refs = refs
+            self.client.source_snapshots = snapshots
+
+    def _candidate_apps_observation(
+        self,
+        environment: Environment,
+        baseline,
+        affected_ids: set[str],
+        changed_files: list[str],
+    ):
+        """Overlay only candidate values files needed by affected checks.
+
+        ``read_apps_observation`` intentionally loads every hosted-cluster
+        values file for the normal report because address uniqueness is a
+        repository-wide check.  A PR touching only paths/checks that do not
+        need that comparison should not trigger those extra raw downloads.
+        """
+
+        repository = "CCI-MOC/oac-apps"
+        tree = self.client.get_tree(repository)
+        hub = environment.infra_cluster
+        wanted = {
+            path
+            for path in changed_files
+            if path.startswith("hosted-clusters/") and path.endswith("/values.yaml")
+        }
+        if affected_ids & {
+            "workload.address_uniqueness",
+        }:
+            wanted.update(
+                path
+                for path in tree
+                if path.startswith("hosted-clusters/")
+                and path.endswith("/values.yaml")
+            )
+        if affected_ids & {
+            "hub.hosted_cluster_defaults",
+            "workload.dns_base_domain",
+            "workload.keycloak_oidc_client",
+        }:
+            wanted.add(f"hosted-clusters/{hub}/values.yaml")
+        for workload in environment.workload_clusters or ():
+            if affected_ids & {
+                "workload.hosted_cluster_values",
+                "workload.api_address_network",
+                "workload.ingress_address_network",
+                "workload.dns_base_domain",
+                "workload.node_pool_hosts",
+                "workload.gpu_without_hosts",
+                "workload.keycloak_oidc_client",
+            }:
+                wanted.add(
+                    f"hosted-clusters/{hub}/{workload}/values.yaml"
+                )
+
+        files = dict(baseline.files)
+        # A candidate deletion must hide the baseline file; changed files that
+        # remain in the tree are fetched at the candidate ref below.
+        for path in list(files):
+            if path not in tree and path.startswith("hosted-clusters/"):
+                files.pop(path, None)
+        for path in sorted(wanted):
+            if path not in tree:
+                files.pop(path, None)
+                continue
+            try:
+                files[path] = self.client.get_file(repository, path)
+            except GitHubError:
+                files.pop(path, None)
+
+        return replace(
+            baseline,
+            paths=SourceValue(
+                tuple(sorted(tree)),
+                repository,
+                "git/trees/main?recursive=1",
+                ref=self.client.ref_for(repository),
+            ),
+            files=files,
+            pull_requests=(),
+            pull_requests_unavailable=None,
+        )
+
+    def _evaluate_pr_candidates(
+        self, environment, path_scope, checks, pulls, *, observation
+    ) -> None:
+        """A changed file is only a candidate: compare the check's observed fields.
+
+        Reuse the client's immutable response cache for unchanged repositories,
+        but resolve each candidate repository at its PR head. Candidate snapshots
+        must not replace the sources of the report being annotated.
+        """
+        passing = {"declared_in_main", "requested", "pr_merged"}
+        candidates: dict[tuple[str, int], list[CheckResult]] = {}
+        for check in checks:
+            if check.state in passing and check.severity == "info":
+                continue
+            for pull in pulls:
+                repository = pull["repository"]["value"]
+                number = pull["number"]
+                ref = f"pull/{number}/head"
+                selected_ref = self.client.ref_for(repository)
+                selected_refs = {
+                    pull.get("head_sha", {}).get("value"),
+                    ref,
+                }
+                if (
+                    pull["classification"]["value"] != "open"
+                    or selected_ref in selected_refs - {None}
+                ):
+                    continue
+                dependencies = self._candidate_input_paths(check, environment)
+                if not any(
+                    repo == repository
+                    and self._path_matches(changed, path)
+                    for repo, path in dependencies
+                    for changed in pull["changed_files"]
+                ):
+                    continue
+                key = (repository, number)
+                if key not in candidates:
+                    refs = self.client.refs
+                    try:
+                        self.client.refs = {**refs, repository: ref}
+                        candidates[key] = self._candidate_check_results(
+                            environment,
+                            path_scope,
+                            repository,
+                            {
+                                item.id
+                                for item in checks
+                                if any(
+                                    repo == repository
+                                    and self._path_matches(changed, path)
+                                    for repo, path in self._candidate_input_paths(
+                                        item, environment
+                                    )
+                                    for changed in pull["changed_files"]
+                                )
+                            },
+                            pull["changed_files"],
+                            observation,
+                        )
+                    except GitHubError:
+                        candidates[key] = []
+                    finally:
+                        self.client.refs = refs
+                candidate = next((item for item in candidates[key]
+                                  if item.id == check.id and item.check == check.check), None)
+                if candidate is None or candidate.state in {"unknown", "blocked"}:
+                    continue
+                before = self._candidate_field_rows(check)
+                after = self._candidate_field_rows(candidate)
+                if before == after:
+                    continue
+                label = f"{repository.removeprefix('CCI-MOC/')}#{number}"
+                if candidate.state in passing and candidate.severity == "info":
+                    annotation = f"fixed by open PR {label}"
+                else:
+                    failures = "; ".join(
+                        f"{name} is {plain(observed)}; expected {plain(expected)}"
+                        for name, expected, observed in failing_field_rows(candidate.to_dict())
+                    )
+                    annotation = f"open PR {label} touches this but the check still fails there: {failures}"
+                check.evidence.setdefault("pr_evaluations", []).append(annotation)
+
+    def _apply_source_refs(self, checks: list[CheckResult]) -> None:
+        """Use the actual selected ref for checks and source links."""
+
+        for check in checks:
+            ref = self.client.ref_for(check.repository)
+            check.ref = ref
+            check.reason = check.reason.replace("in main", f"in {ref}").replace("from main", f"from {ref}")
+            if check.url and "/blob/" in check.url:
+                check.url = github_url(check.repository, check.path, ref)
+            if check.source is not None:
+                repository = check.source.get("repository", check.repository)
+                check.source = {
+                    **check.source,
+                    "ref": self.client.ref_for(repository),
+                }
 
     @staticmethod
     def _apply_blocked_states(checks: list[CheckResult]) -> list[CheckResult]:

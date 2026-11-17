@@ -9,6 +9,7 @@ from moc_env.registry import EnvironmentRegistry
 from moc_env.checks import StatusChecker
 from moc_env.checks import list_environments
 from moc_env.model import Environment
+from moc_env.github import GitHubError, RateLimitError
 from moc_env.observed import (
     read_environment_observation,
     read_infra_observation,
@@ -24,6 +25,89 @@ class StatusCheckerTest(unittest.TestCase):
         self.required_components = self.registry.required_components(
             "bu-ist-demo"
         )
+
+    def test_pull_request_failures_preserve_configuration_report(self) -> None:
+        for failure in (GitHubError("502 bad gateway"), RateLimitError("quota exhausted")):
+            with self.subTest(failure=str(failure)):
+                class UnavailablePullsClient(FakeGitHubClient):
+                    def pulls(self, repository, state="all"):
+                        raise failure
+
+                report = StatusChecker(UnavailablePullsClient()).run(
+                    Environment(name="bu-ist-demo", issue_number=666)
+                )
+                self.assertFalse(report.rate_limited)
+                self.assertTrue(report.checks)
+                self.assertIn(str(failure), report.pull_requests_unavailable)
+                self.assertIn("CCI-MOC/oac-apps", report.to_dict()["pull_requests_unavailable"])
+
+    def test_pull_request_file_failure_is_nonfatal(self) -> None:
+        class UnavailableFilesClient(FakeGitHubClient):
+            def pr_files(self, repository, number):
+                raise GitHubError("PR files unavailable")
+
+        report = StatusChecker(UnavailableFilesClient()).run(
+            Environment(name="bu-ist-demo", issue_number=666)
+        )
+        self.assertTrue(report.checks)
+        self.assertFalse(report.rate_limited)
+        self.assertIn("PR files unavailable", report.pull_requests_unavailable)
+
+    def test_malformed_pull_records_are_nonfatal(self) -> None:
+        cases = (
+            None,
+            {},
+            {"number": [], "state": "open"},
+            {"number": 246, "state": "open", "head": []},
+        )
+        for record in cases:
+            with self.subTest(record=record):
+                class MalformedPullsClient(FakeGitHubClient):
+                    def pulls(self, repository, state="all"):
+                        yield record
+
+                report = StatusChecker(MalformedPullsClient()).run(
+                    Environment(name="bu-ist-demo", issue_number=666)
+                )
+                self.assertTrue(report.checks)
+                self.assertFalse(report.rate_limited)
+                self.assertIn("Malformed pull-request record", report.pull_requests_unavailable)
+
+    def test_malformed_pull_file_records_are_nonfatal(self) -> None:
+        for record in (None, {}, {"filename": []}):
+            with self.subTest(record=record):
+                class MalformedFilesClient(FakeGitHubClient):
+                    def pr_files(self, repository, number):
+                        yield record
+
+                report = StatusChecker(MalformedFilesClient()).run(
+                    Environment(name="bu-ist-demo", issue_number=666)
+                )
+                self.assertTrue(report.checks)
+                self.assertFalse(report.rate_limited)
+                self.assertIn("Malformed pull-request file record", report.pull_requests_unavailable)
+
+    def test_disabled_pull_lookup_is_recorded_without_request(self) -> None:
+        class NoPullsClient(FakeGitHubClient):
+            def pulls(self, repository, state="all"):
+                self.fail("pull-request lookup must be skipped")
+
+        report = StatusChecker(NoPullsClient(), include_prs=False).run(
+            Environment(name="bu-ist-demo", issue_number=666)
+        )
+        self.assertTrue(report.pull_requests_skipped)
+        self.assertEqual(report.pull_requests_skip_reason, "skipped (--no-prs)")
+
+    def test_check_refs_and_urls_use_repository_override(self) -> None:
+        report = StatusChecker(
+            FakeGitHubClient(refs={"CCI-MOC/oac-apps": "pull/246/head"}),
+            include_prs=False,
+        ).run(Environment(name="bu-ist-demo", issue_number=666))
+        app_checks = [check for check in report.checks if check.repository == "CCI-MOC/oac-apps"]
+        self.assertTrue(app_checks)
+        for check in app_checks:
+            self.assertEqual(check.ref, "pull/246/head")
+            self.assertIn("/blob/pull/246/head/", check.url)
 
     def test_bu_ist_demo_milestone_one_states(self) -> None:
         environment = Environment(name="bu-ist-demo", issue_number=666)

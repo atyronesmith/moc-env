@@ -1,0 +1,367 @@
+all:
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    bmc_user: root
+    bmc_password: "{{ lookup('env', 'BMC_PASSWORD') }}"
+    bm_management: openstack
+  hosts:
+    oac-dev-bastion:
+      node_name: MOC-R4PAC22U31-S3A
+      bmc_addr: 10.2.12.165
+      bmc_type: idrac
+  children:
+    oac_clusters:
+      children:
+        oac_dev_infra:
+          vars:
+            network_name: oac-infra
+            bmc_type: idrac
+            boot_image_url: "http://10.2.0.82/boot/agent.x86_64.iso"
+            cluster: oac-dev-infra
+          hosts:
+            oac-dev-infra-control-0:
+              node_name: MOC-R4PAC22U17-S1
+              bmc_addr: 10.2.12.91
+            oac-dev-infra-control-1:
+              node_name: MOC-R4PAC22U15-S1
+              bmc_addr: 10.2.12.81
+            oac-dev-infra-control-2:
+              node_name: MOC-R4PAC08U05-S3
+              bmc_addr: 10.2.14.32
+        oac_dev_workload0:
+          vars:
+            network_name: oac-dev-workload0
+            cluster: oac-dev-workload0
+          children:
+            oac_dev_workload0_gpu:
+              vars:
+                bmc_type: lenovo
+                boot_image_url: "http://10.2.0.82/boot/oac-dev-infra-discovery.iso"
+              hosts:
+                oac-dev-workload0-gpu-0:
+                  node_name: MOC-R4PCC02U05
+                  bmc_addr: 10.2.19.105
+                oac-dev-workload0-gpu-1:
+                  node_name: MOC-R4PCC02U09
+                  bmc_addr: 10.2.19.109
+            oac_dev_workload0_gpu_a100:
+              vars:
+                bmc_type: lenovo
+                boot_image_url: "http://10.2.0.82/boot/oac-dev-infra-agent.iso"
+              hosts:
+                oac-dev-workload0-gpu-a100-0:
+                  node_name: MOC-R8PAC23U33
+                  bmc_addr: 10.2.18.133
+            oac_dev_workload0_compute:
+              vars:
+                bmc_type: idrac
+                boot_image_url: "http://10.2.0.82/boot/oac-dev-infra-discovery.iso"
+              hosts:
+                oac-dev-workload0-compute-0:
+                  node_name: MOC-R4PAC21U03-S3
+                  bmc_addr: 10.2.10.22
+                oac-dev-workload0-compute-1:
+                  node_name: MOC-R4PAC22U27-S1
+                  bmc_addr: 10.2.12.141
+                oac-dev-workload0-compute-2:
+                  node_name: MOC-R4PAC22U29-S3
+                  bmc_addr: 10.2.12.152
+        oac_dev_workload1:
+          vars:
+            cluster: oac-dev-workload1
+            bmc_type: idrac
+            bm_management: bmc
+          children:
+            oac_dev_workload1_compute:
+              vars:
+                boot_image_url: "http://10.2.0.82/boot/dev-workload-agent.iso"
+                #boot_image_url: "http://10.2.0.82/boot/discovery-r440.iso"
+              hosts:
+                oac-dev-workload1-compute-0:
+                  node_name: MOC-R4PAC10U33-S1C
+                  bmc_addr: 10.2.13.173
+                  mac_addr: a8:99:69:8a:97:a9
+                  resource_class: fc430
+                oac-dev-workload1-compute-1:
+                  node_name: MOC-R4PAC10U33-S3B
+                  bmc_addr: 10.2.13.176
+                  mac_addr: a8:99:69:8a:99:9d
+                  resource_class: fc430
+        oac_prod_infra:
+          vars:
+            cluster: oac-prod-infra
+            bm_management: bmc
+            bmc_type: idrac
+          children:
+            oac_prod_infra_controller:
+              vars:
+                boot_image_url: "http://10.2.0.82/boot/oac-prod-infra-agent.x86_64.iso"
+              hosts:
+                oac-prod-infra-control-0:
+                  node_name: MOC-R4PAC10U33-S1A
+                  bmc_addr: 10.2.13.171
+                oac-prod-infra-control-1:
+                  node_name: MOC-R4PAC10U35-S3B
+                  bmc_addr: 10.2.13.186
+                oac-prod-infra-control-2:
+                  node_name: MOC-R4PAC10U37-S3C
+                  bmc_addr: 10.2.13.197
+#            oac_prod_infra_compute:
+#              vars:
+#                boot_image_url: "http://10.2.0.82/boot/discovery-r440.iso"
+#              hosts:
+#                oac-prod-infra-compute-0:
+#                  node_name: R440-TEMP-NAME-1
+#                  bmc_addr: 10.3.10.114
+#                oac-prod-infra-compute-1:
+#                  node_name: R440-TEMP-NAME-2
+#                  bmc_addr: 10.3.10.115
+#                oac-prod-infra-compute-2:
+#                  node_name: R440-TEMP-NAME-3
+#                  bmc_addr: 10.3.10.116
+            # fc830s temporarily used as computes while r440s issues are worked out
+            oac_prod_infra_compute_temp:
+              vars:
+                boot_image_url: "http://10.2.0.82/boot/oac-prod-infra-agent.x86_64.iso"
+              hosts:
+                oac-prod-infra-compute-temp-0:
+                  node_name: MOC-R4PAC10U11-S3
+                  bmc_addr: 10.2.13.62
+                oac-prod-infra-compute-temp-1:
+                  node_name: MOC-R4PAC10U09-S3
+                  bmc_addr: 10.2.13.52
+                oac-prod-infra-compute-temp-2:
+                  node_name: MOC-R4PAC10U19-S1
+                  bmc_addr: 10.2.13.101
+        oac_prod_workload0:
+          vars:
+            cluster: oac-prod-workload0
+            bmc_type: idrac
+          children:
+            oac_prod_workload0_compute:
+              vars:
+                boot_image_url: "http://10.2.0.82/boot/prod-workload0-agent-discovery.iso"
+                bm_management: bmc
+              hosts:
+                oac-prod-workload0-compute-0:
+                  node_name: MOC-R4PAC10U29-S3
+                  bmc_addr: 10.2.13.152
+                  mac_addr: 24:8a:07:1e:85:f4
+                  resource_class: fc830
+                oac-prod-workload0-compute-1:
+                  node_name: MOC-R4PAC10U27-S3
+                  bmc_addr: 10.2.13.142
+                  mac_addr: 24:8a:07:1e:85:a4
+                  resource_class: fc830
+                oac-prod-workload0-compute-2:
+                  node_name: MOC-R4PAC10U25-S3
+                  bmc_addr: 10.2.13.132
+                  mac_addr: 24:8a:07:1e:34:a6
+                  resource_class: fc830
+            oac_prod_workload0_gpu:
+              vars:
+                boot_image_url: "http://10.2.0.82/boot/prod-workload0-agent-discovery.iso"
+                #boot_image_url: "http://10.2.0.82/boot/discovery-r440.iso"
+                bm_management: openstack
+                bmc_type: lenovo
+              hosts:
+                oac-prod-workload0-gpu-0:
+                  node_name: MOC-R4PCC02U30
+                  bmc_addr: 10.2.19.130
+                oac-prod-workload0-gpu-1:
+                  node_name: MOC-R4PCC04U09
+                  bmc_addr: 10.2.20.109
+                oac-prod-workload0-gpu-2:
+                  node_name: MOC-R4PCC04U11
+                  bmc_addr: 10.2.20.111
+                oac-prod-workload0-gpu-3:
+                  node_name: MOC-R4PCC04U12
+                  bmc_addr: 10.2.20.112
+                oac-prod-workload0-gpu-4:
+                  node_name: MOC-R4PCC04U16
+                  bmc_addr: 10.2.20.116
+            oac_prod_workload0_gpu_sxm:
+              vars:
+                boot_image_url: "http://10.2.0.82/boot/prod-workload0-agent-discovery.iso"
+                bm_management: openstack
+                bmc_type: lenovo
+              hosts:
+                oac-prod-workload0-gpu-sxm-0:
+                  node_name: MOC-R8PAC23U31
+                  bmc_addr: 10.2.18.131
+                oac-prod-workload0-gpu-sxm-1:
+                  node_name: MOC-R8PAC23U26
+                  bmc_addr: 10.2.18.126
+    nist_clusters:
+      children:
+        nist_dev_infra:
+          vars:
+            cluster: nist-dev-infra
+            bm_management: bmc
+            bmc_type: idrac
+          children:
+            nist_dev_infra_controller:
+              vars:
+                boot_image_url: "http://10.2.0.82/boot/nist-dev-infra-agent.x86_64.iso"
+              hosts:
+                nist-dev-infra-control-0:
+                  node_name: MOC-R4PAC10U13-S1
+                  bmc_addr: 10.2.13.71
+                nist-dev-infra-control-1:
+                  node_name: MOC-R4PAC10U15-S1
+                  bmc_addr: 10.2.13.81
+                nist-dev-infra-control-2:
+                  node_name: MOC-R4PAC10U17-S3
+                  bmc_addr: 10.2.13.92
+        nist_dev_workload0:
+          vars:
+            cluster: nist-dev-workload0
+            bmc_type: idrac
+          children:
+            nist_dev_workload0_compute:
+              vars:
+                boot_image_url: "http://10.2.0.82/boot/nist-dev-infra-agent-workload-discovery.iso"
+                bm_management: bmc
+              hosts:
+                nist-dev-workload0-compute-0:
+                  node_name: MOC-R4PAC10U37-S1B
+                  bmc_addr: 10.2.13.192
+                  mac_addr: 40:5c:fd:65:f3:ef
+                  resource_class: fc430
+                nist-dev-workload0-compute-1:
+                  node_name: MOC-R4PAC10U37-S1D
+                  bmc_addr: 10.2.13.194
+                  mac_addr: 40:5c:fd:65:f9:a7
+                  resource_class: fc430
+            nist_dev_workload0_gpu:
+              vars:
+                bmc_type: lenovo
+                bm_management: bmc
+                boot_image_url: "http://10.2.0.82/boot/nist-dev-infra-agent-workload-discovery.iso"
+              hosts:
+                nist-dev-workload0-gpu-0:
+                  node_name: MOC-R4PCC02U35
+                  bmc_addr: 10.2.19.135
+                  mac_addr: a0:88:c2:27:c1:f0
+                  resource_class: lenovo-sd665nv3-h100
+                nist-dev-workload0-gpu-1:
+                  node_name: MOC-R4PCC04U32
+                  bmc_addr: 10.2.20.132
+                  mac_addr: a0:88:c2:27:c1:60
+                  resource_class: lenovo-sd665nv3-h100
+    bu_ist_demo_clusters:
+      children:
+        bu_ist_demo_infra:
+          vars:
+            cluster: bu-ist-demo-infra
+            bm_management: bmc
+            bmc_type: idrac
+          children:
+            bu_ist_demo_infra_controller:
+              vars:
+                # switch to bu-ist-demo-infra-agent.iso once the hub image is built
+                boot_image_url: "http://10.2.0.82/boot/discovery.iso"
+              hosts:
+                bu-ist-demo-infra-control-0:
+                  node_name: MOC-R4PAC10U31-S1A
+                  bmc_addr: 10.2.13.161
+                bu-ist-demo-infra-control-1:
+                  node_name: MOC-R4PAC10U33-S1D
+                  bmc_addr: 10.2.13.174
+                bu-ist-demo-infra-control-2:
+                  node_name: MOC-R4PAC10U35-S1A
+                  bmc_addr: 10.2.13.181
+        bu_ist_demo_workload0:
+          vars:
+            cluster: bu-ist-demo-workload0
+            bm_management: bmc
+            bmc_type: idrac
+          children:
+            bu_ist_demo_workload0_compute:
+              vars:
+                # switch to the workload discovery iso once the hub image is built
+                boot_image_url: "http://10.2.0.82/boot/bu-ist-demo-infra-agent-discovery.iso"
+              hosts:
+                bu-ist-demo-workload0-compute-0:
+                  node_name: MOC-R4PAC10U31-S1B
+                  bmc_addr: 10.2.13.162
+                  mac_addr: 10:7d:1a:9c:49:29
+                  resource_class: fc430
+                bu-ist-demo-workload0-compute-1:
+                  node_name: MOC-R4PAC10U31-S1C
+                  bmc_addr: 10.2.13.163
+                  mac_addr: 10:7d:1a:9c:49:af
+                  resource_class: fc430
+    other_clusters:
+      children:
+        jetty:
+          vars:
+            network_name: jetty-net
+            bmc_type: idrac
+            boot_image_url: "http://10.2.0.82/boot/jetty-discovery.iso"
+            cluster: jetty
+          children:
+            jetty_controller:
+              hosts:
+                jetty-0:
+                  node_name: MOC-R4PAC08U35-S3D
+                  bmc_addr: 10.2.14.188
+                jetty-1:
+                  node_name: MOC-R4PAC08U31-S1A
+                  bmc_addr: 10.2.14.161
+                jetty-2:
+                  node_name: MOC-R4PAC08U31-S1B
+                  bmc_addr: 10.2.14.162
+            jetty_gpu:
+              vars:
+                bmc_type: lenovo
+              hosts:
+                jetty-gpu-0:
+                  node_name: MOC-R4PCC02U15
+                  bmc_addr: 10.2.19.115
+                jetty-gpu-1:
+                  node_name: MOC-R4PCC02U16
+                  bmc_addr: 10.2.19.116
+        dizzy:
+          vars:
+            cluster: dizzy-infra
+            bm_management: bmc
+            bmc_type: idrac
+          children:
+            dizzy_infra_controller:
+              vars:
+                boot_image_url: "http://10.2.0.82/boot/dizzy-infra-agent.iso"
+              hosts:
+                # dizzy-infra-control-0:
+                #  node_name: MOC-R4PAC10U07-S1
+                #  bmc_addr: 10.2.13.41
+                #dizzy-infra-control-1:
+                #  node_name: MOC-R4PAC10U05-S1
+                #  bmc_addr: 10.2.13.31
+                #dizzy-infra-control-2:
+                #  node_name: MOC-R4PAC10U03-S1
+                #  bmc_addr: 10.2.13.21
+                dizzy-infra-control-3:
+                  node_name: MOC-R4PAC10U07-S3
+                  bmc_addr: 10.2.13.42
+                dizzy-infra-control-4:
+                  node_name: MOC-R4PAC10U05-S3
+                  bmc_addr: 10.2.13.32
+                dizzy-infra-control-5:
+                  node_name: MOC-R4PAC10U03-S3
+                  bmc_addr: 10.2.13.22
+        ark-cohort:
+          vars:
+            bmc_type: lenovo
+            bm_management: bmc
+            boot_image_url: "http://10.2.0.82/boot/rhel-10.3-x86_64-boot.iso"
+            ansible_user: root
+          hosts:
+            ark-1:
+              ansible_host: 10.20.30.21
+              bmc_addr: 10.2.19.132
+              node_name: MOC-R4PCC02U32
+            ark-2:
+              ansible_host: 10.20.30.20
+              bmc_addr: 10.2.20.103
+              node_name: MOC-R4PCC04U03

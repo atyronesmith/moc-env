@@ -12,8 +12,8 @@ from unittest.mock import patch
 
 import yaml
 
-from moc_env import cli
-from moc_env.github import RateLimitError
+from moc_env import cli, cli_support
+from moc_env.github import GitHubClient, GitHubError, RateLimitError
 
 from fakes import (
     CrossRepoFakeGitHubClient,
@@ -49,7 +49,12 @@ class CliDispatchTest(unittest.TestCase):
             contextlib.redirect_stderr(stderr),
         ):
             exit_code = cli.main(arguments, clock=clock)
-        return exit_code, stdout.getvalue(), stderr.getvalue()
+        diagnostic = stderr.getvalue()
+        accounting = "GitHub API: 0 requests, 0 counted against quota, 0 from cache\n"
+        if "GitHub API:" in diagnostic:
+            self.assertTrue(diagnostic.endswith(accounting), diagnostic)
+            diagnostic = diagnostic.removesuffix(accounting)
+        return exit_code, stdout.getvalue(), diagnostic
 
     def test_list_text_dispatch(self) -> None:
         exit_code, stdout, stderr = self.run_cli(["list"])
@@ -204,7 +209,7 @@ class CliDispatchTest(unittest.TestCase):
             )
             with (
                 patch.dict(os.environ, {}, clear=True),
-                patch.object(cli, "CredentialResolver", return_value=resolver),
+                patch.object(cli_support, "CredentialResolver", return_value=resolver),
             ):
                 self.assertIsNone(cli._resolve_github_token(arguments))
 
@@ -247,7 +252,10 @@ class CliDispatchTest(unittest.TestCase):
         self.assertIn("Step 14:", stderr)
         self.assertNotIn("Step 15:", stderr)
         self.assertNotIn("Action:", stderr)
-        self.assertLessEqual(len(stdout.splitlines()), 85)
+        # NEXT now includes each gap's observed/expected evidence, not just an
+        # imperative. The detailed ledger must still remain opt-in.
+        self.assertLessEqual(len(stdout.splitlines()), 115)
+        self.assertNotIn("DETAILED CHECKS", stdout)
 
     def test_status_fail_on_severity(self) -> None:
         cases = (
@@ -318,14 +326,15 @@ class CliDispatchTest(unittest.TestCase):
                 self.assertEqual(exit_code, 0)
                 self.assertEqual(stdout, golden.read_text(encoding="utf-8"))
 
-    def test_open_pull_request_fix_is_shown_with_action(self) -> None:
+    def test_file_overlap_alone_does_not_claim_a_fix(self) -> None:
         exit_code, stdout, _ = self.run_cli(
             ["status", "bu-ist-demo", "--format", "text", "--prs"],
             client_class=CrossRepoFakeGitHubClient,
         )
 
         self.assertEqual(exit_code, 0)
-        self.assertIn("fix in open PR oac-apps#237", stdout)
+        self.assertNotIn("fixed by open PR oac-apps#237", stdout)
+        self.assertNotIn("fix in open PR", stdout)
 
     def test_markdown_golden_files(self) -> None:
         fixed_clock = lambda: datetime(
@@ -466,7 +475,7 @@ class CliDispatchTest(unittest.TestCase):
         self.assertIn("oac-dev-workload1 host inventory", checks)
         self.assertIn("Workload hosted-cluster values", checks)
 
-    def test_full_status_without_prs_uses_at_most_twelve_api_calls(self) -> None:
+    def test_full_status_without_prs_uses_at_most_seventeen_api_calls(self) -> None:
         class CountingClient(FakeGitHubClient):
             def __init__(self, *args, **kwargs):
                 super().__init__(*args, **kwargs)
@@ -474,11 +483,21 @@ class CliDispatchTest(unittest.TestCase):
 
             def get_json(self, path_or_url):
                 self.api_requests += 1
+                parts = path_or_url.split("/")
+                if len(parts) >= 6 and parts[1] == "repos":
+                    repository = "/".join(parts[2:4])
+                    if parts[4] == "commits":
+                        return {"sha": self.SOURCE_SHAS[repository]}
+                    if parts[4:6] == ["git", "trees"]:
+                        paths = FakeGitHubClient.get_tree(self, repository)
+                        return {
+                            "sha": "f" * 40,
+                            "tree": [{**item, "type": "blob"} for item in paths.values()],
+                        }
                 return super().get_json(path_or_url)
 
             def get_tree(self, repository, ref="main"):
-                self.api_requests += 1
-                return super().get_tree(repository, ref)
+                return GitHubClient.get_tree(self, repository, ref)
 
         client_class = CountingClient
         instances = []
@@ -496,7 +515,10 @@ class CliDispatchTest(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertEqual(stderr, "")
         self.assertTrue(instances)
-        self.assertLessEqual(instances[0].api_requests, 12)
+        # Eight repositories each need one commit resolution and one tree;
+        # the MOC issue itself is one additional request. Repeated reads reuse
+        # the same pinned snapshots rather than resolving mutable refs again.
+        self.assertEqual(instances[0].api_requests, 17)
 
     def test_unauthenticated_status_skips_pull_requests_by_default(self) -> None:
         exit_code, stdout, _ = self.run_cli(
@@ -507,6 +529,50 @@ class CliDispatchTest(unittest.TestCase):
         self.assertIn(
             "Pull requests: skipped because this run is unauthenticated", stdout
         )
+
+    def test_unavailable_pull_request_lookup_still_exits_zero(self) -> None:
+        class UnavailablePullsClient(FakeGitHubClient):
+            def pulls(self, repository, state="all"):
+                raise GitHubError("502 bad gateway")
+
+        exit_code, stdout, stderr = self.run_cli(
+            ["status", "bu-ist-demo", "--prs", "--format", "json"],
+            client_class=UnavailablePullsClient,
+        )
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stderr, "")
+        self.assertIn("502 bad gateway", json.loads(stdout)["pull_requests_unavailable"])
+
+    def test_explicit_no_prs_is_marked_skipped_for_authenticated_run(self) -> None:
+        class AuthenticatedClient(FakeGitHubClient):
+            @property
+            def authenticated(self):
+                return True
+
+        exit_code, stdout, _ = self.run_cli(
+            ["status", "bu-ist-demo", "--no-prs", "--format", "json"],
+            client_class=AuthenticatedClient,
+        )
+        self.assertEqual(exit_code, 0)
+        report = json.loads(stdout)
+        self.assertTrue(report["pull_requests_skipped"])
+        self.assertEqual(report["pull_requests_skip_reason"], "skipped (--no-prs)")
+
+    def test_optional_pr_budget_does_not_block_status_preflight(self) -> None:
+        class LimitedQuotaClient(FakeGitHubClient):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.rate_limit_remaining = 20
+
+            def pulls(self, repository, state="all"):
+                raise RateLimitError("optional PR quota exhausted")
+
+        exit_code, stdout, _ = self.run_cli(
+            ["status", "bu-ist-demo", "--prs", "--format", "json"],
+            client_class=LimitedQuotaClient,
+        )
+        self.assertEqual(exit_code, 0)
+        self.assertIn("optional PR quota exhausted", json.loads(stdout)["pull_requests_unavailable"])
 
     def test_mid_run_rate_limit_renders_unknown_checks_and_exits_two(self) -> None:
         class RateLimitedClient(FakeGitHubClient):

@@ -3,15 +3,21 @@
 from __future__ import annotations
 
 import json
+import re
 import time
+from contextvars import ContextVar
 from collections.abc import Iterator
 from collections.abc import Callable
+from http.client import HTTPException
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
 from urllib.request import Request, urlopen
 
 from .github_cache import GitHubResponseCache
+
+
+run_clients: ContextVar[list | None] = ContextVar("github_run_clients", default=None)
 
 
 class GitHubError(RuntimeError):
@@ -42,11 +48,18 @@ class GitHubClient:
         self.on_response: Callable[[int], None] | None = None
         self._rate_limit_warning_sent = False
         self.api_calls_used = 0
+        self.requests_made = 0
+        self.cache_hits = 0
+        clients = run_clients.get()
+        if clients is not None:
+            clients.append(self)
         self.offline = offline
         self.refresh = refresh
         self.response_cache = GitHubResponseCache()
         self._responses: dict[str, tuple[Any, Any]] = {}
         self._raw_responses: dict[str, str] = {}
+        self._unrevalidated_sources: dict[str, str] = {}
+        self._trees: dict[tuple[str, str], dict[str, dict[str, Any]]] = {}
 
     @property
     def authenticated(self) -> bool:
@@ -58,14 +71,64 @@ class GitHubClient:
         if sha:
             self.source_snapshots[(repository, ref)] = sha
 
-    def sources(self) -> list[dict[str, str]]:
+    def sources(self) -> list[dict[str, Any]]:
         return [
-            {"repository": repository, "ref": ref, "sha": sha}
+            {
+                "repository": repository,
+                "ref": ref,
+                "sha": sha,
+                **(
+                    {
+                        "from_cache": True,
+                        "fetched_at": self._unrevalidated_sources[repository],
+                    }
+                    if repository in self._unrevalidated_sources
+                    else {}
+                ),
+            }
             for (repository, ref), sha in sorted(self.source_snapshots.items())
         ]
 
     def ref_for(self, repository: str) -> str:
         return self.refs.get(repository, "main")
+
+    @staticmethod
+    def _is_commit_sha(value: Any) -> bool:
+        return isinstance(value, str) and re.fullmatch(r"[0-9a-fA-F]{40}", value) is not None
+
+    def snapshot_request_urls(self, repository: str, ref: str = "main") -> list[str]:
+        """Estimate commit and tree requests without resolving refs remotely."""
+
+        ref = self.refs.get(repository, ref)
+        prefix = f"{self.base_url}/repos/{repository}"
+        if self._is_commit_sha(ref):
+            return [f"{prefix}/git/trees/{ref}?recursive=1"]
+        commit_url = f"{prefix}/commits/{quote(ref, safe='/')}"
+        cached = None if self.refresh else self.response_cache.read(commit_url)
+        try:
+            data = json.loads(cached["body"]) if cached else None
+        except json.JSONDecodeError:
+            data = None
+        sha = data.get("sha") if isinstance(data, dict) else None
+        tree_ref = sha if self._is_commit_sha(sha) else ref
+        return [commit_url, f"{prefix}/git/trees/{tree_ref}?recursive=1"]
+
+    def resolve_commit(self, repository: str, ref: str = "main") -> str:
+        """Resolve a mutable ref once, keeping commits distinct from Git trees."""
+
+        ref = self.refs.get(repository, ref)
+        sha = self.source_snapshots.get((repository, ref))
+        if sha is not None:
+            return sha
+        if self._is_commit_sha(ref):
+            sha = ref
+        else:
+            data = self.get_json(f"/repos/{repository}/commits/{quote(ref, safe='/')}")
+            sha = data.get("sha") if isinstance(data, dict) else None
+            if not self._is_commit_sha(sha):
+                raise GitHubError(f"GitHub did not resolve a commit SHA for {repository}@{ref}")
+        self.record_source(repository, ref, sha)
+        return sha
 
     def _record_headers(self, headers: Any) -> None:
         remaining = headers.get("X-RateLimit-Remaining")
@@ -90,24 +153,27 @@ class GitHubClient:
     def _request(self, url: str, etag: str | None = None) -> tuple[Any, Any]:
         request = Request(url, headers=self._headers(etag), method="GET")
         try:
-            with urlopen(request, timeout=self.timeout) as response:
-                body = response.read().decode("utf-8")
-                self._record_headers(response.headers)
-                data = json.loads(body)
-                if getattr(response, "status", 200) != 304 and not url.endswith(
-                    "/rate_limit"
-                ):
-                    self.api_calls_used += 1
-                response_etag = response.headers.get("ETag")
-                if response_etag:
-                    self._store_response(url, response_etag, body)
-                return data, response.headers
+            body, headers, status = self._read_response(request)
+            self._record_headers(headers)
+            if status == 304 and etag is not None:
+                cached = self.response_cache.read(url)
+                if cached is not None:
+                    self.cache_hits += 1
+                    return json.loads(cached["body"]), headers
+                raise GitHubError(f"GitHub returned 304 without a usable cached response for {url}")
+            data = json.loads(body)
+            response_etag = headers.get("ETag")
+            if response_etag:
+                self._store_response(url, response_etag, body)
+            return data, headers
         except HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace")
+            exc.close()
             self._record_headers(exc.headers)
             if exc.code == 304 and etag is not None:
                 cached = self.response_cache.read(url)
                 if cached is not None:
+                    self.cache_hits += 1
                     return json.loads(cached["body"]), exc.headers
                 raise GitHubError(
                     f"GitHub returned 304 without a usable cached response for {url}"
@@ -123,8 +189,56 @@ class GitHubClient:
             raise GitHubError(
                 f"GitHub API request failed ({exc.code}) for {url}: {body[:500]}"
             ) from exc
-        except (URLError, TimeoutError, json.JSONDecodeError) as exc:
+        except (OSError, URLError, HTTPException, json.JSONDecodeError) as exc:
             raise GitHubError(f"GitHub API request failed for {url}: {exc}") from exc
+
+    def _read_response(self, request: Request) -> tuple[str, Any, int]:
+        """Read a response, retrying transient failures three times."""
+
+        for attempt in range(4):
+            try:
+                if self.offline:
+                    raise AssertionError("HTTP requests are forbidden in offline mode")
+                self.requests_made += 1
+                with urlopen(request, timeout=self.timeout) as response:
+                    status = getattr(response, "status", 200)
+                    self._count_quota(request.full_url, status)
+                    return (
+                        response.read().decode("utf-8"),
+                        response.headers,
+                        status,
+                    )
+            except HTTPError as exc:
+                self._count_quota(request.full_url, exc.code)
+                if not 500 <= exc.code < 600 or attempt == 3:
+                    raise
+                exc.close()
+            except (OSError, URLError, HTTPException):
+                if attempt == 3:
+                    raise
+            time.sleep(0.5 * (2 ** attempt))
+        raise AssertionError("unreachable retry state")
+
+    def _count_quota(self, url: str, status: int) -> None:
+        if url.startswith(self.base_url + "/") and not url.endswith("/rate_limit") and status != 304:
+            self.api_calls_used += 1
+
+    def _mark_unrevalidated(self, url: str, cached: dict[str, Any]) -> None:
+        """Keep the oldest cached fetch time used for each repository."""
+
+        parsed = urlsplit(url)
+        parts = parsed.path.strip("/").split("/")
+        if parsed.netloc == "api.github.com" and len(parts) >= 3 and parts[0] == "repos":
+            repository = "/".join(parts[1:3])
+        elif parsed.netloc == "raw.githubusercontent.com" and len(parts) >= 3:
+            repository = "/".join(parts[:2])
+        else:
+            return
+        fetched_at = cached.get("fetched_at") or "unknown"
+        previous = self._unrevalidated_sources.get(repository)
+        self._unrevalidated_sources[repository] = (
+            min(previous, fetched_at) if previous is not None else fetched_at
+        )
 
     def get_json(self, path_or_url: str) -> Any:
         url = path_or_url if path_or_url.startswith("https://") else self.base_url + path_or_url
@@ -135,7 +249,9 @@ class GitHubClient:
     ) -> None:
         """Stop before REST work when the known quota cannot cover it."""
 
-        if self.offline or self.rate_limit_remaining is None:
+        if self.offline:
+            return
+        if self.rate_limit_remaining is None:
             data = self.get_json("/rate_limit")
             resources = data.get("resources", {}).get("core", {}) if isinstance(data, dict) else {}
             remaining = resources.get("remaining")
@@ -168,6 +284,8 @@ class GitHubClient:
                     "run the command without --offline to populate the cache"
                 )
             data = json.loads(cached["body"])
+            self.cache_hits += 1
+            self._mark_unrevalidated(url, cached)
             response = (data, None)
             self._responses[url] = response
             return response
@@ -178,6 +296,8 @@ class GitHubClient:
             and self.rate_limit_remaining == 0
             and cached is not None
         ):
+            self.cache_hits += 1
+            self._mark_unrevalidated(url, cached)
             response = (json.loads(cached["body"]), None)
             self._responses[url] = response
             return response
@@ -206,7 +326,7 @@ class GitHubClient:
             yield from data
 
             next_url = None
-            link = headers.get("Link", "")
+            link = (headers or {}).get("Link", "")
             for part in link.split(","):
                 fields = part.split(";", 1)
                 if len(fields) == 2 and 'rel="next"' in fields[1]:
@@ -216,15 +336,20 @@ class GitHubClient:
 
     def get_tree(self, repository: str, ref: str = "main") -> dict[str, dict[str, Any]]:
         ref = self.refs.get(repository, ref)
-        data = self.get_json(f"/repos/{repository}/git/trees/{ref}?recursive=1")
+        key = (repository, ref)
+        if key in self._trees:
+            return self._trees[key]
+        commit_sha = self.resolve_commit(repository, ref)
+        data = self.get_json(f"/repos/{repository}/git/trees/{commit_sha}?recursive=1")
         if not isinstance(data, dict) or data.get("truncated") is True:
             raise GitHubError(f"GitHub tree response was truncated for {repository}@{ref}")
-        self.record_source(repository, ref, data.get("sha"))
-        return {
+        tree = {
             item["path"]: item
             for item in data.get("tree", [])
             if isinstance(item, dict) and item.get("type") == "blob"
         }
+        self._trees[key] = tree
+        return tree
 
     def get_file(self, repository: str, path: str, ref: str = "main") -> str:
         ref = self.refs.get(repository, ref)
@@ -249,6 +374,8 @@ class GitHubClient:
                     "run the command without --offline to populate the cache"
                 )
             self._raw_responses[url] = cached["body"]
+            self.cache_hits += 1
+            self._mark_unrevalidated(url, cached)
             return cached["body"]
         cached = None if self.refresh else self.response_cache.read(url)
         body = self._raw_request(url, cached["etag"] if cached else None)
@@ -261,23 +388,31 @@ class GitHubClient:
             headers["If-None-Match"] = etag
         request = Request(url, headers=headers, method="GET")
         try:
-            with urlopen(request, timeout=self.timeout) as response:
-                body = response.read().decode("utf-8")
-                response_etag = response.headers.get("ETag")
-                if response_etag:
-                    self._store_response(url, response_etag, body)
-                return body
+            body, response_headers, status = self._read_response(request)
+            if status == 304 and etag is not None:
+                cached = self.response_cache.read(url)
+                if cached is None:
+                    raise GitHubError(f"GitHub returned 304 without a usable cached response for {url}")
+                self.cache_hits += 1
+                return cached["body"]
+            response_etag = response_headers.get("ETag")
+            if response_etag:
+                self._store_response(url, response_etag, body)
+            return body
         except HTTPError as exc:
             if exc.code == 304 and etag is not None:
                 cached = self.response_cache.read(url)
                 if cached is not None:
+                    self.cache_hits += 1
+                    exc.close()
                     return cached["body"]
             body = exc.read().decode("utf-8", errors="replace")
+            exc.close()
             raise GitHubError(
                 f"GitHub raw download failed ({exc.code}) for {url}: {body[:500]}"
             ) from exc
-        except (URLError, TimeoutError) as exc:
-            raise GitHubError(f"GitHub raw download failed for {url}") from exc
+        except (OSError, URLError, HTTPException) as exc:
+            raise GitHubError(f"GitHub raw download failed for {url}: {exc}") from exc
 
     def pulls(self, repository: str, state: str = "all") -> Iterator[dict[str, Any]]:
         yield from self.list(
