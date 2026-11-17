@@ -1,22 +1,21 @@
-dizzy · hub · repo config as of 2026-11-16 12:34:56 UTC
-ansible-switches@8888888  everpure-moc@5555555  moc-aws@6666666  moc-keycloak@4444444
-oac-apps@3333333  oac-infra@2222222
+dizzy · hub · repo config as of 2026-11-16 12:34 UTC
 
 RESULT: 10 blocking gaps · 0 advisories · 3 of 14 checks pass
-UNKNOWN: Hub moc-dns records: Hub-image variables required for DNS validation are unavailable.
+1 check blocked until Edit CCI-MOC/oac-infra at hub-images/group_vars/<hub>/vars.yml and provide cluster_domain_name, base_domain, machine_network, api_ip, ingress_ip, and dns_ip.
+Pull requests: skipped because this run is unauthenticated; use --prs to inspect them.
 
+
+HUB PHASES
 PHASE                        HUB dizzy-infra
-1 Host inventory entry in…   ✅ 1 hosts
-2 Hub-image inventory entry… ⚪ unknown
-3 Cluster discovery image…   ❌ none
-4 Keycloak OIDC client /…    ❌ none
-5 GitOps values and…         ❌ none
-6 oac-apps values            –
-7 Shared-service…            –
+1 Host inventory entry       ✅ 1/1 checks
+2 Hub image inventory and…   ❌ 1/3 checks, 1…
+3 Discovery image reference  ❌ 0/1 checks
+4 Keycloak OIDC client       ❌ 0/1 checks
+5 GitOps values and apps     ❌ 0/7 checks
 
 NEXT
-  1. [oac-infra] Edit CCI-MOC/oac-infra at hub-images/group_vars/<hub>/vars.yml and provide
-  cluster_domain_name, base_domain, machine_network, api_ip, ingress_ip, and dns_ip.
+  1. [oac-infra] Edit CCI-MOC/oac-infra at hub-images/group_vars/dizzy-infra/vars.yml and
+  provide cluster_domain_name, base_domain, machine_network, api_ip, ingress_ip, and dns_ip.
        guide: docs/infra-cluster-deployment.md → Cluster Deployment
   2. [oac-infra] Generate and publish a hub-specific discovery ISO, then replace the generic
   boot_image_url for every host in the hub cluster group. (after 1)
@@ -27,23 +26,23 @@ NEXT
   client_secret_name = `cluster/dizzy-infra/keycloak-oidc`. (after 2)
        guide: docs/infra-cluster-deployment.md → Cluster Configuration
   4. [oac-apps] Create or complete the hub hosted-cluster defaults file at
-  hosted-clusters/<hub>/values.yaml in CCI-MOC/oac-infra. (after 2)
+  hosted-clusters/dizzy-infra/values.yaml in CCI-MOC/oac-infra. (after 2)
        guide: docs/infra-cluster-deployment.md → Cluster Configuration
-  5. [oac-apps] Create or complete values/<hub>/hcp-config.yaml in CCI-MOC/oac-infra for
-  hub-wide HCP and secret-selector values. (after 4)
+  5. [everpure-moc] Add or correct the hub realm in everpure-moc realms.yaml. (after 4)
        guide: docs/infra-cluster-deployment.md → Cluster Configuration
   6. [oac-apps] Copy the required local-cluster component files from an existing hub environment
   and adjust cluster-specific names and addresses. (after 4)
        guide: docs/infra-cluster-deployment.md → Cluster Configuration
-  7. [oac-apps] Add Argo CD application manifests for the hub after its hosted-cluster, hub-wide
-  component, and local-cluster values are present, and reference the correct clusters. (after 4,
-  5, 6, 3)
+  7. [moc-aws] Add or correct the hub entry in moc-aws local.openshift_oidc_clusters. (after 4)
        guide: docs/infra-cluster-deployment.md → Cluster Configuration
-  8. [everpure-moc] Add or correct the hub realm in everpure-moc realms.yaml. (after 4)
+  8. [moc-aws] Add a cert-manager policy entry for the hub. (after 4)
        guide: docs/infra-cluster-deployment.md → Cluster Configuration
-  9. [moc-aws] Add or correct the hub entry in moc-aws local.openshift_oidc_clusters. (after 4)
+  9. [oac-apps] Create or complete values/dizzy-infra/hcp-config.yaml in CCI-MOC/oac-infra for
+  hub-wide HCP and secret-selector values. (after 4)
        guide: docs/infra-cluster-deployment.md → Cluster Configuration
-  10. [moc-aws] Add a cert-manager policy entry for the hub. (after 4)
+  10. [oac-apps] Add Argo CD application manifests for the hub after its hosted-cluster,
+  hub-wide component, and local-cluster values are present, and reference the correct clusters.
+  (after 4, 9, 6, 3)
        guide: docs/infra-cluster-deployment.md → Cluster Configuration
 
 NOT CHECKED — verify by hand:
@@ -51,8 +50,19 @@ NOT CHECKED — verify by hand:
   SSH key and kubeadmin credentials in AWS Secrets Manager; Place the pull secret and SSH key
   under hub-images/credentials/dizzy-infra; Run create_agent_install_media and copy the
   dizzy-infra ISO to the bastion host; Bootstrap Argo CD for dizzy-infra; Agents visible in
-  hardware-inventory; Agents labelled and approved; Additional workload prerequisites are not
-  yet documented upstream
+  hardware-inventory; Agents labelled and approved
+
+PULL REQUESTS
+0 open PRs touch this environment.
+
+Sources
+Repository                 Ref      Commit
+CCI-MOC/ansible-switches    main     8888888
+CCI-MOC/everpure-moc        main     5555555
+CCI-MOC/moc-aws             main     6666666
+CCI-MOC/moc-keycloak        main     4444444
+CCI-MOC/oac-apps            main     3333333
+CCI-MOC/oac-infra           main     2222222
 
 Details:  moc-env status dizzy --details
 Markdown: moc-env status dizzy --format markdown --output report.md

@@ -16,11 +16,13 @@ compliant. It reports repository configuration evidence.
 | Command | Use it to | Reads GitHub | Writes local files | Mutates MOC |
 |---|---|---:|---:|---:|
 | `moc-env list` | Discover hub and workload clusters | Yes | User cache | No |
+| `moc-env status` | Show the fleet view of hub and workload clusters | Yes | User cache | No |
 | `moc-env completion bash` | Print a Bash completion script | No | No | No |
 | `moc-env completion zsh` | Print a Zsh completion script | No | No | No |
 | `moc-env status ENV` | Inspect one environment's current configuration state | Yes | With `--output` | No |
 | `moc-env status-hub ENV` | Inspect one environment's hub-cluster state | Yes | With `--output` | No |
 | `moc-env status-workload ENV` | Inspect one environment's workload-cluster state | Yes | With `--output` | No |
+| `moc-env diff ENV_A ENV_B` | Compare two environments' repository structure | Yes | With `--output` | No |
 | `moc-env export-infra ENV` | Create a draft hub-cluster desired-state snapshot | Yes | With `--output` | No |
 | `moc-env export-workload ENV WORKLOAD` | Create a draft workload-cluster snapshot | Yes | With `--output` | No |
 | `moc-env export-environment ENV` | Create a draft Environment bundle | Yes | With `--output` | No |
@@ -80,6 +82,25 @@ unauthenticated REST quota is small. For repeated use, configure a read-only
 fine-grained personal access token or log in with GitHub CLI. When no token is
 used, moc-env prints one warning with the remaining request quota after GitHub
 supplies that header. Pass `--no-auth` to force unauthenticated access.
+File contents are downloaded from `raw.githubusercontent.com` at the resolved
+commit SHA, so they do not consume REST quota. The CLI reserves enough REST
+quota for repository trees before starting, skips pull-request discovery when
+unauthenticated, and stops without spending calls if the quota is too small.
+If unauthenticated quota is already exhausted but the repository trees are
+cached, the cached snapshots are used so a read-only report can still complete.
+
+### GitHub response cache
+
+GitHub-reading commands cache response bodies and ETags by URL under the
+user-local cache directory, in `moc-env/github-responses.json`. Later requests
+send `If-None-Match`; GitHub's uncounted `304 Not Modified` response serves the
+cached body. Within one process, the same URL is never requested twice. The
+cache never stores an Authorization header or token.
+
+Pass `--offline` to serve only cached responses; a miss fails clearly with exit
+code `2`. Pass `--refresh` to ignore the disk cache and request current data;
+per-process request deduplication still applies. These options are mutually
+exclusive.
 
 The token needs access to public repositories and these read-only permissions:
 
@@ -207,6 +228,14 @@ includes both scopes.
 
 ### 2. Inspect current repository state
 
+List the fleet first:
+
+```sh
+uv run moc-env status
+```
+
+Then inspect one environment:
+
 ```sh
 uv run moc-env status bu-ist-demo
 ```
@@ -219,6 +248,9 @@ uv run moc-env status bu-ist-demo --format markdown \
   --output reports/bu-ist-demo.md
 uv run moc-env status bu-ist-demo --issue 666
 uv run moc-env status bu-ist-demo --no-prs
+uv run moc-env status bu-ist-demo --prs
+uv run moc-env status bu-ist-demo --details
+uv run moc-env status bu-ist-demo --fail-on blocking
 ```
 
 Run a hub-scoped report:
@@ -233,8 +265,113 @@ Run a workload-scoped report:
 uv run moc-env status-workload bu-ist-demo
 ```
 
-`--no-prs` avoids pull-request API calls. Progress steps are printed to stderr;
-the report is printed to stdout or written with `--output`.
+Compare two environments:
+
+```sh
+uv run moc-env diff bu-ist-demo oac-prod
+```
+
+`--no-prs` avoids pull-request API calls. When unauthenticated, pull-request
+discovery is also skipped by default to preserve REST quota; `--prs` forces it.
+`--details` appends the full check ledger after the summary. `--fail-on` controls the status exit code: `never`
+(the default) always returns `0` after a successful report, `blocking` returns
+`1` when any blocking gap exists, and `advisory` returns `1` when any advisory
+or blocking gap exists. Progress steps are printed to stderr; the report is
+printed to stdout or written with `--output`.
+
+## Reading a status report
+
+The example below is the current text renderer's output for the synthetic
+`example-env` fixture. Run `make sample-reports` to regenerate it as
+`docs/samples/example-env.txt`. Every generated sample starts with a banner
+that identifies it as synthetic.
+
+```text
+example-env · hub + workload · repo config as of 2026-11-16 12:34 UTC
+
+RESULT: 8 blocking gaps (workload 3) · 0 advisories · 15 of 28 checks pass
+5 checks blocked until Create the missing hosted-cluster values file from the closest existing environment; set the cluster name, parent hub, networking, and node pools before adding components.
+Pull requests: skipped because this run is unauthenticated; use --prs to inspect them.
+
+HUB PHASES
+PHASE                        HUB example-env-infra
+1 Host inventory entry       ✅ 1/1 checks
+2 Hub image inventory and…   ✅ 3/3 checks
+3 Discovery image reference  🟡 0/1 checks
+4 Keycloak OIDC client       ✅ 1/1 checks
+5 GitOps values and apps     ❌ 4/8 checks
+
+WORKLOAD PHASES
+PHASE                        WORKLOAD example-env-workload0
+1 Host inventory entry       ✅ 1/1 checks
+2 Hub agent discovery ISO    🟡 0/1 checks
+3 Agent ISO boot             –
+4 Agent visibility           –
+5 Agent labels and approval  ✅ 1/1 checks
+6 oac-apps values            ❌ 0/7 checks, 5 blocked
+7 Shared-service…            –
+
+NEXT
+  1. [oac-infra] Generate and publish the parent hub's agent discovery ISO, then replace the
+  generic boot_image_url for every host in the workload cluster group. (after 2)
+       guide: docs/workload-cluster-deployment.md → Infrastructure Configuration
+  2. [oac-infra] Generate and publish a hub-specific discovery ISO, then replace the generic
+  boot_image_url for every host in the hub cluster group.
+       guide: docs/infra-cluster-deployment.md → Cluster Deployment
+  3. [oac-apps] Create or complete the hub hosted-cluster defaults file at
+  hosted-clusters/example-env-infra/values.yaml in CCI-MOC/oac-infra. (after 1)
+       guide: docs/infra-cluster-deployment.md → Cluster Configuration
+
+NOT CHECKED — verify by hand:
+  Configure cluster and storage networks and firewalls for example-env-infra; Store the
+  example-env-infra SSH key and kubeadmin credentials in AWS Secrets Manager; Place the pull
+  secret and SSH key under hub-images/credentials/example-env-infra; Run
+  create_agent_install_media and copy the example-env-infra ISO to the bastion host
+
+PULL REQUESTS
+0 open PRs touch this environment.
+
+Sources
+Sources: MOC-issues@main@1111111, ansible-switches@main@8888888, everpure-moc@5555555, moc-aws@main@6666666, moc-dns@main@7777777, moc-keycloak@4444444, oac-apps@main@3333333, oac-infra@main@2222222
+
+Details:  moc-env status example-env --details
+Markdown: moc-env status example-env --format markdown --output report.md
+```
+
+The first line identifies the environment, report scope, and the UTC minute at
+which repository state was read. The `Sources` table at the end records each
+repository ref and SHA. Treat the report as evidence at those snapshots, not as
+continuously monitored state.
+
+`RESULT` is the first answer: how many blocking gaps exist, how many are
+advisory, and how many checks pass. For an environment report, the parenthetical
+workload count shows how many blocking gaps belong to workload scopes. An
+`UNKNOWN` line names at most two checks whose evidence was absent or could not
+be normalized, then reports how many more exist. A blocked line names the input
+that must be completed before dependent checks can run; blocked checks are not
+unknown and are not counted as gaps.
+
+Pull requests are context, not a check. They do not affect pass/gap counts,
+severity, or next actions; the pull-request section states how many open PRs
+touch the environment and lists them separately.
+
+Hub and workload phases are rendered as separate tables so each scope keeps its
+own numbering and titles. Each cell counts every check in that phase as
+`passing/total checks`; unknown and blocked counts are shown separately. The
+worst known state sets the symbol, but unknown checks never hide the passes.
+`–` means that phase has no repository check.
+
+`NEXT` is the work list. Actions are sorted topologically so no action appears
+before one it depends on; within that order, hub actions precede workload
+actions and blocking actions precede advisories. `(after N)` records an
+explicit dependency, and Markdown guide links point to the upstream
+documentation section. The list contains repository actions only.
+
+`NOT CHECKED` names required deployment steps that cannot be proven from the
+public repositories, such as live cluster state and credentials stored outside
+Git. The final lines give the commands for full details and a Markdown file.
+Use `--details` when you need every check's expected value, observed value,
+source path, and reason.
 
 ### 3. Enable shell completion
 
@@ -524,49 +661,76 @@ make run ENV=bu-ist-demo
 make run-json ENV=bu-ist-demo
 make run-no-prs ENV=bu-ist-demo
 make report-markdown ENV=bu-ist-demo
+make sample-reports
 ```
 
 Desired-state targets:
 
 ```sh
-make export-infra ENV=bu-ist-demo
-make export-workload ENV=bu-ist-demo WORKLOAD=workload0
-make validate ENV=bu-ist-demo
-make validate-markdown ENV=bu-ist-demo
-make check-infra ENV=bu-ist-demo
-make check-infra-markdown ENV=bu-ist-demo
-make plan-infra ENV=bu-ist-demo
-make plan-infra-markdown ENV=bu-ist-demo
-make check-workload ENV=bu-ist-demo WORKLOAD=workload0
-make check-workload-markdown ENV=bu-ist-demo WORKLOAD=workload0
+make export-infra-file ENV=bu-ist-demo \
+  OUTPUT=desired-state/infra-clusters/bu-ist-demo-infra.yaml
+make export-workload-file ENV=bu-ist-demo WORKLOAD=workload0 \
+  OUTPUT=desired-state/workload-clusters/bu-ist-demo-workload0.yaml
+make validate FILE=desired-state/infra-clusters/bu-ist-demo-infra.yaml
+make validate-markdown FILE=desired-state/infra-clusters/bu-ist-demo-infra.yaml
+make check-infra FILE=desired-state/infra-clusters/bu-ist-demo-infra.yaml
+make check-infra-markdown FILE=desired-state/infra-clusters/bu-ist-demo-infra.yaml
+make plan-infra FILE=desired-state/infra-clusters/bu-ist-demo-infra.yaml
+make plan-infra-markdown FILE=desired-state/infra-clusters/bu-ist-demo-infra.yaml
+make check-workload FILE=desired-state/workload-clusters/bu-ist-demo-workload0.yaml
+make check-workload-markdown FILE=desired-state/workload-clusters/bu-ist-demo-workload0.yaml
 ```
 
 `NO_PRS=1` adds `--no-prs` to the `make run`, `make run-json`, and
 `make run-markdown` status targets. For check or plan targets, pass
 `ARGS="--no-prs"` explicitly.
 
+`make sample-reports` regenerates the offline `example-env` status, export,
+validation, comparison, plan, and chart-values samples under `docs/samples/`
+with synthetic fixtures and a fixed clock. It does not call GitHub.
+
 ## Output and exit codes
 
 Most commands support `--format` and `--output`:
 
-- status reports: text, JSON, Markdown;
+- fleet status and environment lists: text, JSON;
+- environment status reports: text, JSON, Markdown;
 - validation reports: text, JSON, Markdown;
 - comparison reports: text, JSON, Markdown;
 - change plans: text, JSON, Markdown;
 - documentation refresh: text, JSON;
 - discovery reports: text, JSON, Markdown;
+- chart-values reference: Markdown;
 - exports: YAML.
+
+Status-specific options:
+
+| Option | Effect |
+|---|---|
+| `--details` | Appends the full per-check ledger to the text report |
+| `--fail-on never` | Returns `0` after a successful report, even with gaps (default) |
+| `--fail-on blocking` | Returns `1` when any check has `blocking` severity |
+| `--fail-on advisory` | Returns `1` when any check has `advisory` or `blocking` severity |
+
+`moc-env diff ENV_A ENV_B` always exits `0` after successfully rendering a
+comparison. It reports checks, files, components, and structural facts; it does
+not compare addresses, cluster-specific names, or MAC addresses.
+
+GitHub-reading commands also accept the mutually exclusive `--offline` and
+`--refresh` cache options described in [Authentication](#authentication).
+`--no-prs` is available for status, comparison, and planning commands.
 
 Exit codes:
 
 | Result | Code |
 |---|---:|
-| Successful report, export, validation, comparison without hard differences, or plan | `0` |
-| Hard desired-state comparison difference | `1` |
-| Invalid input, GitHub failure, parse failure, or output-file failure | `2` |
+| Successful report, diff, export, plan, validation, or comparison without hard differences | `0` |
+| Hard desired-state comparison difference, or a status gap matching `--fail-on` | `1` |
+| Invalid input, GitHub failure, offline cache miss, parse failure, or output-file failure | `2` |
 
-Missing configuration in a status report does not cause a non-zero exit. This is
-a reporting tool, not a deployment gate.
+With the default `--fail-on never`, missing configuration in a status report
+does not cause a non-zero exit. This remains a reporting tool, not a deployment
+gate; `--fail-on` is an explicit opt-in for automation.
 
 ## Files and directories
 
@@ -592,6 +756,7 @@ of deployment or health.
 | `requested` | The MOC issue exists and records the request |
 | `missing` | No relevant configuration was found |
 | `partial` | Some information exists, but required details are absent or generic |
+| `unknown` | Evidence was absent or could not be normalized into an expected value |
 | `pr_open` | Relevant configuration exists only in an open pull request |
 | `pr_merged` | A relevant pull request has been merged |
 | `declared_in_main` | Relevant configuration is present in a merged `main` branch |
@@ -609,6 +774,39 @@ Desired-state comparisons also use:
 
 Open pull requests are not treated as merged desired state.
 
+## Severity and phases
+
+Every status check has one severity:
+
+| Severity | Meaning |
+|---|---|
+| `blocking` | The gap prevents the environment from progressing to the next repository-configuration phase |
+| `advisory` | The gap is worth reviewing, but it does not block the overall configuration state |
+| `info` | The check passed or records supporting information without a gap |
+
+The report's phase numbers follow the upstream deployment guides. Phase `0` is
+the environment request. Hub phases `1–5` cover inventory, hub-image variables,
+discovery images, OIDC, and GitOps values. Workload phases `1–7` cover
+inventory, discovery ISO, booting, agent visibility, agent labelling, `oac-apps`
+values, and shared-service prerequisites. A phase can contain checks that pass,
+are partial, are missing, or are unknown.
+
+The JSON `current_phase` value is the lowest phase with a blocking gap. For an
+environment report it is a hub/workload mapping; scoped reports return one
+value. The text and Markdown `NEXT` lists sort blocking gaps first, then
+advisories, and then order each group by phase and dependencies.
+
+Overall status states are:
+
+| Report | Overall state | Meaning |
+|---|---|---|
+| Status | `CONFIGURATION IN PROGRESS` | At least one blocking gap exists |
+| Status | `DECLARED IN MAIN` | Checks exist and none are blocking |
+| Status | `NOT CONFIGURED` | No checks were produced |
+| Comparison | `DIFFERENCES FOUND` | At least one hard difference exists |
+| Comparison | `CONFIGURATION IN PROGRESS` | No hard difference, but relevant work is open in a PR |
+| Comparison | `MATCHES MAIN` | Reviewed desired state matches merged `main` |
+
 ## Troubleshooting
 
 ### GitHub rate limits
@@ -622,7 +820,7 @@ Issue numbers come from the packaged `moc_env/data/environments.yaml` registry.
 If the environment has no registry entry, pass the issue explicitly:
 
 ```sh
-uv run moc-env example-env --issue 123
+uv run moc-env status example-env --issue 123
 ```
 
 The same registry defines default and per-environment required and optional

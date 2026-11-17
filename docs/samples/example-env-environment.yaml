@@ -1,0 +1,66 @@
+# SAMPLE — generated from a synthetic fixture, not a live environment.
+
+apiVersion: moc-env/v1alpha1
+kind: Environment
+metadata:
+  name:
+    confidence: inferred
+    provenance:
+      path: infra/inventory/00hosts.yaml
+      ref: main
+      repository: CCI-MOC/oac-infra
+    value: example-env
+schemaVersion: '1'
+spec:
+  domain:
+    confidence: inferred
+    provenance:
+      path: hub-images/group_vars/example-env-infra/vars.yml
+      ref: main
+      repository: CCI-MOC/oac-infra
+    value: example-env.int.massopen.cloud
+  gitOps:
+    sourceRepository:
+      confidence: inferred
+      provenance:
+        path: git/trees/main?recursive=1
+        ref: main
+        repository: CCI-MOC/oac-apps
+      value: CCI-MOC/oac-apps
+  hubCluster:
+    confidence: inferred
+    provenance:
+      path: infra/inventory/00hosts.yaml
+      ref: main
+      repository: CCI-MOC/oac-infra
+    value: example-env-infra
+  issue:
+    confidence: exact
+    provenance:
+      path: issues/666
+      ref: main
+      repository: CCI-MOC/MOC-issues
+    value: https://github.com/CCI-MOC/MOC-issues/issues/666
+  network:
+    machineNetwork:
+      confidence: exact
+      provenance:
+        path: hub-images/group_vars/example-env-infra/vars.yml
+        ref: main
+        repository: CCI-MOC/oac-infra
+      value: 10.20.26.0/23
+  workloadClusters:
+  - name:
+      confidence: inferred
+      provenance:
+        path: infra/inventory/00hosts.yaml
+        ref: main
+        repository: CCI-MOC/oac-infra
+      value: example-env-workload0
+    parentHubCluster:
+      confidence: inferred
+      provenance:
+        path: infra/inventory/00hosts.yaml
+        ref: main
+        repository: CCI-MOC/oac-infra
+      value: example-env-infra

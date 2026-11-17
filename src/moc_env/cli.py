@@ -3,19 +3,18 @@
 from __future__ import annotations
 
 import argparse
-import difflib
 import os
 import sys
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Callable
 
 from .checks import Clock, StatusChecker, list_environments
 from .chart_values import documentation_directory, load_chart_values_manual, render_chart_values_markdown
 from .chart_value_discovery import build_discovery_report, render_discovery_json, render_discovery_markdown, render_discovery_text
-from .credentials import CredentialResolver
+from .credentials import CredentialError, CredentialResolver
 from .compare import compare_environment, compare_infra, compare_workload, desired_environment, render_comparison_json, render_comparison_markdown, render_comparison_text
 from .completion import COMMANDS, bash_completion_script, command_help_epilog, zsh_completion_script
-from .cli_support import ProgressReporter, _print_unauthenticated_warning, resolve_github_token, sanitize_command, write_output
 from .doc_catalog import DocumentCatalogError, load_catalog_sources, refresh_document_catalog, render_catalog_refresh_json, render_catalog_refresh_text
 from .environment_cache import read_environment_cache, write_environment_cache
 from .export import render_environment_export, render_infra_export, render_workload_export, workload_cluster_name
@@ -25,35 +24,14 @@ from .observed import read_apps_observation, read_chart_values_reference_observa
 from .plan import build_infra_change_plan, render_change_plan_json, render_change_plan_markdown, render_change_plan_text
 from .registry import DEFAULT_REGISTRY_PATH, EnvironmentRegistry, RegistryError
 from .report import render_environment_list_json, render_environment_list_text, render_json, render_markdown, render_text
+from .cli_support import ProgressReporter, _print_unauthenticated_warning, add_credential_arguments, add_output, configure_diff, configure_status, diff_handler, print_unknown_environment, resolve_github_token, resolve_workload_argument, sanitize_command, write_output
 from .validate import load_environment_document, load_infra_cluster_document, load_validation_result, load_yaml_document, render_validation_json, render_validation_markdown, render_validation_text, validate_workload_cluster
 
 Handler = Callable[..., int]
 
-
-def _add_credential_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--no-auth", action="store_true", help="Force unauthenticated GitHub access")
-    parser.add_argument("--bws-secret-id", help="Bitwarden Secrets Manager UUID whose key is GITHUB_TOKEN")
-    parser.add_argument(
-        "--bws-secret-id-keychain-service",
-        help="macOS Keychain service containing the Bitwarden secret UUID (default: moc-env-github-token)",
-    )
-    parser.add_argument(
-        "--bws-secret-id-keychain-account",
-        help="macOS Keychain account for the Bitwarden secret UUID (default: current user)",
-    )
-    parser.add_argument(
-        "--env-file",
-        default=".env",
-        help="Optional KEY=VALUE file for non-secret credential selectors (default: .env; absent file is ignored)",
-    )
-    parser.add_argument("--timeout", type=float, default=20.0, help="GitHub request timeout in seconds")
-    cache_mode = parser.add_mutually_exclusive_group()
-    cache_mode.add_argument("--offline", action="store_true", help="Serve GitHub responses only from the local response cache")
-    cache_mode.add_argument("--refresh", action="store_true", help="Ignore cached GitHub responses and request current data")
-
-
-def _add_output(parser: argparse.ArgumentParser, help: str) -> None:
-    parser.add_argument("--output", help=help)
+_add_credential_arguments = add_credential_arguments
+_add_output = add_output
+_configure_status = configure_status
 
 
 def _add_report_arguments(
@@ -71,28 +49,6 @@ def _add_report_arguments(
         parser.add_argument("--no-prs", action="store_true", help="Do not inspect pull requests")
     if credentials:
         _add_credential_arguments(parser)
-
-
-def _configure_status(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("environment", help="Environment name, such as bu-ist-demo")
-    parser.add_argument("--issue", type=int, help="MOC-issues number; overrides the packaged environment registry")
-    parser.add_argument("--format", choices=("text", "json", "markdown"), default="text", help="Output format")
-    parser.add_argument("--no-prs", action="store_true", help="Do not inspect pull requests")
-    parser.add_argument(
-        "--ref",
-        action="append",
-        default=[],
-        metavar="REPO=REF",
-        help="Read a repository at a branch or pull-request head, for example --ref oac-apps=pull/246/head (repeatable)",
-    )
-    parser.add_argument("--details", action="store_true", help="Append full per-check findings after the one-screen summary")
-    parser.add_argument("--ascii", action="store_true", help="Replace emoji with ASCII markers such as [ok] and [fail]")
-    parser.add_argument("--verbose", action="store_true", help="Show progress on stderr even when stderr is not a terminal")
-    _add_credential_arguments(parser)
-    _add_output(
-        parser,
-        "Write the rendered report to this file instead of stdout; useful with --format markdown",
-    )
 
 
 def _configure_list(parser: argparse.ArgumentParser) -> None:
@@ -172,6 +128,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     commands: dict[str, tuple[str, Callable[[argparse.ArgumentParser], None], Handler]] = {
         "status": ("Report combined hub and workload repository configuration state", _configure_status, _status_handler),
+        "diff": ("Compare repository configuration state for two environments", configure_diff, _diff_handler),
         "status-hub": ("Report hub-cluster repository configuration state", _configure_status, _status_handler),
         "status-workload": ("Report workload-cluster repository configuration state", _configure_status, _status_handler),
         "list": ("List environment names that can be passed to moc-env", _configure_list, _list_handler),
@@ -207,16 +164,6 @@ def build_list_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _print_unknown_environment(environment_name: str, known_names: list[str]) -> None:
-    print(f"moc-env: unknown environment: {environment_name}", file=sys.stderr)
-    matches = difflib.get_close_matches(environment_name, known_names, n=1)
-    if matches:
-        print(f"Did you mean: {matches[0]}", file=sys.stderr)
-    print("Known environments:", file=sys.stderr)
-    for name in known_names:
-        print(f"  {name}", file=sys.stderr)
-
-
 def _resolve_github_token(args: argparse.Namespace) -> str | None:
     return resolve_github_token(args)
 
@@ -232,17 +179,6 @@ def _new_github_client(args: argparse.Namespace, github_token: str | None, refs:
     if github_token is None:
         client.on_response = _print_unauthenticated_warning
     return client
-
-
-def _resolve_workload_argument(environment_name: str, workload: str, workload_clusters: list[str]) -> str:
-    for cluster in workload_clusters:
-        if workload in {cluster, cluster.removeprefix(f"{environment_name}-")}:
-            return cluster
-    print(f"moc-env: unknown workload cluster: {workload}", file=sys.stderr)
-    print("Known workload clusters:", file=sys.stderr)
-    for cluster in workload_clusters:
-        print(f"  {cluster}", file=sys.stderr)
-    raise ValueError(workload)
 
 
 def _completion_handler(args: argparse.Namespace, **_context: Any) -> int:
@@ -480,6 +416,10 @@ def _status_handler(
     clock: Clock | None,
     arguments: list[str],
 ) -> int:
+    if args.environment is None:
+        if args.format == "markdown":
+            args.parser.error("--format markdown requires an environment name")
+        return _list_handler(args)
     issue_number = args.issue if args.issue is not None else registry.issue(args.environment)
     environment = Environment(name=args.environment, issue_number=issue_number)
     repository_refs: dict[str, str] = {}
@@ -489,7 +429,28 @@ def _status_handler(
             args.parser.error("--ref must have the form REPO=REF")
         repository_refs[f"CCI-MOC/{repository}"] = ref
     client = _new_github_client(args, _resolve_github_token(args), repository_refs)
+    include_prs = args.prs or (client.authenticated and not args.no_prs)
+    repositories = (
+        "CCI-MOC/oac-infra",
+        "CCI-MOC/oac-apps",
+        "CCI-MOC/moc-keycloak",
+        "CCI-MOC/everpure-moc",
+        "CCI-MOC/moc-aws",
+        "CCI-MOC/moc-dns",
+        "CCI-MOC/ansible-switches",
+    )
+    candidate_urls = [
+        f"https://api.github.com/repos/{repository}/git/trees/"
+        f"{client.ref_for(repository)}?recursive=1"
+        for repository in repositories
+    ]
+    if issue_number is not None:
+        candidate_urls.append(
+            f"https://api.github.com/repos/CCI-MOC/MOC-issues/issues/{issue_number}"
+        )
+    estimated_calls = 60 if include_prs else len(candidate_urls)
     try:
+        client.reserve_quota(estimated_calls, candidate_urls)
         rows = list_environments(client)
         known_names = sorted({row["environment"] for row in rows if row["type"] == "hub"})
         workload_clusters = [row["cluster"] for row in rows if row["environment"] == args.environment and row["type"] == "workload"]
@@ -500,18 +461,18 @@ def _status_handler(
         if args.issue is not None:
             print("moc-env: warning: environment is not in the oac-infra inventory; continuing with the supplied MOC issue", file=sys.stderr)
         else:
-            _print_unknown_environment(args.environment, known_names)
+            print_unknown_environment(args.environment, known_names)
             return 2
     selected_workload = None
     if getattr(args, "workload", None) is not None:
         try:
-            selected_workload = _resolve_workload_argument(args.environment, args.workload, workload_clusters)
+            selected_workload = resolve_workload_argument(args.environment, args.workload, workload_clusters)
         except ValueError:
             return 2
     environment = Environment(name=args.environment, issue_number=issue_number, workload_clusters=tuple(workload_clusters))
     checker = StatusChecker(
         client=client,
-        include_prs=not args.no_prs,
+        include_prs=include_prs,
         progress=ProgressReporter(args.verbose),
         registry=registry,
         command=sanitize_command(arguments),
@@ -524,9 +485,18 @@ def _status_handler(
             report = checker.run_hub(environment)
         else:
             report = checker.run_workload(environment, workload=selected_workload)
-    except (CredentialError, GitHubError, RateLimitError) as exc:
+    except (CredentialError, GitHubError) as exc:
         print(f"moc-env: {exc}", file=sys.stderr)
         return 2
+    report = replace(
+        report,
+        pull_requests_skipped=not include_prs and not client.authenticated,
+    )
+    if report.rate_limited:
+        print(
+            "moc-env: GitHub API rate limit was hit; unread checks are unknown",
+            file=sys.stderr,
+        )
     report_dict = report.to_dict()
     if args.format == "json":
         rendered = render_json(report_dict)
@@ -534,7 +504,25 @@ def _status_handler(
         rendered = render_markdown(report_dict)
     else:
         rendered = render_text(report_dict, details=args.details, ascii_mode=args.ascii)
-    return write_output(args, rendered, f"{args.format} report")
+    exit_code = write_output(args, rendered, f"{args.format} report")
+    if exit_code:
+        return exit_code
+    if report.rate_limited:
+        return 2
+    if args.fail_on == "blocking" and any(check.severity == "blocking" for check in report.checks):
+        return 1
+    if args.fail_on == "advisory" and any(check.severity in {"blocking", "advisory"} for check in report.checks):
+        return 1
+    return 0
+
+
+def _diff_handler(
+    args: argparse.Namespace,
+    registry: EnvironmentRegistry,
+    clock: Clock | None,
+    arguments: list[str],
+) -> int:
+    return diff_handler(args, registry, clock, arguments, client_factory=GitHubClient)
 
 
 def _complete_environment(arguments: list[str]) -> int:

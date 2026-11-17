@@ -169,6 +169,7 @@ def parse_hardware_resource_classes(markdown: str) -> dict[str, str]:
     """Read Node Name and Resource Class columns from hardware documentation."""
 
     lines = [line.strip() for line in markdown.splitlines()]
+    values: dict[str, str] = {}
     for index, header in enumerate(lines[:-1]):
         if not header.startswith("|") or not header.endswith("|"):
             continue
@@ -182,12 +183,11 @@ def parse_hardware_resource_classes(markdown: str) -> dict[str, str]:
         if not separator.startswith("|") or not separator.endswith("|"):
             continue
         if not all(
-            cell.strip() in {"---", ":---", "---:", ":---:"}
+            re.fullmatch(r":?-+:?", cell.strip())
             for cell in separator.strip("|").split("|")
         ):
             continue
 
-        values: dict[str, str] = {}
         for row in lines[index + 2 :]:
             if not row.startswith("|") or not row.endswith("|"):
                 break
@@ -198,8 +198,7 @@ def parse_hardware_resource_classes(markdown: str) -> dict[str, str]:
             resource_class = cells[resource_index]
             if node_name and resource_class:
                 values[node_name] = resource_class
-        return values
-    return {}
+    return values
 
 
 @dataclass(frozen=True)

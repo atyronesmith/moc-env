@@ -1,668 +1,88 @@
 # moc-env
 
-`moc-env` is a CLI for inspecting and, in later milestones, declaring the
-configuration of Mass Open Cloud (MOC) environments across public CCI-MOC
-GitHub repositories.
+`moc-env` is a read-only Python CLI that reports the repository configuration
+state of Mass Open Cloud environments by reading public CCI-MOC GitHub
+repositories. It distinguishes what an issue requests, what is declared in
+merged `main` branches, and what exists only in an open pull request. It does
+not claim that a cluster is deployed, healthy, or compliant, and it does not
+mutate GitHub or connect to a live cluster.
 
-It intentionally does **not** claim that a cluster is deployed or healthy. Its
-first release distinguishes:
+## Quickstart
 
-- what the MOC issue requests;
-- what is declared in merged repository `main` branches;
-- what exists only in an open pull request.
-
-The implemented milestones provide a read-only configuration-state reporter,
-deterministic desired-state exports, local validation, comparisons with merged
-`main`, and read-only change planning. The motivating environment is
-`bu-ist-demo`, tracked by
-[MOC issue 666](https://github.com/CCI-MOC/MOC-issues/issues/666).
-
-See [docs/user-guide.md](docs/user-guide.md) for prerequisites, credential
-setup, the recommended end-to-end workflow, command examples, output
-interpretation, exit codes, and troubleshooting.
-
-See [docs/roadmap.md](docs/roadmap.md) for the desired-state, validation, and
-future coordinated-PR design.
-
-See [docs/hub-cluster-terminology.md](docs/hub-cluster-terminology.md) for the
-hub-cluster, hosted-control-plane, and workload-cluster terminology used by
-this project.
-
-## Current scope
-
-Current repository-state inspection covers:
-
-- `CCI-MOC/MOC-issues`
-- `CCI-MOC/oac-infra`
-- `CCI-MOC/moc-keycloak`
-- `CCI-MOC/oac-apps`
-
-It reports:
-
-- MOC issue state;
-- hub and hosted-workload host inventory;
-- hub-image variables and hardware identifiers;
-- boot-image specificity;
-- `update-agents.yaml` host inputs for non-OpenStack workload hosts;
-- Keycloak OIDC client registration;
-- `oac-apps` hub, local-cluster, and hosted-workload GitOps paths;
-- open and merged pull requests in `oac-apps`, `oac-infra`, and
-  `moc-keycloak` that reference the environment.
-
-Later milestones can add broader repository coverage and optional live
-OpenShift/Argo CD checks. Current desired-state tooling covers hub clusters,
-workload clusters, Environment bundles, validation, comparison, and read-only
-change planning.
-
-## Install and run
-
-Using `uv`:
+Install the locked environment and verify the command:
 
 ```sh
 uv sync
+uv run moc-env --help
+```
+
+List every discovered hub and workload cluster:
+
+```sh
+uv run moc-env status
+```
+
+Inspect one environment:
+
+```sh
 uv run moc-env status bu-ist-demo
 ```
 
-Using the Makefile:
-
-```sh
-make help
-make setup
-make test
-make list
-make run ENV=bu-ist-demo
-make run-json ENV=bu-ist-demo
-make run-no-prs ENV=bu-ist-demo
-make report-markdown ENV=bu-ist-demo
-make check
-```
-
-Common variables:
-
-```sh
-make run ENV=bu-ist-demo FORMAT=markdown
-make run ARGS="--issue 666"
-make run-no-prs ENV=bu-ist-demo
-```
-
-List hub and workload clusters, including each cluster type and the
-matching scoped status command:
-
-```sh
-uv run moc-env list
-```
-
-JSON output:
-
-```sh
-uv run moc-env list --format json
-```
-
-`list` also writes a user-local XDG cache used by shell completion. Enable
-Bash or Zsh completion with:
-
-```sh
-make completion-init
-```
-
-The target detects Bash or Zsh from `SHELL`, appends an idempotent completion
-block to the matching startup file, and adds this checkout's `.venv/bin` to
-`PATH`. After sourcing the startup file, run `moc-env` directly; shell
-completion attaches to that first word, which avoids the `uv run` prefix
-problem. The first environment-name completion refreshes the local cache
-automatically; later Tab presses use that cache. Run `moc-env` or
-`moc-env --help` for a complete command catalog.
-
-Run a hub-scoped repository-status report:
-
-```sh
-uv run moc-env status-hub bu-ist-demo
-```
-
-Run a workload-scoped repository-status report:
-
-```sh
-uv run moc-env status-workload bu-ist-demo
-```
-
-Use `moc-env status bu-ist-demo` for the environment-level report that includes
-both hub and workload checks.
-
-Export a deterministic draft hub-cluster snapshot from merged `main`. The
-command name remains `export-infra` for compatibility:
-
-```sh
-uv run moc-env export-infra bu-ist-demo
-```
-
-Write the YAML snapshot to a file:
-
-```sh
-uv run moc-env export-infra bu-ist-demo \
-  --output desired-state/infra-clusters/bu-ist-demo-infra.yaml
-```
-
-The export is read-only. It records repository, path, ref, and extraction
-confidence for observed values; derived names and paths are marked `inferred`,
-and unsupported or ambiguous values are represented explicitly. It does not
-claim that a cluster is deployed.
-
-Export a deterministic draft workload-cluster snapshot:
-
-```sh
-uv run moc-env export-workload bu-ist-demo workload0
-```
-
-Write the workload YAML to a file:
-
-```sh
-uv run moc-env export-workload bu-ist-demo workload0 \
-  --output desired-state/workload-clusters/bu-ist-demo-workload0.yaml
-```
-
-Or with the Makefile:
-
-```sh
-make export-workload ENV=bu-ist-demo WORKLOAD=workload0
-```
-
-The workload export records the parent hub cluster, host inventory, boot
-image, hosted-cluster values, component values, and application paths. Missing
-paths remain explicit with `present: false` and empty path lists.
-
-Generate an environment-independent Markdown reference for chart values:
-
-```sh
-uv run moc-env document-values
-```
-
-Refresh the local documentation catalog from your local MOC repository clones:
-
-```sh
-uv run moc-env refresh-doc-catalog
-```
-
-The command records repository HEAD SHAs, source content hashes, and cached
-document text under `.cache/doc-catalog/`. It is local and read-only with
-respect to the upstream repositories.
-
-Compare local `oac-apps` values with the manual documentation layer:
-
-```sh
-uv run moc-env discover-values
-```
-
-The report identifies variables that need manual definitions, manual entries
-without current repository occurrences, changed or missing evidence, default
-conflicts, and unsupported YAML files. It does not modify manual documentation.
-
-Write the guide to a file:
-
-```sh
-uv run moc-env document-values --output reports/chart-values.md
-```
-
-The guide is topic-first. Manual definitions in `docs/variables/*.yaml` provide
-the reviewed explanation, defaults, relationships, and evidence for each
-variable. Repository discovery adds the charts, scopes, types, and file counts
-where that key currently appears. Source references are shown as compact links
-such as `DNS-1`; the source appendix lists each cited document once instead of
-repeating a URL for every variable row. Variables without a manual definition
-remain visible in an uncurated section. List-valued settings are expanded with
-`[]` keys so fields inside objects such as node pools are documented
-individually. The guide does not print an environment's current values.
-
-Export a deterministic draft Environment bundle:
-
-```sh
-uv run moc-env export-environment bu-ist-demo
-```
-
-Write the bundle to a file:
-
-```sh
-uv run moc-env export-environment bu-ist-demo \
-  --output desired-state/environments/bu-ist-demo.yaml
-```
-
-The bundle records the MOC issue, hub cluster, workload clusters and their
-parent references, domain, machine network, and GitOps source repository. It
-uses the team's preferred `hubCluster` terminology while the older
-`InfraCluster` and `export-infra` names remain compatible.
-
-Compare a reviewed Environment bundle with merged `main`:
-
-```sh
-uv run moc-env check-environment \
-  desired-state/environments/bu-ist-demo.yaml
-```
-
-Write a Markdown comparison report:
-
-```sh
-uv run moc-env check-environment \
-  desired-state/environments/bu-ist-demo.yaml \
-  --format markdown \
-  --output reports/bu-ist-demo-environment-comparison.md
-```
-
-The check cross-references the issue, hub and workload inventory groups,
-parent-child references, domain, machine network, and the expected hosted
-cluster, component, and application GitOps paths.
-
-Validate a desired-state document:
-
-```sh
-uv run moc-env validate desired-state/infra-clusters/bu-ist-demo-infra.yaml
-```
-
-JSON validation output:
-
-```sh
-uv run moc-env validate desired-state/infra-clusters/bu-ist-demo-infra.yaml \
-  --format json
-```
-
-Write a standalone Markdown validation report:
-
-```sh
-uv run moc-env validate desired-state/infra-clusters/bu-ist-demo-infra.yaml \
-  --format markdown \
-  --output reports/bu-ist-demo-validation.md
-```
-
-Or with the Makefile:
-
-```sh
-make validate-markdown ENV=bu-ist-demo
-```
-
-The Markdown report includes a category summary and a detailed table of every
-validation check, including expected value, actual value, result, and failure
-detail.
-
-Validation is local and read-only. Invalid documents return exit code 2.
-Unknown fields produce warnings; duplicate keys, secret-like fields, invalid
-IP/CIDR values, naming mismatches, and unsupported required values are errors.
-
-Compare reviewed desired state with merged `main`:
-
-```sh
-uv run moc-env check-infra \
-  desired-state/infra-clusters/bu-ist-demo-infra.yaml
-```
-
-JSON comparison output:
-
-```sh
-uv run moc-env check-infra \
-  desired-state/infra-clusters/bu-ist-demo-infra.yaml \
-  --format json
-```
-
-Write a Markdown comparison report:
-
-```sh
-uv run moc-env check-infra \
-  desired-state/infra-clusters/bu-ist-demo-infra.yaml \
-  --format markdown \
-  --output reports/bu-ist-demo-infra-comparison.md
-```
-
-Or with the Makefile:
-
-```sh
-make check-infra ENV=bu-ist-demo
-make check-infra-markdown ENV=bu-ist-demo
-```
-
-Comparison reports use `matches_main`, `missing_from_main`,
-`value_mismatch`, `unexpected_in_main`, `unsupported_check`, `ambiguous`,
-and `pr_open`. Hard differences return exit code 1; an open relevant pull
-request alone returns exit code 0.
-
-Plan read-only repository changes from a reviewed InfraCluster document:
-
-```sh
-uv run moc-env plan-infra \
-  desired-state/infra-clusters/bu-ist-demo-infra.yaml
-```
-
-Write a JSON plan:
-
-```sh
-uv run moc-env plan-infra \
-  desired-state/infra-clusters/bu-ist-demo-infra.yaml \
-  --format json
-```
-
-Write a Markdown plan:
-
-```sh
-uv run moc-env plan-infra \
-  desired-state/infra-clusters/bu-ist-demo-infra.yaml \
-  --format markdown \
-  --output reports/bu-ist-demo-infra-plan.md
-```
-
-Or with the Makefile:
-
-```sh
-make plan-infra ENV=bu-ist-demo
-make plan-infra-markdown ENV=bu-ist-demo
-```
-
-The plan maps comparison differences to `create`, `update`, `delete`, or
-`manual_review` operations and records the repository, base ref, deterministic
-branch, path, field, desired/current values, reason, and dependencies. It uses
-one branch per repository by default. Matches and open pull requests do not
-become repository-change operations; open PRs still require separate review.
-Planning is read-only and returns exit code 0 when a plan is produced
-successfully.
-
-Compare a reviewed workload-cluster document with merged `main`:
-
-```sh
-uv run moc-env check-workload \
-  desired-state/workload-clusters/bu-ist-demo-workload0.yaml
-```
-
-Write a Markdown workload comparison:
-
-```sh
-uv run moc-env check-workload \
-  desired-state/workload-clusters/bu-ist-demo-workload0.yaml \
-  --format markdown \
-  --output reports/bu-ist-demo-workload0-comparison.md
-```
-
-Or with the Makefile:
-
-```sh
-make check-workload ENV=bu-ist-demo WORKLOAD=workload0
-make check-workload-markdown ENV=bu-ist-demo WORKLOAD=workload0
-```
-
-The workload check validates the document, confirms the parent hub cluster,
-checks naming and parent domain/network references, verifies host inventory
-and a cluster-specific boot image, confirms that hosted-cluster and component
-values exist, and verifies that application paths reference the correct
-clusters. Application absence is valid when the reviewed desired state also
-records it as absent.
-
-`make check` runs the unit tests, byte-compilation, Git whitespace check, and
-package build.
-
-Generate a verbose Markdown report:
-
-```sh
-make report-markdown ENV=bu-ist-demo
-```
-
-The default destination is `reports/bu-ist-demo.md`. Override it with:
-
-```sh
-make report-markdown ENV=bu-ist-demo OUTPUT=/tmp/bu-ist-demo.md
-```
-
-Create a secret GitHub gist from the generated report:
-
-```sh
-make report-gist-secret ENV=bu-ist-demo
-```
-
-Create a public GitHub gist:
-
-```sh
-make report-gist-public ENV=bu-ist-demo
-```
-
-Create a gist from any existing file. The gist is secret by default:
-
-```sh
-tools/create-gist.sh reports/bu-ist-demo.md
-```
-
-Create a public gist from any existing file:
-
-```sh
-tools/create-gist.sh --public reports/bu-ist-demo.md
-```
-
-The CLI prints each inspection step to stderr, including the action, repository,
-and source path. Partial results include a reason plus explicit present and
-missing values.
-
-Produce JSON:
-
-```sh
-uv run moc-env status bu-ist-demo --format json
-```
-
-Produce Markdown:
-
-```sh
-uv run moc-env status bu-ist-demo --format markdown
-```
-
-Write Markdown directly to a file:
-
-```sh
-uv run moc-env status bu-ist-demo --format markdown --output reports/bu-ist-demo.md
-```
-
-Override the associated MOC issue:
-
-```sh
-uv run moc-env status bu-ist-demo --issue 666
-```
-
-Issue numbers and environment-specific local-cluster component policy come from
-the packaged `moc_env/data/environments.yaml` registry. A command-line `--issue`
-value always takes precedence over the registry.
-
-Status reports include a metadata block with schema version, generation time,
-tool version, sanitized command, repository refs and SHAs, authentication
-state, and GitHub rate-limit remaining when available. JSON checks also provide
-normalized `expected`, `observed`, and `gaps` arrays.
-
-Skip pull-request discovery:
-
-```sh
-uv run moc-env status bu-ist-demo --no-prs
-```
-
-## GitHub authentication
-
-The CLI works without authentication against public repositories, but GitHub's
-unauthenticated REST quota is small. When it runs unauthenticated, it prints one
-warning with the remaining request quota after GitHub supplies that header.
-Pass `--no-auth` to force unauthenticated access.
-
-### Local selector file
-
-Copy `.env.example` to `.env`:
-
-```sh
-cp .env.example .env
-```
-
-Then set the non-secret selectors:
-
-```dotenv
-GITHUB_BWS_SECRET_ID=00000000-0000-0000-0000-000000000000
-BWS_ACCESS_TOKEN_KEYCHAIN_SERVICE=example-bws-access-token
-```
-
-`.env` is Git-ignored. It may contain only selector values such as UUIDs and
-Keychain service/account names. It must not contain `GITHUB_TOKEN` or
-`BWS_ACCESS_TOKEN`. Real environment variables override `.env` values.
-
-Use another file with:
-
-```sh
-uv run moc-env status bu-ist-demo --env-file /path/to/selectors.env
-```
-
-### Direct token
-
-To use a token directly:
-
-```sh
-export GITHUB_TOKEN="..."
-uv run moc-env status bu-ist-demo
-```
-
-### Bitwarden Secrets Manager
-
-Store the GitHub personal access token in Bitwarden Secrets Manager as a secret
-with key `GITHUB_TOKEN`. Then select that secret by its UUID.
-
-Provide the UUID directly:
-
-```sh
-export GITHUB_BWS_SECRET_ID="00000000-0000-0000-0000-000000000000"
-uv run moc-env status bu-ist-demo
-```
-
-Or pass it as a selector:
-
-```sh
-uv run moc-env status bu-ist-demo \
-  --bws-secret-id 00000000-0000-0000-0000-000000000000
-```
-
-The UUID is not the GitHub token and is not the Bitwarden machine access token.
-
-### macOS Keychain-stored Bitwarden UUID
-
-If no direct token, explicit Bitwarden selector, or usable GitHub CLI login is
-configured, the CLI reads the default Bitwarden secret UUID from:
+Read the report from top to bottom: the `RESULT` line gives the number of
+blocking and advisory gaps, the phase table shows where each scope stands, and
+`NEXT` lists repository actions in dependency order. The
+[Reading a status report](docs/user-guide.md#reading-a-status-report) section
+explains each part with a complete example.
+
+## Sample text report
 
 ```text
-service: moc-env-github-token
-account: <current-user>
+bu-ist-demo · hub + workload · repo config as of 2026-11-16 12:34:56 UTC
+MOC-issues@1111111  ansible-switches@8888888  everpure-moc@5555555  moc-aws@6666666
+moc-dns@7777777  moc-keycloak@4444444  oac-apps@3333333  oac-infra@2222222  issue #666 (open)
+
+RESULT: 8 blocking gaps (workload 3) · 0 advisories · 16 of 29 checks pass
+UNKNOWN: Workload API address network: hosted-clusters/bu-ist-demo-infra/bu-ist-demo-…
+
+PHASE                        HUB bu-ist-demo-infra           WORKLOAD bu-ist-demo-workload0
+1 Host inventory entry in…   ✅ 1 hosts                       ✅ 1 hosts
+2 Hub-image inventory entry… ✅ 6/6 variables                 🟡 partial
+3 Cluster discovery image…   🟡 partial                       –
+4 Keycloak OIDC client /…    ✅ 1/1 checks                    –
+5 GitOps values and…         ❌ none                          ✅ 1/2 variables
+6 oac-apps values            –                               ⚪ unknown
+7 Shared-service…            –                               ✅ 3/3 checks
+
+NEXT
+  1. [oac-infra] Generate and publish the parent hub's agent discovery ISO, then replace the
+  generic boot_image_url for every host in the workload cluster group. (after 2)
+       guide: docs/workload-cluster-deployment.md → Infrastructure Configuration
+  2. [oac-infra] Generate and publish a hub-specific discovery ISO, then replace the generic
+  boot_image_url for every host in the hub cluster group.
+       guide: docs/infra-cluster-deployment.md → Cluster Deployment
+
+NOT CHECKED — verify by hand:
+  Configure cluster and storage networks and firewalls for bu-ist-demo-infra; Store the
+  bu-ist-demo-infra SSH key and kubeadmin credentials in AWS Secrets Manager; Place the pull
+  secret and SSH key under hub-images/credentials/bu-ist-demo-infra
+
+Details:  moc-env status bu-ist-demo --details
+Markdown: moc-env status bu-ist-demo --format markdown --output report.md
 ```
 
-The service name is retained for compatibility with the existing local item, but
-its value must be the **Bitwarden secret UUID**, not a GitHub token.
+## Authentication
 
-Create or update the UUID item with:
+- Public repositories can be read without a token, but GitHub allows only 60 unauthenticated REST requests per hour.
+- For repeated use, set a read-only `GITHUB_TOKEN` or log in with GitHub CLI.
+- Detailed Bitwarden Secrets Manager and macOS Keychain setup is in the [user guide](docs/user-guide.md#authentication).
+- A token needs only public-repository read access to contents, issues, pull requests, and metadata.
+- Never place a token in a command-line argument or commit it to the repository.
 
-```sh
-/usr/bin/security add-generic-password -U \
-  -a "$(id -un)" \
-  -s moc-env-github-token \
-  -T /usr/bin/security \
-  -w
-```
+## Documentation
 
-Paste the Bitwarden secret UUID at the prompt.
+- [User guide](docs/user-guide.md) — setup, authentication, workflows, report interpretation, options, and troubleshooting.
+- [Roadmap](docs/roadmap.md) — milestone history and future desired-state work.
+- [Hub-cluster terminology](docs/hub-cluster-terminology.md) — hub, hosted, workload, and compatibility naming.
 
-Override the UUID item's service or account with:
-
-```text
-GITHUB_BWS_SECRET_ID_KEYCHAIN_SERVICE
-GITHUB_BWS_SECRET_ID_KEYCHAIN_ACCOUNT
-```
-
-The equivalent CLI options are:
-
-```text
---bws-secret-id-keychain-service
---bws-secret-id-keychain-account
-```
-
-### Bitwarden machine access token
-
-To read the selected secret, the CLI needs a Bitwarden machine access token. It
-looks for that token in this order:
-
-1. `BWS_ACCESS_TOKEN` environment variable
-2. macOS Keychain service `moc-env-bws-access-token`
-
-Create or update the machine-token item with:
-
-```sh
-/usr/bin/security add-generic-password -U \
-  -a "$(id -un)" \
-  -s moc-env-bws-access-token \
-  -T /usr/bin/security \
-  -w
-```
-
-Paste the Bitwarden machine access token at the prompt. Override its account or
-service with `BWS_ACCESS_TOKEN_KEYCHAIN_ACCOUNT` or
-`BWS_ACCESS_TOKEN_KEYCHAIN_SERVICE`.
-
-The complete resolution order is:
-
-1. `GITHUB_TOKEN`
-2. An explicitly configured Bitwarden selector
-3. `gh auth token`, when GitHub CLI is installed and logged in
-4. The default Bitwarden secret UUID item in macOS Keychain
-5. Unauthenticated access
-
-The GitHub token itself is never stored in macOS Keychain. Unavailable optional
-steps are skipped silently: non-macOS systems skip Keychain, a missing `gh`
-executable is skipped, and an absent default Keychain item is skipped. If a
-direct token or explicitly selected Bitwarden source fails, the command fails;
-the CLI does not silently try another credential source after that selection.
-No token is accepted as a command-line argument or passed in command-line
-arguments to a subprocess. GitHub CLI output is captured and subject to a
-timeout.
-
-Use a fine-grained personal access token with access to public repositories and
-these read-only permissions:
-
-- Contents
-- Issues
-- Pull requests
-- Metadata
-
-Do not grant interaction limits, administration, workflows, or write access.
-
-## State meanings
-
-| State | Meaning |
-|---|---|
-| `requested` | The MOC issue exists and records the request |
-| `missing` | No relevant configuration was found |
-| `partial` | Some information exists, but required details are absent or generic |
-| `pr_open` | Relevant configuration exists only in an open pull request |
-| `pr_merged` | A relevant pull request has been merged |
-| `declared_in_main` | Relevant configuration is present in a merged `main` branch |
-
-The key distinction is `pr_open` versus `declared_in_main`: an open PR is not
-deployed desired state.
-
-## Exit codes
-
-- `0`: a report, export, validation, comparison without hard differences, or
-  change plan was produced successfully
-- `1`: a desired-state comparison found a hard difference
-- `2`: input validation, GitHub access, parsing, or output-file writing failed
-
-Missing configuration does not cause a non-zero exit because this is a reporting
-tool, not a deployment gate.
-
-## Development
-
-```sh
-uv sync
-uv run python -m unittest discover -s tests -v
-make check
-```
-
-See [docs/user-guide.md](docs/user-guide.md) for detailed usage and
-[docs/roadmap.md](docs/roadmap.md) for milestone history and future work.
-
-## Non-goals
-
-- No MOC infrastructure or cluster mutation
-- No retrieval of MOC workload or infrastructure secrets
-- No branch, commit, PR, approval, merge, comment, or push generation
-- No live OpenShift/Argo CD checks in the current milestones
-
-The explicit `make report-gist-*` targets are the only external publishing
-actions; they require the `gh` CLI and deliberate invocation.
+Developers can run the full test and packaging gate with `make check`, and regenerate the
+offline sample reports with `make sample-reports`.

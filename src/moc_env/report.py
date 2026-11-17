@@ -119,14 +119,11 @@ def _host_table(check: dict[str, Any], evidence: dict[str, Any]) -> list[str]:
     hosts = evidence.get("hosts")
     if not isinstance(hosts, list) or not all(isinstance(host, dict) for host in hosts):
         return []
-    source_url = _github_location(
-        check.get("repository"), check.get("path"), check.get("ref")
-    )
     rows = [
         [
-            _linked_code(host.get("name"), source_url),
-            _linked_code(host.get("node_name"), source_url),
-            _linked_code(host.get("bmc_addr"), source_url),
+            host.get("name"),
+            host.get("node_name"),
+            host.get("bmc_addr"),
             host.get("boot_image_url"),
         ]
         for host in hosts
@@ -147,7 +144,7 @@ def _path_table(check: dict[str, Any], evidence: dict[str, Any]) -> list[str]:
     rows = [
         [
             _linked_code(path, _path_url(check, path)),
-            "Present" if path in found else "Missing",
+            "present" if path in found else "missing",
         ]
         for path in expected_paths
     ]
@@ -265,55 +262,6 @@ def _source_value_table(check: dict[str, Any], evidence: dict[str, Any]) -> list
         "",
         *_markdown_table(["Field", "Value", "Confidence", "Source"], rows),
     ]
-
-
-def _pull_request_table(evidence: dict[str, Any]) -> list[str]:
-    pull_requests = evidence.get("pull_requests")
-    if not isinstance(pull_requests, list) or not pull_requests:
-        return []
-
-    def repository(pull: dict[str, Any]) -> str:
-        value = pull.get("repository")
-        if isinstance(value, dict):
-            return str(value.get("value"))
-        return str(value or "unknown")
-
-    lines: list[str] = []
-    for pull_repository in sorted({repository(pull) for pull in pull_requests}):
-        rows = [
-            [
-                pull.get("number"),
-                pull.get("title"),
-                pull.get("state"),
-                pull.get("merged"),
-                pull.get("classification"),
-                pull.get("head_ref"),
-                pull.get("html_url"),
-                pull.get("changed_files"),
-            ]
-            for pull in pull_requests
-            if repository(pull) == pull_repository
-        ]
-        lines.extend(
-            [
-                f"**Relevant pull requests — {pull_repository}**",
-                "",
-                *_markdown_table(
-                    [
-                        "PR",
-                        "Title",
-                        "State",
-                        "Merged",
-                        "Classification",
-                        "Head branch",
-                        "Link",
-                        "Changed files",
-                    ],
-                    rows,
-                ),
-            ]
-        )
-    return lines
 
 
 def _text_value(value: Any, indent: int) -> str:
@@ -654,62 +602,206 @@ def _wrap(text: str, indent: int = 0, width: int = 96) -> list[str]:
     ) or [prefix]
 
 
+def _generated_timestamp(report: dict[str, Any]) -> str:
+    generated = (report.get("metadata") or {}).get("generated_at", "")
+    if not generated:
+        return "unknown"
+    try:
+        seconds = generated.removesuffix("Z")
+        return seconds[:16].replace("T", " ") + " UTC"
+    except ValueError:
+        return generated
+
+
+def _sources_table(report: dict[str, Any]) -> list[str]:
+    sources = (report.get("metadata") or {}).get("sources", [])
+    if not sources:
+        return ["Sources: —"]
+    rows = ["Repository                 Ref      Commit"]
+    for source in sources:
+        repository = source.get("repository", "unknown")
+        ref = source.get("ref", "main")
+        sha = source.get("sha", "")
+        rows.append(f"{repository:<27} {ref:<8} {sha[:7]}")
+    return rows
+
+
+def _markdown_sources_table(report: dict[str, Any]) -> list[str]:
+    sources = (report.get("metadata") or {}).get("sources", [])
+    if not sources:
+        return ["Sources: —"]
+    rows = []
+    for source in sources:
+        repository = source.get("repository", "unknown")
+        ref = source.get("ref", "main")
+        sha = source.get("sha", "")
+        commit_url = f"https://github.com/{repository}/commit/{sha}"
+        rows.append(
+            [
+                repository.removeprefix("CCI-MOC/"),
+                ref,
+                MarkdownCell(f"[{sha[:7]}]({commit_url})") if sha else "—",
+            ]
+        )
+    return _markdown_table(["Repository", "Ref", "Commit"], rows)
+
+
+def _workload_checks(
+    checks: list[dict[str, Any]], workload: str
+) -> list[dict[str, Any]]:
+    def belongs(check: dict[str, Any]) -> bool:
+        searchable = json.dumps(
+            [
+                check.get("check"),
+                check.get("path"),
+                check.get("reason"),
+                check.get("actual"),
+                check.get("evidence"),
+            ],
+            default=str,
+        )
+        return workload in searchable
+
+    workload_checks = [check for check in checks if check.get("scope") == "workload"]
+    identified = [check for check in workload_checks if belongs(check)]
+    if identified:
+        return identified
+    return workload_checks
+
+
+def _report_pulls(
+    report: dict[str, Any], classifications: set[str] | None = None
+) -> list[dict[str, Any]]:
+    pulls = [
+        pull
+        for pull in report.get("pull_requests", [])
+        if isinstance(pull, dict)
+        and (
+            classifications is None
+            or _pull_field(pull, "classification") in classifications
+        )
+    ]
+    return sorted(
+        pulls,
+        key=lambda pull: (
+            _pull_field(pull, "repository") or "",
+            _pull_field(pull, "number") or 0,
+        ),
+    )
+
+
+def _unknown_headline(checks: list[dict[str, Any]]) -> str:
+    unknown = [check for check in checks if check["state"] == "unknown"]
+    if not unknown:
+        return ""
+    names = [check["check"] for check in unknown]
+    shown = ", ".join(names[:2])
+    if len(names) > 2:
+        shown += f", and {len(names) - 2} more"
+    return f"UNKNOWN: {shown}"
+
+
+def _blocked_summary(report: dict[str, Any]) -> str | None:
+    checks = report.get("checks", [])
+    by_id = {check.get("id"): check for check in checks}
+    blocked = [check for check in checks if check.get("state") == "blocked"]
+    if not blocked:
+        return None
+    actions = []
+    for check in blocked:
+        blocker_ids = [
+            item for item in check.get("blocked_by", []) if item in by_id
+        ]
+        blocker = by_id[blocker_ids[0]] if blocker_ids else None
+        action = (blocker or {}).get("next_action") or (blocker or {}).get("check")
+        if action and action not in actions:
+            actions.append(action)
+    action = actions[0] if actions else "missing inputs are completed"
+    noun = "check" if len(blocked) == 1 else "checks"
+    return f"{len(blocked)} {noun} blocked until {action}"
+
+
+def _substitute_action(
+    action: str, check: dict[str, Any], report: dict[str, Any]
+) -> str:
+    environment = report["environment"]
+    hub = environment.get("infra_cluster", environment.get("name", ""))
+    path = check.get("path") or ""
+    workloads = environment.get("workload_clusters") or []
+    workload = next((name for name in workloads if name in path), None)
+    cluster = workload if check.get("scope") == "workload" and workload else hub
+    return action.replace("<hub>", hub).replace("<cluster>", cluster)
+
+
+def _sorted_actions(gaps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    by_id = {check.get("id"): check for check in gaps}
+    remaining = set(by_id)
+    ordered: list[dict[str, Any]] = []
+
+    def key(check: dict[str, Any]) -> tuple[Any, ...]:
+        return (
+            0 if check.get("scope") == "hub" else 1,
+            0 if check.get("severity") == "blocking" else 1,
+            check.get("phase") or 0,
+            check.get("check") or "",
+        )
+
+    while remaining:
+        ready = [
+            by_id[item]
+            for item in remaining
+            if not any(
+                dependency in remaining
+                for dependency in by_id[item].get("blocked_by", [])
+            )
+        ]
+        if not ready:
+            ready = [by_id[item] for item in remaining]
+        selected = min(ready, key=key)
+        ordered.append(selected)
+        remaining.remove(selected["id"])
+    return ordered
+
+
 def _phase_rows(report: dict[str, Any], scope: str) -> list[tuple[int, str]]:
     phases = report.get("phases", {})
-    if scope == "environment":
-        hub_definitions = phases.get("hub", []) if isinstance(phases, dict) else []
-        workload_definitions = phases.get("workload", []) if isinstance(phases, dict) else []
-    else:
-        hub_definitions = phases if isinstance(phases, list) else []
-        workload_definitions = []
-    by_phase: dict[int, str] = {}
-    for phase in hub_definitions:
-        by_phase[phase["phase"]] = phase["title"]
-    for phase in workload_definitions:
-        number = phase["phase"]
-        if number not in by_phase:
-            by_phase[number] = phase["title"]
-        elif by_phase[number] != phase["title"]:
-            by_phase[number] = f"{by_phase[number]} / {phase['title']}"
-    return sorted(by_phase.items())
+    key = scope if scope in {"hub", "workload"} else "hub"
+    definitions = phases.get(key, []) if isinstance(phases, dict) else []
+    return sorted((phase["phase"], phase["title"]) for phase in definitions)
+
+
+def _workload_phase_rows(report: dict[str, Any]) -> list[tuple[int, str]]:
+    phases = report.get("phases", {})
+    definitions = (
+        phases
+        if isinstance(phases, list)
+        else phases.get("workload", [])
+    )
+    return sorted((phase["phase"], phase["title"]) for phase in definitions)
 
 
 def _phase_cell(checks: list[dict[str, Any]], ascii_mode: bool) -> str:
     if not checks:
         return "[--]" if ascii_mode else "–"
-    if any(check["state"] == "unknown" for check in checks):
+    pass_states = {"declared_in_main", "requested", "pr_merged"}
+    passing = sum(check["state"] in pass_states for check in checks)
+    unknown = sum(check["state"] == "unknown" for check in checks)
+    blocked = sum(check["state"] == "blocked" for check in checks)
+    failures = [check for check in checks if check["state"] not in pass_states | {"unknown"}]
+    if not failures and (not unknown or passing):
+        symbol = "[ok]" if ascii_mode else "✅"
+    elif not failures:
         symbol = "[??]" if ascii_mode else "⚪"
-        return f"{symbol} unknown"
-    passing = all(check["state"] in {"declared_in_main", "requested", "pr_merged"} for check in checks)
-    if passing:
-        if any(check["id"].endswith(".inventory") for check in checks):
-            hosts = sum(len((check.get("evidence") or {}).get("hosts") or []) for check in checks)
-            detail = f"{hosts} hosts"
-        elif any(isinstance(check.get("expected"), list) for check in checks):
-            expected = sum(len(check["expected"]) for check in checks if isinstance(check.get("expected"), list))
-            observed = sum(
-                len(check.get("actual") or [])
-                for check in checks
-                if isinstance(check.get("expected"), list) and isinstance(check.get("actual"), list)
-            )
-            detail = f"{observed}/{expected} variables"
-        elif any((check.get("evidence") or {}).get("expected_path_count") for check in checks):
-            expected = sum((check.get("evidence") or {}).get("expected_path_count", 0) for check in checks)
-            found = sum((check.get("evidence") or {}).get("path_count", 0) for check in checks)
-            detail = f"{found}/{expected} files"
-        else:
-            detail = f"{len(checks)}/{len(checks)} checks"
-        return f"{'[ok]' if ascii_mode else '✅'} {detail}"
-
-    if any(check["state"] == "missing" for check in checks):
-        return f"{'[fail]' if ascii_mode else '❌'} none"
-    if any(check["state"] == "partial" for check in checks):
-        return f"{'[warn]' if ascii_mode else '🟡'} partial"
-    if any(check["state"] in {"value_mismatch", "pr_open"} for check in checks):
-        return f"{'[warn]' if ascii_mode else '🟡'} " + (
-            "open PR" if any(check["state"] == "pr_open" for check in checks) else "mismatch"
-        )
-    return f"{'[warn]' if ascii_mode else '🟡'} gap"
+    elif any(check["state"] == "missing" for check in failures):
+        symbol = "[fail]" if ascii_mode else "❌"
+    else:
+        symbol = "[warn]" if ascii_mode else "🟡"
+    detail = f"{passing}/{len(checks)} checks"
+    if unknown:
+        detail += f", {unknown} unknown"
+    if blocked:
+        detail += f", {blocked} blocked"
+    return f"{symbol} {detail}"
 
 
 def _guide(report: dict[str, Any], scope: str, phase: int) -> str:
@@ -833,10 +925,9 @@ def _detail_section(check: dict[str, Any], ascii_mode: bool) -> list[str]:
         "-" * 100,
         *_wrap(
             f"{_symbol(check['state'], ascii_mode)} "
-            f"{check.get('phase_title', 'Check')} / {check['check']}",
+            f"{check['check']} — {check['reason']}",
             2,
         ),
-        *_wrap(f"Finding: {check['reason']}", 2),
         *_wrap(
             f"Source: {check['repository']} · {check['path']} @ {short_sha}",
             2,
@@ -878,8 +969,7 @@ def render_text(
     environment = report["environment"]
     scope = report.get("scope", "environment")
     dash = "[--]" if ascii_mode else "–"
-    generated = (report.get("metadata") or {}).get("generated_at", "")
-    generated_text = generated.replace("T", " ").replace("Z", " UTC")
+    generated_text = _generated_timestamp(report)
     non_main = [
         source for source in (report.get("metadata") or {}).get("sources", [])
         if source.get("ref") != "main"
@@ -894,7 +984,7 @@ def render_text(
     )
     if non_main:
         first += " · NOT A REPORT ON MAIN"
-    lines = [first, *_wrap(_source_line(report)), ""]
+    lines = [first, ""]
 
     checks = report["checks"]
     pass_states = {"declared_in_main", "requested", "pr_merged"}
@@ -910,6 +1000,7 @@ def render_text(
         if check["severity"] == "advisory"
         and check["state"] not in pass_states
         and check["state"] != "unknown"
+        and check["state"] != "blocked"
     ]
     unknown = [check for check in checks if check["state"] == "unknown"]
     scope_blocking = {
@@ -921,56 +1012,72 @@ def render_text(
         if scope_blocking and scope == "environment"
         else ""
     )
-    result = (
-        f"RESULT: {len(blocking)} blocking gaps{scope_text} · "
-        f"{len(advisories)} advisories · {passing} of {len(checks)} checks pass"
-    )
+    if not blocking and not advisories and not unknown:
+        result = "RESULT: No deployment gaps in repository configuration."
+    else:
+        result = (
+            f"RESULT: {len(blocking)} blocking gaps{scope_text} · "
+            f"{len(advisories)} advisories · {passing} of {len(checks)} checks pass"
+        )
     lines.extend(_wrap(result))
     if unknown:
-        reasons = "; ".join(f"{check['check']}: {check['reason']}" for check in unknown)
-        lines.append(f"UNKNOWN: {textwrap.shorten(reasons, width=92, placeholder='…')}")
+        lines.append(_unknown_headline(checks))
+    blocked_summary = _blocked_summary(report)
+    if blocked_summary:
+        lines.append(blocked_summary)
+    if report.get("pull_requests_skipped"):
+        lines.append(
+            "Pull requests: skipped because this run is unauthenticated; "
+            "use --prs to inspect them."
+        )
     lines.append("")
 
-    columns: list[tuple[str, list[dict[str, Any]]]] = []
+    def phase_table(title: str, phase_rows: list[tuple[int, str]], columns: list[tuple[str, list[dict[str, Any]]]]) -> None:
+        if not phase_rows or not columns:
+            return
+        lines.extend(["", title])
+        labels = [f"{phase} {phase_title}" for phase, phase_title in phase_rows]
+        phase_width = min(max([len("PHASE")] + [len(label) for label in labels]) + 2, 29)
+        cell_width = min(max([len(header) for header, _ in columns] + [14]) + 2, 32)
+        lines.append(f"{'PHASE':<{phase_width}}" + "".join(f"{header:<{cell_width}}" for header, _ in columns))
+        for phase, phase_title in phase_rows:
+            label = textwrap.shorten(f"{phase} {phase_title}", width=phase_width, placeholder="…")
+            cells = []
+            for _header, scope_checks in columns:
+                phase_checks = [check for check in scope_checks if check.get("phase") == phase]
+                cell = _phase_cell(phase_checks, ascii_mode)
+                cells.append(textwrap.shorten(cell, width=cell_width, placeholder="…"))
+            lines.append(f"{label:<{phase_width}}" + "".join(f"{cell:<{cell_width}}" for cell in cells))
+
     if scope in {"environment", "hub"}:
-        columns.append((f"HUB {environment['infra_cluster']}", [c for c in checks if c["scope"] == "hub"]))
+        phase_table(
+            "HUB PHASES",
+            _phase_rows(report, "hub"),
+            [(f"HUB {environment['infra_cluster']}", [c for c in checks if c["scope"] == "hub"])],
+        )
     if scope in {"environment", "workload"}:
-        for workload in environment.get("workload_clusters", []):
-            columns.append((f"WORKLOAD {workload}", [c for c in checks if c["scope"] == "workload"]))
-    phase_rows = _phase_rows(report, scope)
-    labels = [f"{phase} {title}" for phase, title in phase_rows]
-    phase_width = min(max([len("PHASE")] + [len(label) for label in labels]) + 2, 29)
-    cell_width = min(max([len(header) for header, _ in columns] + [14]) + 2, 32)
-    lines.append(f"{'PHASE':<{phase_width}}" + "".join(f"{header:<{cell_width}}" for header, _ in columns))
-    for phase, title in phase_rows:
-        label = f"{phase} {title}"
-        label = textwrap.shorten(label, width=phase_width, placeholder="…")
-        cells = []
-        for _header, scope_checks in columns:
-            phase_checks = [check for check in scope_checks if check.get("phase") == phase]
-            cell = _phase_cell(phase_checks, ascii_mode)
-            cells.append(textwrap.shorten(cell, width=cell_width, placeholder="…"))
-        lines.append(f"{label:<{phase_width}}" + "".join(f"{cell:<{cell_width}}" for cell in cells))
+        columns = [
+            (f"WORKLOAD {workload}", _workload_checks(checks, workload))
+            for workload in environment.get("workload_clusters", [])
+        ]
+        phase_table("WORKLOAD PHASES", _workload_phase_rows(report), columns)
     lines.append("")
 
     lines.append("NEXT")
-    gaps = [*blocking, *advisories]
-    gaps.sort(key=lambda check: (check["severity"] != "blocking", check.get("phase", 0)))
+    gaps = _sorted_actions([*blocking, *advisories])
     if not gaps:
         lines.append("Nothing to do in the repositories this tool reads.")
     else:
-        open_pulls = [
-            pull
-            for check in checks
-            for pull in (check.get("evidence") or {}).get("pull_requests", [])
-            if isinstance(pull, dict)
-            and pull.get("classification", {}).get("value") == "open"
-        ]
+        open_pulls = _report_pulls(report, {"open"})
         action_numbers: dict[str, int] = {}
         for number, check in enumerate(gaps, start=1):
             action_numbers.setdefault(check["id"], number)
         for number, check in enumerate(gaps, start=1):
-            action = check.get("next_action") or f"Resolve {check['check']}."
+            action = _substitute_action(
+                check.get("next_action") or f"Resolve {check['check']}.",
+                check,
+                report,
+            )
             repository = check["repository"].removeprefix("CCI-MOC/")
             after = [str(action_numbers[item]) for item in check.get("blocked_by", []) if item in action_numbers]
             suffix = f" (after {', '.join(after)})" if after else ""
@@ -989,11 +1096,31 @@ def render_text(
     else:
         lines.append("None.")
 
+    open_pulls = _report_pulls(report, {"open"})
+    pr_lines = []
+    for pull in open_pulls:
+        repository = (_pull_field(pull, "repository") or "").removeprefix("CCI-MOC/")
+        number = _pull_field(pull, "number")
+        title = _pull_field(pull, "title")
+        files = _pull_field(pull, "changed_files") or []
+        pr_lines.append(f"  {repository} #{number} — {title}")
+        pr_lines.extend(f"    {path}" for path in files)
     lines.extend(
         [
             "",
-            *_wrap(f"Details:  {_status_command(report, '--details')}"),
-            *_wrap(f"Markdown: {_status_command(report, '--format markdown --output report.md')}"),
+            "PULL REQUESTS",
+            f"{len(open_pulls)} open {'PR' if len(open_pulls) == 1 else 'PRs'} touch this environment.",
+            *pr_lines,
+        ]
+    )
+
+    lines.extend(["", "Sources"])
+    lines.extend(_sources_table(report))
+    lines.extend(
+        [
+            "",
+            f"Details:  {_status_command(report, '--details')}",
+            f"Markdown: {_status_command(report, '--format markdown --output report.md')}",
         ]
     )
 
@@ -1087,6 +1214,14 @@ def _detail_field_rows(check: dict[str, Any], report: dict[str, Any]) -> list[li
     expected = check.get("expected")
     actual = check.get("actual")
 
+    if check.get("id", "").endswith(".pure_storage_realm") and isinstance(
+        evidence.get("realm"), dict
+    ):
+        return [
+            [field, None, value]
+            for field, value in evidence["realm"].items()
+        ]
+
     expected_paths = evidence.get("expected_paths")
     if isinstance(expected_paths, list):
         found_paths = set(evidence.get("paths") or [])
@@ -1115,7 +1250,11 @@ def _detail_field_rows(check: dict[str, Any], report: dict[str, Any]) -> list[li
         ]
 
     if isinstance(expected, dict):
-        keys = expected if isinstance(actual, dict) else list(expected)
+        keys = (
+            list(dict.fromkeys((*expected, *actual)))
+            if isinstance(actual, dict)
+            else list(expected)
+        )
         return [
             [
                 key,
@@ -1152,7 +1291,8 @@ def _expand_field_row(
     if isinstance(expected, list) and any(isinstance(item, dict) for item in expected):
         for index, item in enumerate(expected):
             observed_value = observed[index] if isinstance(observed, list) and index < len(observed) else observed
-            _expand_field_row(f"item {index}", item, observed_value, expanded)
+            label = str(item.get("name", index)) if isinstance(item, dict) else str(index)
+            _expand_field_row(label, item, observed_value, expanded)
         return
     if isinstance(observed, dict):
         for key, value in observed.items():
@@ -1160,7 +1300,8 @@ def _expand_field_row(
         return
     if isinstance(observed, list) and any(isinstance(item, dict) for item in observed):
         for index, item in enumerate(observed):
-            _expand_field_row(f"item {index}", expected, item, expanded)
+            label = str(item.get("name", index)) if isinstance(item, dict) else str(index)
+            _expand_field_row(label, expected, item, expanded)
         return
     expanded.append([field, expected, observed])
 
@@ -1188,26 +1329,56 @@ def _check_markdown_details(
     }
     lines = [
         f"<details{' open' if open_state else ''}>",
-        f"<summary>{_state(check['state'])} · {check['severity']} — {check['check']}</summary>",
-        "",
-        f"Finding: {check['reason']}",
+        f"<summary>{_state(check['state'])} {check['check']} — {check['reason']}</summary>",
         "",
         f"Source: {check['repository']} · {path_text} @ {short_sha}",
         "",
     ]
     if check_rule:
         lines.extend([f"Status rule: {check_rule}", ""])
-    rows = [
-        [
-            field if isinstance(field, MarkdownCell) else _markdown_human_value(field),
-            _markdown_human_value(expected),
-            _markdown_human_value(observed),
+    field_rows = _expanded_field_rows(_detail_field_rows(check, report))
+    if check["state"] in {"declared_in_main", "requested", "pr_merged"}:
+        rows = [
+            [
+                field if isinstance(field, MarkdownCell) else _markdown_human_value(field),
+                _markdown_human_value(observed),
+            ]
+            for field, _expected, observed in field_rows
         ]
-        for field, expected, observed in _expanded_field_rows(
-            _detail_field_rows(check, report)
+        lines.extend(_markdown_table(["Field", "Observed"], rows))
+    else:
+        rows = [
+            [
+                field if isinstance(field, MarkdownCell) else _markdown_human_value(field),
+                _markdown_human_value(expected),
+                _markdown_human_value(observed),
+            ]
+            for field, expected, observed in field_rows
+        ]
+        lines.extend(_markdown_table(["Field", "Expected", "Observed"], rows))
+    if check.get("id") == "hub.local_cluster_values":
+        required = set(evidence.get("expected_paths") or [])
+        found = set(evidence.get("paths") or [])
+        lines.extend(
+            [
+                "**Required files**",
+                "",
+                *_markdown_table(
+                    ["Path", "Status"],
+                    [
+                        [path, "present" if path in found else "missing"]
+                        for path in sorted(required)
+                    ],
+                ),
+                "**Additional files present**",
+                "",
+            ]
         )
-    ]
-    lines.extend(_markdown_table(["Field", "Expected", "Observed"], rows))
+        extra = sorted(found - required)
+        if extra:
+            lines.extend(_markdown_table(["Path"], [[path] for path in extra]))
+        else:
+            lines.extend(["None.", ""])
     lines.extend(_host_table(check, evidence))
     lines.extend(_agent_label_markdown_table(check))
     lines.extend(["</details>", ""])
@@ -1250,35 +1421,33 @@ def _markdown_verdict(report: dict[str, Any]) -> str:
         if check["severity"] == "advisory"
         and check["state"] not in pass_states
         and check["state"] != "unknown"
+        and check["state"] != "blocked"
     ]
     unknown = [check for check in checks if check["state"] == "unknown"]
     passing = sum(check["state"] in pass_states for check in checks)
+    if not blocking and not advisories and not unknown:
+        return "No deployment gaps in repository configuration."
     verdict = (
         f"{len(blocking)} blocking gaps, {len(advisories)} advisories, "
         f"and {passing} of {len(checks)} checks pass"
     )
-    if unknown:
-        reasons = "; ".join(f"{check['check']}: {check['reason']}" for check in unknown)
-        verdict += f"; unknown: {textwrap.shorten(reasons, width=180, placeholder='…')}"
+    unknown_headline = _unknown_headline(checks)
+    if unknown_headline:
+        verdict += f"; {unknown_headline}"
+    blocked_summary = _blocked_summary(report)
+    if blocked_summary:
+        verdict += f"; {blocked_summary}"
     return verdict
 
 
 def _markdown_metadata(report: dict[str, Any]) -> str:
     metadata = report.get("metadata") or {}
-    generated = metadata.get("generated_at", "unknown").replace("T", " ").replace("Z", " UTC")
+    generated = _generated_timestamp(report)
     parts = [f"Generated {generated}"]
-    sources = []
-    non_main = False
-    for source in metadata.get("sources", []):
-        short_sha = source.get("sha", "")[:7] or "—"
-        label = f"{source.get('repository', 'unknown')}@{short_sha}"
-        if source.get("ref") != "main":
-            label = f"{label}@{source.get('ref')}"
-            non_main = True
-        url = f"https://github.com/{source.get('repository')}/commit/{source.get('sha')}"
-        sources.append(f"[{label}]({url})" if source.get("sha") else label)
-    if sources:
-        parts.append("Sources: " + " · ".join(sources))
+    non_main = any(
+        source.get("ref") != "main"
+        for source in metadata.get("sources", [])
+    )
     issue = next((check for check in report.get("checks", []) if check.get("id") == "request.issue"), None)
     issue_number = report.get("environment", {}).get("issue_number")
     if issue_number is None:
@@ -1289,6 +1458,10 @@ def _markdown_metadata(report: dict[str, Any]) -> str:
         )
     else:
         parts.append(f"MOC issue: #{issue_number}")
+    if report.get("pull_requests_skipped"):
+        parts.append(
+            "Pull requests skipped because this run is unauthenticated; use --prs"
+        )
     prefix = "**This is not a report on main.** " if non_main else ""
     return prefix + " · ".join(parts)
 
@@ -1297,27 +1470,52 @@ def _markdown_phase_table(report: dict[str, Any]) -> list[str]:
     environment = report["environment"]
     checks = report["checks"]
     scope = report.get("scope", "environment")
-    columns: list[tuple[str, list[dict[str, Any]]]] = []
+
+    def table(
+        heading: str,
+        phase_rows: list[tuple[int, str]],
+        columns: list[tuple[str, list[dict[str, Any]]]],
+    ) -> list[str]:
+        if not phase_rows or not columns:
+            return []
+        rendered = [f"### {heading}", ""]
+        rendered.append("| Phase | " + " | ".join(header for header, _ in columns) + " |")
+        rendered.append("|---|" + "|".join("---:" for _ in columns) + "|")
+        for phase, title in phase_rows:
+            cells = [
+                _phase_cell(
+                    [check for check in scope_checks if check.get("phase") == phase],
+                    False,
+                )
+                for _header, scope_checks in columns
+            ]
+            rendered.append(f"| {phase} {title} | " + " | ".join(cells) + " |")
+        rendered.append("")
+        return rendered
+
+    lines: list[str] = []
     if scope in {"environment", "hub"}:
-        columns.append(
-            (f"HUB {environment['infra_cluster']}", [c for c in checks if c["scope"] == "hub"])
+        lines.extend(
+            table(
+                "Hub phases",
+                _phase_rows(report, "hub"),
+                [(
+                    f"HUB {environment['infra_cluster']}",
+                    [c for c in checks if c["scope"] == "hub"],
+                )],
+            )
         )
     if scope in {"environment", "workload"}:
-        for workload in environment.get("workload_clusters", []):
-            columns.append(
-                (f"WORKLOAD {workload}", [c for c in checks if c["scope"] == "workload"])
+        lines.extend(
+            table(
+                "Workload phases",
+                _workload_phase_rows(report),
+                [
+                    (f"WORKLOAD {workload}", _workload_checks(checks, workload))
+                    for workload in environment.get("workload_clusters", [])
+                ],
             )
-    lines = ["| Phase | " + " | ".join(header for header, _ in columns) + " |"]
-    lines.append("|---|" + "|".join("---:" for _ in columns) + "|")
-    for phase, title in _phase_rows(report, scope):
-        cells = []
-        for _header, scope_checks in columns:
-            phase_checks = [
-                check for check in scope_checks if check.get("phase") == phase
-            ]
-            cells.append(_phase_cell(phase_checks, False))
-        lines.append(f"| {phase} {title} | " + " | ".join(cells) + " |")
-    lines.append("")
+        )
     return lines
 
 
@@ -1330,25 +1528,23 @@ def _markdown_next_actions(report: dict[str, Any]) -> list[str]:
         if check["severity"] in {"blocking", "advisory"}
         and check["state"] not in pass_states
         and check["state"] != "unknown"
+        and check["state"] != "blocked"
     ]
-    gaps.sort(key=lambda check: (check["severity"] != "blocking", check.get("phase", 0)))
+    gaps = _sorted_actions(gaps)
     lines = ["## Next actions", ""]
     if not gaps:
         lines.extend(["Nothing to do in the repositories this tool reads.", ""])
         return lines
-    open_pulls = [
-        pull
-        for check in checks
-        for pull in (check.get("evidence") or {}).get("pull_requests", [])
-        if isinstance(pull, dict)
-        and pull.get("classification", {}).get("value") == "open"
-    ]
+    open_pulls = _report_pulls(report, {"open"})
     action_numbers: dict[str, int] = {}
     for number, check in enumerate(gaps, start=1):
         action_numbers.setdefault(check["id"], number)
     for number, check in enumerate(gaps, start=1):
-        action = check.get("next_action") or f"Resolve {check['check']}."
-        action = action.replace("<", "&lt;").replace(">", "&gt;")
+        action = _substitute_action(
+            check.get("next_action") or f"Resolve {check['check']}.",
+            check,
+            report,
+        )
         repository = check["repository"].removeprefix("CCI-MOC/")
         path_url = _markdown_check_url(report, check)
         path_label = _markdown_inline(check.get("path"))
@@ -1366,7 +1562,12 @@ def _markdown_next_actions(report: dict[str, Any]) -> list[str]:
         guide = _guide(report, check["scope"], check.get("phase", 0))
         if guide:
             document, heading = guide.split(" → ", 1)
-            lines.append(f"   Guide: [{document} → {heading}]({document})")
+            guide_url = (
+                f"https://github.com/CCI-MOC/oac-apps/blob/main/{document}"
+            )
+            lines.append(
+                f"   Guide: [{document} → {heading}]({guide_url}#{heading.lower().replace(' ', '-')})"
+            )
     lines.append("")
     return lines
 
@@ -1379,9 +1580,12 @@ def _markdown_manual_checks(report: dict[str, Any]) -> list[str]:
         return lines
     for entry in entries:
         where = entry["where"]
+        guide_url = (
+            f"https://github.com/CCI-MOC/oac-apps/blob/main/{where['document']}"
+        )
         lines.append(
             f"- [ ] **{entry['title']}** (phase {entry['phase']}) — {entry['why']} "
-            f"Documented at [{where['document']} → {where['heading']}]({where['document']})."
+            f"Documented at [{where['document']} → {where['heading']}]({guide_url}#{where['heading'].lower().replace(' ', '-')})."
         )
     lines.append("")
     return lines
@@ -1398,11 +1602,18 @@ def _markdown_pull_requests(report: dict[str, Any]) -> list[str]:
             _pull_field(pull, "repository"),
             _pull_field(pull, "number"),
         ): pull
-        for check in report.get("checks", [])
-        for pull in (check.get("evidence") or {}).get("pull_requests", [])
+        for pull in report.get("pull_requests", [])
         if isinstance(pull, dict)
     }
     lines = ["## Pull requests", ""]
+    open_count = sum(
+        _pull_field(pull, "classification") == "open"
+        for pull in pulls.values()
+    )
+    lines.append(
+        f"**{open_count} open {'PR' if open_count == 1 else 'PRs'} touch this environment.**"
+    )
+    lines.append("")
     if not pulls:
         lines.extend(["None.", ""])
         return lines
@@ -1445,7 +1656,7 @@ def _markdown_pull_requests(report: dict[str, Any]) -> list[str]:
             rows.append(
                 [
                     repository.removeprefix("CCI-MOC/"),
-                    f"[#{number}]({url})",
+                    MarkdownCell(f"[#{number}]({url})"),
                     _pull_field(pull, "title"),
                     _pull_field(pull, "head_ref"),
                     MarkdownCell("<br>".join(files)),
@@ -1521,7 +1732,176 @@ def render_markdown(report: dict[str, Any]) -> str:
     for check in report.get("checks", []):
         lines.extend(_check_markdown_details(check, sources, report))
     lines.extend(_markdown_pull_requests(report))
+    lines.extend(["## Sources", "", *_markdown_sources_table(report), ""])
     lines.extend(_markdown_legend(report))
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _diff_scopes(report: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    environment = report["environment"]
+    scopes = {"hub": [c for c in report["checks"] if c.get("scope") == "hub"]}
+    for position, workload in enumerate(environment.get("workload_clusters", []), 1):
+        scopes[f"workload {position}"] = _workload_checks(
+            report["checks"], workload
+        )
+    return scopes
+
+
+def _diff_files(checks: list[dict[str, Any]]) -> set[str]:
+    files: set[str] = set()
+    for check in checks:
+        evidence = check.get("evidence") or {}
+        if isinstance(evidence.get("paths"), list):
+            files.update(str(path) for path in evidence["paths"])
+    return files
+
+
+def _structural_facts(checks: list[dict[str, Any]]) -> dict[str, Any]:
+    by_id = {check.get("id"): check for check in checks}
+    facts: dict[str, Any] = {}
+    inventory = next(
+        (
+            check for check in checks
+            if check.get("id", "").endswith(".inventory")
+            and isinstance(check.get("actual"), dict)
+        ),
+        None,
+    )
+    if inventory:
+        facts["node_count"] = inventory["actual"].get("host_count")
+    dns = by_id.get("hub.moc_dns_records")
+    if dns:
+        facts["dns_zone"] = (dns.get("evidence") or {}).get("zone")
+    hub_defaults = by_id.get("hub.hosted_cluster_defaults") or {}
+    hosted_zone = (
+        (hub_defaults.get("evidence") or {}).get("values") or {}
+    ).get("hcpExternalDomain")
+    if hosted_zone:
+        facts["hosted_cluster_zone_delegation"] = hosted_zone
+    boot = next(
+        (
+            check for check in checks
+            if check.get("id", "").endswith(".boot_image")
+            and isinstance(check.get("actual"), list)
+            and check["actual"]
+        ),
+        None,
+    )
+    if boot:
+        facts["boot_image_naming"] = sorted(
+            str(url).rsplit("/", 1)[-1] for url in boot["actual"]
+        )
+    agent = next(
+        (
+            check for check in checks
+            if isinstance((check.get("evidence") or {}).get("agent_label_hosts"), list)
+        ),
+        None,
+    )
+    if agent:
+        management_counts: dict[str, int] = {}
+        for row in agent["evidence"]["agent_label_hosts"]:
+            if isinstance(row, dict):
+                value = "true" if row.get("bm_management") is True else "false" if row.get("bm_management") is False else str(row.get("bm_management"))
+                management_counts[value] = management_counts.get(value, 0) + 1
+        facts["bm_management_mix"] = management_counts
+    return facts
+
+
+def build_environment_diff(
+    report_a: dict[str, Any], report_b: dict[str, Any]
+) -> dict[str, Any]:
+    """Compare structural repository state without environment-specific values."""
+
+    scopes_a, scopes_b = _diff_scopes(report_a), _diff_scopes(report_b)
+    scopes: list[dict[str, Any]] = []
+    for scope in sorted(set(scopes_a) | set(scopes_b)):
+        checks_a, checks_b = scopes_a.get(scope, []), scopes_b.get(scope, [])
+        pass_states = {"declared_in_main", "requested", "pr_merged"}
+        passing_a = {
+            check.get("id")
+            for check in checks_a if check.get("state") in pass_states
+        }
+        passing_b = {
+            check.get("id")
+            for check in checks_b if check.get("state") in pass_states
+        }
+        files_a, files_b = _diff_files(checks_a), _diff_files(checks_b)
+        facts_a, facts_b = _structural_facts(checks_a), _structural_facts(checks_b)
+        scopes.append(
+            {
+                "scope": scope,
+                "checks_only_in_a": [
+                    {"id": check_id}
+                    for check_id in sorted(passing_a - passing_b)
+                ],
+                "checks_only_in_b": [
+                    {"id": check_id}
+                    for check_id in sorted(passing_b - passing_a)
+                ],
+                "files_only_in_a": sorted(files_a - files_b),
+                "files_only_in_b": sorted(files_b - files_a),
+                "structural_facts": {
+                    "a": facts_a,
+                    "b": facts_b,
+                    "different": {
+                        key: {"a": facts_a.get(key), "b": facts_b.get(key)}
+                        for key in sorted(set(facts_a) | set(facts_b))
+                        if facts_a.get(key) != facts_b.get(key)
+                    },
+                },
+            }
+        )
+    return {
+        "environment_a": report_a["environment"]["name"],
+        "environment_b": report_b["environment"]["name"],
+        "scopes": scopes,
+    }
+
+
+def render_diff_text(diff: dict[str, Any]) -> str:
+    lines = [
+        f"{diff['environment_a']} → {diff['environment_b']}",
+        "",
+    ]
+    for scope in diff["scopes"]:
+        lines.append(f"SCOPE: {scope['scope']}")
+        lines.append(f"  Passing only in {diff['environment_a']}: {', '.join(item['id'] for item in scope['checks_only_in_a']) or 'none'}")
+        lines.append(f"  Passing only in {diff['environment_b']}: {', '.join(item['id'] for item in scope['checks_only_in_b']) or 'none'}")
+        lines.append(f"  Files only in {diff['environment_a']}: {', '.join(scope['files_only_in_a']) or 'none'}")
+        lines.append(f"  Files only in {diff['environment_b']}: {', '.join(scope['files_only_in_b']) or 'none'}")
+        for key, values in scope["structural_facts"]["different"].items():
+            lines.append(f"  {key}: {values['a']} → {values['b']}")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def render_diff_markdown(diff: dict[str, Any]) -> str:
+    lines = [f"# {diff['environment_a']} → {diff['environment_b']}", ""]
+    for scope in diff["scopes"]:
+        lines.extend([f"## {scope['scope']}", ""])
+        lines.extend(_markdown_table(
+            ["Direction", "Checks passing", "Files"],
+            [
+                [
+                    f"Only in {diff['environment_a']}",
+                    ", ".join(item["id"] for item in scope["checks_only_in_a"]) or "—",
+                    ", ".join(scope["files_only_in_a"]) or "—",
+                ],
+                [
+                    f"Only in {diff['environment_b']}",
+                    ", ".join(item["id"] for item in scope["checks_only_in_b"]) or "—",
+                    ", ".join(scope["files_only_in_b"]) or "—",
+                ],
+            ],
+        ))
+        facts = scope["structural_facts"]["different"]
+        if facts:
+            lines.extend(["**Structural facts**", ""])
+            lines.extend(_markdown_table(
+                ["Fact", diff["environment_a"], diff["environment_b"]],
+                [[key, values["a"], values["b"]] for key, values in facts.items()],
+            ))
     return "\n".join(lines).rstrip() + "\n"
 
 

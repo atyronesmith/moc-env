@@ -35,6 +35,7 @@ class EnvironmentRegistry:
     required_local_cluster_components: dict[str, tuple[str, ...]]
     optional_local_cluster_components: dict[str, tuple[str, ...]]
     keycloak_client_names: dict[str, str]
+    default_required_components: tuple[str, ...] = ()
 
     @classmethod
     def load(
@@ -126,13 +127,19 @@ class EnvironmentRegistry:
             required_local_cluster_components=required,
             optional_local_cluster_components=optional,
             keycloak_client_names=keycloak_names,
+            default_required_components=_component_list(
+                defaults.get("required_local_cluster_components"),
+                "defaults.required_local_cluster_components",
+            ),
         )
 
     def issue(self, environment: str) -> int | None:
         return self.issues.get(environment)
 
     def required_components(self, environment: str) -> tuple[str, ...]:
-        return self.required_local_cluster_components.get(environment, ())
+        return self.required_local_cluster_components.get(
+            environment, self.default_required_components
+        )
 
     def optional_components(self, environment: str) -> tuple[str, ...]:
         return self.optional_local_cluster_components.get(environment, ())

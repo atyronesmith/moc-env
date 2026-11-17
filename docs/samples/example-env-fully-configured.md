@@ -1,0 +1,477 @@
+SAMPLE — generated from a synthetic fixture, not a live environment.
+
+# example-env — environment configuration status
+
+**No deployment gaps in repository configuration.**
+
+Generated 2026-11-16 12:34 UTC · MOC issue: not set — pass `--issue N` · Pull requests skipped because this run is unauthenticated; use --prs
+
+## Phase summary
+
+### Hub phases
+
+| Phase | HUB example-env-infra |
+|---|---:|
+| 1 Host inventory entry | ✅ 1/1 checks |
+| 2 Hub image inventory and vars | ✅ 3/3 checks |
+| 3 Discovery image reference | ✅ 1/1 checks |
+| 4 Keycloak OIDC client | ✅ 1/1 checks |
+| 5 GitOps values and apps | ✅ 8/8 checks |
+
+### Workload phases
+
+| Phase | WORKLOAD example-env-workload0 |
+|---|---:|
+| 1 Host inventory entry | ✅ 1/1 checks |
+| 2 Hub agent discovery ISO | ✅ 1/1 checks |
+| 3 Agent ISO boot | – |
+| 4 Agent visibility | – |
+| 5 Agent labels and approval | ✅ 1/1 checks |
+| 6 oac-apps values | ✅ 7/7 checks |
+| 7 Shared-service prerequisites | ✅ 4/4 checks |
+
+## Next actions
+
+Nothing to do in the repositories this tool reads.
+
+## Not checked — verify by hand
+
+- [ ] **Configure cluster and storage networks and firewalls for example-env-infra** (phase 1) — The repositories read by this tool do not describe the switch, network, or firewall state required for example-env-infra. Documented at [docs/infra-cluster-deployment.md → Infrastructure Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#infrastructure-configuration).
+- [ ] **Store the example-env-infra SSH key and kubeadmin credentials in AWS Secrets Manager** (phase 2) — Secrets Manager is outside the public repositories read by this tool, so it cannot verify cluster/example-env-infra/sshkey or cluster/example-env-infra/kubeadmin. Documented at [docs/infra-cluster-deployment.md → Cluster Deployment](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-deployment).
+- [ ] **Place the pull secret and SSH key under hub-images/credentials/example-env-infra** (phase 2) — The documented credential directory is intentionally not committed, so repository state cannot prove that its files exist for example-env-infra. Documented at [docs/infra-cluster-deployment.md → Cluster Deployment](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-deployment).
+- [ ] **Run create_agent_install_media and copy the example-env-infra ISO to the bastion host** (phase 3) — Running the playbook and copying the generated discovery ISO leave no trace that this tool can verify in the repositories it reads. Documented at [docs/infra-cluster-deployment.md → Cluster Deployment](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-deployment).
+- [ ] **Bootstrap Argo CD for example-env-infra** (phase 5) — Running setup-gitops.sh and applying the bootstrap Helm template changes live cluster state, which this repository-only report cannot verify. Documented at [docs/infra-cluster-deployment.md → Cluster Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-configuration).
+- [ ] **Agents visible in hardware-inventory** (phase 4) — Agent visibility in the hub's hardware-inventory namespace requires live cluster state that repository configuration cannot prove. Documented at [docs/workload-cluster-deployment.md → Infrastructure Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/workload-cluster-deployment.md#infrastructure-configuration).
+- [ ] **Agents labelled and approved** (phase 5) — Labelling and approving agents with update-agents.yaml changes live hub cluster state that repository configuration cannot prove. Documented at [docs/workload-cluster-deployment.md → Infrastructure Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/workload-cluster-deployment.md#infrastructure-configuration).
+
+## Details
+
+<details>
+<summary>✅ declared_in_main example-env-infra host inventory — The inventory contains a example-env-infra group with 1 hosts.</summary>
+
+Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml) @ 2222222
+
+| Field | Observed |
+|---|---|
+| `cluster_group` | `example-env-infra` |
+| `host_count` | `1` |
+
+**Observed hosts**
+
+| Host | Node name | BMC address | Boot image URL |
+|---|---|---|---|
+| `control-0` | `MOC-R4PAC10U31-S1A` | — | `http://10.2.0.82/boot/example-env-infra-agent-discovery.iso` |
+
+</details>
+
+<details>
+<summary>✅ declared_in_main Hub image inventory — The hub-image inventory contains the all.children.example-env-infra key.</summary>
+
+Source: CCI-MOC/oac-infra · [`hub-images/inventory.yml`](https://github.com/CCI-MOC/oac-infra/blob/main/hub-images/inventory.yml) @ 2222222
+
+| Field | Observed |
+|---|---|
+| `inventory_key` | `example-env-infra` |
+
+</details>
+
+<details>
+<summary>✅ declared_in_main Hub image variables — All required hub-image variables are present in main.</summary>
+
+Source: CCI-MOC/oac-infra · [`hub-images/group_vars/example-env-infra/vars.yml`](https://github.com/CCI-MOC/oac-infra/blob/main/hub-images/group_vars/example-env-infra/vars.yml) @ 2222222
+
+| Field | Observed |
+|---|---|
+| `cluster_domain_name` | `example-env` |
+| `base_domain` | `int.massopen.cloud` |
+| `machine_network` | `10.20.26.0/23` |
+| `api_ip` | `10.20.27.11` |
+| `ingress_ip` | `10.20.27.12` |
+| `dns_ip` | `8.8.8.8` |
+
+</details>
+
+<details>
+<summary>✅ declared_in_main Hub moc-dns records — All required hub DNS records in zonefiles/int.massopen.cloud.zone match the hub-image variables.</summary>
+
+Source: CCI-MOC/moc-dns · [`zonefiles/int.massopen.cloud.zone`](https://github.com/CCI-MOC/moc-dns/blob/main/zonefiles/int.massopen.cloud.zone) @ 7777777
+
+| Field | Observed |
+|---|---|
+| `api.example-env.int.massopen.cloud` | `10.20.27.11` |
+| `api-int.example-env.int.massopen.cloud` | `10.20.27.11` |
+| `*.apps.example-env.int.massopen.cloud` | `10.20.27.12` |
+
+</details>
+
+<details>
+<summary>✅ declared_in_main example-env-infra boot image — The boot image URL is specific to example-env-infra.</summary>
+
+Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml) @ 2222222
+
+Status rule: The boot-image filename must contain the full cluster name `example-env-infra`; generic `discovery.iso` does not satisfy this rule.
+
+| Field | Observed |
+|---|---|
+| `value` | `http://10.2.0.82/boot/example-env-infra-agent-discovery.iso` |
+
+</details>
+
+<details>
+<summary>✅ declared_in_main Hub OIDC client — All expected Keycloak OIDC client fields match.</summary>
+
+Source: CCI-MOC/moc-keycloak · [`main.tf`](https://github.com/CCI-MOC/moc-keycloak/blob/main/main.tf) @ 4444444
+
+| Field | Observed |
+|---|---|
+| `client` | `example-env-infra` |
+| `redirect_uri` | `https://oauth-openshift.apps.example-env.int.massopen.cloud/oauth2callback/mocsso` |
+| `secret_name` | `cluster/example-env-infra/keycloak-oidc` |
+
+</details>
+
+<details>
+<summary>✅ declared_in_main Hub hosted-cluster defaults — All expected files for the default values for hosted clusters on this hub cluster are present in main.</summary>
+
+Source: CCI-MOC/oac-apps · [`hosted-clusters/example-env-infra/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/example-env-infra/values.yaml) @ 3333333
+
+| Field | Observed |
+|---|---|
+| [`hosted-clusters/example-env-infra/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/example-env-infra/values.yaml) | `present` |
+
+</details>
+
+<details>
+<summary>✅ declared_in_main Hub-wide component values — All expected files for hub-wide HCP and secret-selector values are present in main.</summary>
+
+Source: CCI-MOC/oac-apps · [`values/example-env-infra`](https://github.com/CCI-MOC/oac-apps/blob/main/values/example-env-infra) @ 3333333
+
+| Field | Observed |
+|---|---|
+| [`values/example-env-infra/hcp-config.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/values/example-env-infra/hcp-config.yaml) | `present` |
+
+</details>
+
+<details>
+<summary>✅ declared_in_main Hub local-cluster values — All expected files for the hub cluster's local operator and shared-service values are present in main.</summary>
+
+Source: CCI-MOC/oac-apps · [`values/example-env-infra/local-cluster`](https://github.com/CCI-MOC/oac-apps/blob/main/values/example-env-infra/local-cluster) @ 3333333
+
+| Field | Observed |
+|---|---|
+| [`values/example-env-infra/local-cluster/acm.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/values/example-env-infra/local-cluster/acm.yaml) | `present` |
+| [`values/example-env-infra/local-cluster/acm-placements.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/values/example-env-infra/local-cluster/acm-placements.yaml) | `present` |
+| [`values/example-env-infra/local-cluster/cert-manager.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/values/example-env-infra/local-cluster/cert-manager.yaml) | `present` |
+| [`values/example-env-infra/local-cluster/cluster-certificates.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/values/example-env-infra/local-cluster/cluster-certificates.yaml) | `present` |
+| [`values/example-env-infra/local-cluster/cluster-version.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/values/example-env-infra/local-cluster/cluster-version.yaml) | `present` |
+| [`values/example-env-infra/local-cluster/external-dns-operator.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/values/example-env-infra/local-cluster/external-dns-operator.yaml) | `present` |
+| [`values/example-env-infra/local-cluster/external-secrets.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/values/example-env-infra/local-cluster/external-secrets.yaml) | `present` |
+| [`values/example-env-infra/local-cluster/hcp-config.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/values/example-env-infra/local-cluster/hcp-config.yaml) | `present` |
+| [`values/example-env-infra/local-cluster/keycloak-oauth.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/values/example-env-infra/local-cluster/keycloak-oauth.yaml) | `present` |
+| [`values/example-env-infra/local-cluster/metallb.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/values/example-env-infra/local-cluster/metallb.yaml) | `present` |
+| [`values/example-env-infra/local-cluster/openshift-gitops.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/values/example-env-infra/local-cluster/openshift-gitops.yaml) | `present` |
+| [`values/example-env-infra/local-cluster/portworx.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/values/example-env-infra/local-cluster/portworx.yaml) | `present` |
+| [`values/example-env-infra/local-cluster/user-workload-monitoring.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/values/example-env-infra/local-cluster/user-workload-monitoring.yaml) | `present` |
+
+**Required files**
+
+| Path | Status |
+|---|---|
+| `values/example-env-infra/local-cluster/acm-placements.yaml` | `present` |
+| `values/example-env-infra/local-cluster/acm.yaml` | `present` |
+| `values/example-env-infra/local-cluster/cert-manager.yaml` | `present` |
+| `values/example-env-infra/local-cluster/cluster-certificates.yaml` | `present` |
+| `values/example-env-infra/local-cluster/cluster-version.yaml` | `present` |
+| `values/example-env-infra/local-cluster/external-dns-operator.yaml` | `present` |
+| `values/example-env-infra/local-cluster/external-secrets.yaml` | `present` |
+| `values/example-env-infra/local-cluster/hcp-config.yaml` | `present` |
+| `values/example-env-infra/local-cluster/keycloak-oauth.yaml` | `present` |
+| `values/example-env-infra/local-cluster/metallb.yaml` | `present` |
+| `values/example-env-infra/local-cluster/openshift-gitops.yaml` | `present` |
+| `values/example-env-infra/local-cluster/portworx.yaml` | `present` |
+| `values/example-env-infra/local-cluster/user-workload-monitoring.yaml` | `present` |
+
+**Additional files present**
+
+None.
+
+</details>
+
+<details>
+<summary>✅ declared_in_main Hub ArgoCD applications — All expected files for direct ArgoCD applications applied on the hub cluster are present in main.</summary>
+
+Source: CCI-MOC/oac-apps · [`apps/example-env-infra`](https://github.com/CCI-MOC/oac-apps/blob/main/apps/example-env-infra) @ 3333333
+
+| Field | Observed |
+|---|---|
+| [`apps/example-env-infra/keycloak-oauth.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/apps/example-env-infra/keycloak-oauth.yaml) | `present` |
+
+</details>
+
+<details>
+<summary>✅ declared_in_main Hub Pure storage realm — The example-env-infra Pure storage realm is complete.</summary>
+
+Source: CCI-MOC/everpure-moc · [`ansible/group_vars/all/realms.yaml`](https://github.com/CCI-MOC/everpure-moc/blob/main/ansible/group_vars/all/realms.yaml) @ 5555555
+
+| Field | Observed |
+|---|---|
+| `subnet_vlan` | `2321` |
+| `subnet_prefix` | `10.9.15.0/24` |
+| `s3_endpoint` | `s3.example-env.int.massopen.cloud` |
+
+</details>
+
+<details>
+<summary>✅ declared_in_main Hub moc-aws OIDC cluster — The moc-aws OIDC cluster entry for example-env-infra is present.</summary>
+
+Source: CCI-MOC/moc-aws · [`main.tf`](https://github.com/CCI-MOC/moc-aws/blob/main/main.tf) @ 6666666
+
+| Field | Observed |
+|---|---|
+| `cluster_name` | `example-env-infra` |
+| `eso_writable_secret_prefixes` | `cluster/example-env-infra/hostedcluster/` |
+
+</details>
+
+<details>
+<summary>✅ declared_in_main Hub moc-aws cert-manager policy — The cert-manager policy entry cert_manager_policies covers example-env-infra.</summary>
+
+Source: CCI-MOC/moc-aws · [`cert-manager-policies.tf`](https://github.com/CCI-MOC/moc-aws/blob/main/cert-manager-policies.tf) @ 6666666
+
+| Field | Observed |
+|---|---|
+| `cluster` | `cert_manager_policies` |
+
+</details>
+
+<details>
+<summary>✅ declared_in_main Hub hosted-cluster secret prefix — The hub can write hosted-cluster secrets at cluster/example-env-infra/hostedcluster/.</summary>
+
+Source: CCI-MOC/moc-aws · [`main.tf`](https://github.com/CCI-MOC/moc-aws/blob/main/main.tf) @ 6666666
+
+| Field | Observed |
+|---|---|
+| `eso_writable_secret_prefix` | `cluster/example-env-infra/hostedcluster/` |
+
+</details>
+
+<details>
+<summary>✅ declared_in_main example-env-workload0 host inventory — The inventory contains a example-env-workload0 group with 1 hosts.</summary>
+
+Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml) @ 2222222
+
+| Field | Observed |
+|---|---|
+| `cluster_group` | `example-env-workload0` |
+| `host_count` | `1` |
+
+**Observed hosts**
+
+| Host | Node name | BMC address | Boot image URL |
+|---|---|---|---|
+| `compute-0` | `MOC-R4PAC10U31-S1B` | — | `http://10.2.0.82/boot/example-env-infra-agent-discovery.iso` |
+
+</details>
+
+<details>
+<summary>✅ declared_in_main example-env-workload0 boot image — The boot image URL identifies the workload or its parent hub example-env-infra.</summary>
+
+Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml) @ 2222222
+
+Status rule: The workload boot-image filename may contain the workload name `example-env-workload0`, its oac-shortened name, the parent hub name `example-env-infra`, or the hub's oac-shortened name. Unrecognized names are advisory because naming is not consistent across environments; generic `discovery.iso` remains a gap.
+
+| Field | Observed |
+|---|---|
+| `value` | `http://10.2.0.82/boot/example-env-infra-agent-discovery.iso` |
+
+</details>
+
+<details>
+<summary>✅ declared_in_main example-env-workload0 update-agents inputs — Every non-openstack host has the mac_addr and resource_class inputs required by infra/update-agents.yaml.</summary>
+
+Source: CCI-MOC/oac-infra · [`infra/update-agents.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/update-agents.yaml) @ 2222222
+
+| Field | Observed |
+|---|---|
+| `host` | `compute-0` |
+| `node_name` | `MOC-R4PAC10U31-S1B` |
+| `bm_management` | `ipmi` |
+| `mac_addr` | `00:11:22:33:44:55` |
+| `resource_class` | `example-env-worker` |
+| `documented_resource_class` | `example-env-worker` |
+| `item 1` | `—` |
+
+**Agent label inputs**
+
+| Host | bm_management | mac_addr | resource_class |
+|---|---|---|---|
+| `compute-0` | `ipmi` | `00:11:22:33:44:55` | `example-env-worker` |
+
+</details>
+
+<details>
+<summary>✅ declared_in_main Workload hosted-cluster values — All expected files for the hosted workload cluster definition are present in main.</summary>
+
+Source: CCI-MOC/oac-apps · [`hosted-clusters/example-env-infra/example-env-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/example-env-infra/example-env-workload0/values.yaml) @ 3333333
+
+| Field | Observed |
+|---|---|
+| [`hosted-clusters/example-env-infra/example-env-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/example-env-infra/example-env-workload0/values.yaml) | `present` |
+
+</details>
+
+<details>
+<summary>✅ declared_in_main Workload component values — All expected files for component values scoped to the workload cluster are present in main.</summary>
+
+Source: CCI-MOC/oac-apps · [`values/example-env-infra/example-env-workload0`](https://github.com/CCI-MOC/oac-apps/blob/main/values/example-env-infra/example-env-workload0) @ 3333333
+
+</details>
+
+<details>
+<summary>✅ declared_in_main Workload API address network — The API address is inside the hub machine network.</summary>
+
+Source: CCI-MOC/oac-apps · [`hosted-clusters/example-env-infra/example-env-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/example-env-infra/example-env-workload0/values.yaml) @ 3333333
+
+| Field | Observed |
+|---|---|
+| `ipAddress` | `10.20.26.10` |
+| `machine_network` | `10.20.26.10` |
+
+</details>
+
+<details>
+<summary>✅ declared_in_main Workload ingress address network — The ingress pool address is on the expected network.</summary>
+
+Source: CCI-MOC/oac-apps · [`hosted-clusters/example-env-infra/example-env-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/example-env-infra/example-env-workload0/values.yaml) @ 3333333
+
+| Field | Observed |
+|---|---|
+| `poolAddress` | `10.20.28.10` |
+| `machine_network` | `10.20.28.10` |
+| `vlan_subnet` | `10.20.28.10` |
+
+</details>
+
+<details>
+<summary>✅ declared_in_main Workload DNS base domain — All DNS record hostnames use the hub base domain.</summary>
+
+Source: CCI-MOC/oac-apps · [`hosted-clusters/example-env-infra/example-env-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/example-env-infra/example-env-workload0/values.yaml) @ 3333333
+
+| Field | Observed |
+|---|---|
+| `baseDomain` | `api.example-env-workload0.int.massopen.cloud` |
+
+</details>
+
+<details>
+<summary>✅ declared_in_main Workload node-pool host capacity — Every node pool has enough matching inventory hosts.</summary>
+
+Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml) @ 2222222
+
+| Field | Observed |
+|---|---|
+| `name` | `compute` |
+| `replicas` | `1` |
+| `cluster` | `—` |
+| `resource_class` | `—` |
+
+</details>
+
+<details>
+<summary>✅ declared_in_main Workload GPU feature support — GPU configuration is consistent with the inventory.</summary>
+
+Source: CCI-MOC/oac-apps · [`hosted-clusters/example-env-infra/example-env-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/example-env-infra/example-env-workload0/values.yaml) @ 3333333
+
+| Field | Observed |
+|---|---|
+| `feature-gpu` | `—` |
+| `gpu_host_count` | `0` |
+
+</details>
+
+<details>
+<summary>✅ declared_in_main Workload address uniqueness — No workload address is used by another cluster.</summary>
+
+Source: CCI-MOC/oac-apps · [`hosted-clusters/`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/) @ 3333333
+
+| Field | Observed |
+|---|---|
+| `10.20.26.10` | `example-env-workload0, services.APIServer.ipAddress` |
+| `10.20.28.10` | `example-env-workload0, ingress.poolAddress` |
+| `10.20.29.10` | `example-env-workload0, services.APIServer.externalIpAddress, example-env-workload0, ingress.externalIpAddress` |
+
+</details>
+
+<details>
+<summary>✅ declared_in_main Workload Pure storage realm — The example-env-workload0 Pure storage realm is complete.</summary>
+
+Source: CCI-MOC/everpure-moc · [`ansible/group_vars/all/realms.yaml`](https://github.com/CCI-MOC/everpure-moc/blob/main/ansible/group_vars/all/realms.yaml) @ 5555555
+
+| Field | Observed |
+|---|---|
+| `subnet_vlan` | `2322` |
+| `subnet_prefix` | `10.20.28.0/24` |
+| `s3_endpoint` | `s3.example-env-workload0.hcp.example-env.int.massopen.cloud` |
+
+</details>
+
+<details>
+<summary>✅ declared_in_main Workload moc-aws OIDC cluster — The moc-aws OIDC cluster entry for example-env-workload0 is present.</summary>
+
+Source: CCI-MOC/moc-aws · [`main.tf`](https://github.com/CCI-MOC/moc-aws/blob/main/main.tf) @ 6666666
+
+| Field | Observed |
+|---|---|
+| `cluster_name` | `example-env-workload0` |
+| `eso_writable_secret_prefixes` | `—` |
+
+</details>
+
+<details>
+<summary>✅ declared_in_main Workload moc-aws cert-manager policy — The cert-manager policy entry cert_manager_policy_example_env_workload0 covers example-env-workload0.</summary>
+
+Source: CCI-MOC/moc-aws · [`cert-manager-policies.tf`](https://github.com/CCI-MOC/moc-aws/blob/main/cert-manager-policies.tf) @ 6666666
+
+| Field | Observed |
+|---|---|
+| `cluster` | `cert_manager_policy_example_env_workload0` |
+
+</details>
+
+<details>
+<summary>✅ declared_in_main Workload Keycloak OIDC client — The Keycloak OIDC client for example-env-workload0 matches.</summary>
+
+Source: CCI-MOC/moc-keycloak · [`main.tf`](https://github.com/CCI-MOC/moc-keycloak/blob/main/main.tf) @ 4444444
+
+| Field | Observed |
+|---|---|
+| `cluster_name` | `example-env-workload0` |
+| `openshift_redirect_uri` | `https://oauth-example-env-workload0.hcp.example-env.int.massopen.cloud:443/oauth2callback/mocsso` |
+| `client_secret_name` | `cluster/example-env-infra/hostedcluster/example-env-workload0/keycloak-oidc` |
+
+</details>
+
+## Pull requests
+
+**0 open PRs touch this environment.**
+
+None.
+
+## Sources
+
+| Repository | Ref | Commit |
+|---|---|---|
+| `ansible-switches` | `main` | [8888888](https://github.com/CCI-MOC/ansible-switches/commit/8888888888888888888888888888888888888888) |
+| `everpure-moc` | `main` | [5555555](https://github.com/CCI-MOC/everpure-moc/commit/5555555555555555555555555555555555555555) |
+| `moc-aws` | `main` | [6666666](https://github.com/CCI-MOC/moc-aws/commit/6666666666666666666666666666666666666666) |
+| `moc-dns` | `main` | [7777777](https://github.com/CCI-MOC/moc-dns/commit/7777777777777777777777777777777777777777) |
+| `moc-keycloak` | `main` | [4444444](https://github.com/CCI-MOC/moc-keycloak/commit/4444444444444444444444444444444444444444) |
+| `oac-apps` | `main` | [3333333](https://github.com/CCI-MOC/oac-apps/commit/3333333333333333333333333333333333333333) |
+| `oac-infra` | `main` | [2222222](https://github.com/CCI-MOC/oac-infra/commit/2222222222222222222222222222222222222222) |
+
+
+## Legend
+
+- ✅ `declared_in_main` — Desired configuration is present on merged main.
+
+Repository-state disclaimer: this report describes repository configuration only. It does not prove live cluster synchronization, node readiness, or application health.

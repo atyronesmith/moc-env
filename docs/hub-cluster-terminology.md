@@ -36,10 +36,12 @@ values/<hub-cluster>/<hosted-cluster>/
 
 ## Compatibility with existing commands
 
-The existing `export-infra`, `check-infra`, and `InfraCluster` names remain
-compatible with already-generated documents. New user-facing documentation
-uses **hub cluster** terminology. A later schema migration can introduce
-`HubCluster`, `export-hub`, and `check-hub` names while preserving aliases.
+The existing `export-infra`, `check-infra`, `plan-infra`, and `InfraCluster`
+names remain compatible with already-generated documents. The JSON environment
+key `infra_cluster` is also unchanged for report consumers. New user-facing
+check display names and documentation use **hub cluster** terminology. A later
+schema migration can introduce `HubCluster`, `export-hub`, and `check-hub`
+names while preserving aliases.
 
 The planned environment bundle uses `hubCluster`:
 

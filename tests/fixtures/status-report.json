@@ -2,7 +2,7 @@
   "checks": [
     {
       "actual": {
-        "found": true,
+        "cluster_group": "bu-ist-demo-infra",
         "host_count": 1
       },
       "blocked_by": [],
@@ -23,8 +23,8 @@
       "next_action": null,
       "observed": [
         {
-          "name": "found",
-          "value": true
+          "name": "cluster_group",
+          "value": "bu-ist-demo-infra"
         },
         {
           "name": "host_count",
@@ -33,7 +33,7 @@
       ],
       "path": "infra/inventory/00hosts.yaml",
       "phase": 1,
-      "phase_title": "Host inventory entry in oac-infra",
+      "phase_title": "Host inventory entry",
       "present": {
         "cluster_group": "bu-ist-demo-infra",
         "host_count": 1
@@ -49,7 +49,7 @@
     },
     {
       "actual": {
-        "found": true
+        "inventory_key": "bu-ist-demo-infra"
       },
       "blocked_by": [
         "hub.inventory"
@@ -64,13 +64,13 @@
       "next_action": null,
       "observed": [
         {
-          "name": "found",
-          "value": true
+          "name": "inventory_key",
+          "value": "bu-ist-demo-infra"
         }
       ],
       "path": "hub-images/inventory.yml",
       "phase": 2,
-      "phase_title": "Hub-image inventory entry and group variables",
+      "phase_title": "Hub image inventory and vars",
       "present": {
         "inventory_key": "bu-ist-demo-infra"
       },
@@ -146,7 +146,7 @@
       ],
       "path": "hub-images/group_vars/bu-ist-demo-infra/vars.yml",
       "phase": 2,
-      "phase_title": "Hub-image inventory entry and group variables",
+      "phase_title": "Hub image inventory and vars",
       "present": {
         "fields": [
           "cluster_domain_name",
@@ -184,7 +184,15 @@
         "hub.image_vars"
       ],
       "check": "Hub moc-dns records",
-      "evidence": {},
+      "evidence": {
+        "records": {
+          "*.apps.bu-ist-demo.int.massopen.cloud": "10.20.27.12",
+          "api-int.bu-ist-demo.int.massopen.cloud": "10.20.27.11",
+          "api.bu-ist-demo.int.massopen.cloud": "10.20.27.11"
+        },
+        "zone": "int.massopen.cloud",
+        "zonefile": "zonefiles/int.massopen.cloud.zone"
+      },
       "expected": {
         "*.apps.bu-ist-demo.int.massopen.cloud": "10.20.27.12",
         "api-int.bu-ist-demo.int.massopen.cloud": "10.20.27.11",
@@ -209,8 +217,8 @@
       ],
       "path": "zonefiles/int.massopen.cloud.zone",
       "phase": 2,
-      "phase_title": "Hub-image inventory entry and group variables",
-      "reason": "All required hub DNS records match the hub-image variables.",
+      "phase_title": "Hub image inventory and vars",
+      "reason": "All required hub DNS records in zonefiles/int.massopen.cloud.zone match the hub-image variables.",
       "ref": "main",
       "repository": "CCI-MOC/moc-dns",
       "scope": "hub",
@@ -253,7 +261,7 @@
       ],
       "path": "infra/inventory/00hosts.yaml",
       "phase": 3,
-      "phase_title": "Cluster discovery image published and referenced by the inventory",
+      "phase_title": "Discovery image reference",
       "present": {
         "boot_image_url": "http://10.2.0.82/boot/discovery.iso"
       },
@@ -275,7 +283,7 @@
       "blocked_by": [
         "hub.boot_image"
       ],
-      "check": "Infra OIDC client",
+      "check": "Hub OIDC client",
       "evidence": {
         "client": {
           "block_name": {
@@ -386,7 +394,7 @@
       "blocked_by": [
         "hub.boot_image"
       ],
-      "check": "Infra hosted-cluster defaults",
+      "check": "Hub hosted-cluster defaults",
       "evidence": {
         "expected_path_count": 1,
         "expected_paths": [
@@ -430,7 +438,7 @@
       ],
       "path": "hosted-clusters/bu-ist-demo-infra/values.yaml",
       "phase": 5,
-      "phase_title": "GitOps values and applications in oac-apps",
+      "phase_title": "GitOps values and apps",
       "present": {
         "file_count": 0
       },
@@ -494,7 +502,7 @@
       ],
       "path": "values/bu-ist-demo-infra",
       "phase": 5,
-      "phase_title": "GitOps values and applications in oac-apps",
+      "phase_title": "GitOps values and apps",
       "present": {
         "file_count": 0
       },
@@ -514,7 +522,7 @@
       "blocked_by": [
         "hub.hosted_cluster_defaults"
       ],
-      "check": "Infra local-cluster values",
+      "check": "Hub local-cluster values",
       "evidence": {
         "expected_path_count": 13,
         "expected_paths": [
@@ -594,7 +602,7 @@
       ],
       "path": "values/bu-ist-demo-infra/local-cluster",
       "phase": 5,
-      "phase_title": "GitOps values and applications in oac-apps",
+      "phase_title": "GitOps values and apps",
       "present": {
         "file_count": 0
       },
@@ -617,7 +625,7 @@
         "hub.local_cluster_values",
         "hub.oidc_client"
       ],
-      "check": "Infra ArgoCD applications",
+      "check": "Hub ArgoCD applications",
       "evidence": {
         "expected_path_count": 1,
         "expected_paths": [
@@ -661,7 +669,7 @@
       ],
       "path": "apps/bu-ist-demo-infra",
       "phase": 5,
-      "phase_title": "GitOps values and applications in oac-apps",
+      "phase_title": "GitOps values and apps",
       "present": {
         "file_count": 0
       },
@@ -684,7 +692,13 @@
         "hub.hosted_cluster_defaults"
       ],
       "check": "Hub Pure storage realm",
-      "evidence": {},
+      "evidence": {
+        "realm": {
+          "s3_endpoint": "s3.bu-ist-demo.int.massopen.cloud",
+          "subnet_prefix": "10.9.15.0/24",
+          "subnet_vlan": 2321
+        }
+      },
       "expected": {
         "fields": [
           "subnet_vlan",
@@ -712,7 +726,7 @@
       ],
       "path": "ansible/group_vars/all/realms.yaml",
       "phase": 5,
-      "phase_title": "GitOps values and applications in oac-apps",
+      "phase_title": "GitOps values and apps",
       "reason": "The bu-ist-demo-infra Pure storage realm is complete.",
       "ref": "main",
       "repository": "CCI-MOC/everpure-moc",
@@ -723,14 +737,17 @@
       "url": "https://github.com/CCI-MOC/everpure-moc/blob/main/ansible/group_vars/all/realms.yaml"
     },
     {
-      "actual": "local.defaults, {\n      cluster_name = \"bu-ist-demo-infra\"\n      eso_writable_secret_prefixes = [\"cluster/bu-ist-demo-infra/hostedcluster/\"]",
+      "actual": {
+        "cluster_name": "bu-ist-demo-infra",
+        "eso_writable_secret_prefixes": [
+          "cluster/bu-ist-demo-infra/hostedcluster/"
+        ]
+      },
       "blocked_by": [
         "hub.hosted_cluster_defaults"
       ],
       "check": "Hub moc-aws OIDC cluster",
-      "evidence": {
-        "block": "local.defaults, {\n      cluster_name = \"bu-ist-demo-infra\"\n      eso_writable_secret_prefixes = [\"cluster/bu-ist-demo-infra/hostedcluster/\"]"
-      },
+      "evidence": {},
       "expected": {
         "cluster_name": "bu-ist-demo-infra"
       },
@@ -739,13 +756,19 @@
       "next_action": null,
       "observed": [
         {
-          "name": "value",
-          "value": "local.defaults, {\n      cluster_name = \"bu-ist-demo-infra\"\n      eso_writable_secret_prefixes = [\"cluster/bu-ist-demo-infra/hostedcluster/\"]"
+          "name": "cluster_name",
+          "value": "bu-ist-demo-infra"
+        },
+        {
+          "name": "eso_writable_secret_prefixes",
+          "value": [
+            "cluster/bu-ist-demo-infra/hostedcluster/"
+          ]
         }
       ],
       "path": "main.tf",
       "phase": 5,
-      "phase_title": "GitOps values and applications in oac-apps",
+      "phase_title": "GitOps values and apps",
       "reason": "The moc-aws OIDC cluster entry for bu-ist-demo-infra is present.",
       "ref": "main",
       "repository": "CCI-MOC/moc-aws",
@@ -778,7 +801,7 @@
       ],
       "path": "cert-manager-policies.tf",
       "phase": 5,
-      "phase_title": "GitOps values and applications in oac-apps",
+      "phase_title": "GitOps values and apps",
       "reason": "The cert-manager policy entry cert_manager_policies covers bu-ist-demo-infra.",
       "ref": "main",
       "repository": "CCI-MOC/moc-aws",
@@ -789,29 +812,33 @@
       "url": "https://github.com/CCI-MOC/moc-aws/blob/main/cert-manager-policies.tf"
     },
     {
-      "actual": [
-        "cluster/bu-ist-demo-infra/hostedcluster/"
-      ],
+      "actual": {
+        "eso_writable_secret_prefix": [
+          "cluster/bu-ist-demo-infra/hostedcluster/"
+        ]
+      },
       "blocked_by": [
         "hub.moc_aws_oidc_cluster"
       ],
       "check": "Hub hosted-cluster secret prefix",
       "evidence": {},
-      "expected": [
-        "cluster/bu-ist-demo-infra/hostedcluster/"
-      ],
+      "expected": {
+        "eso_writable_secret_prefix": "cluster/bu-ist-demo-infra/hostedcluster/"
+      },
       "gaps": [],
       "id": "hub.moc_aws_hosted_secret_prefix",
       "next_action": null,
       "observed": [
         {
-          "name": "0",
-          "value": "cluster/bu-ist-demo-infra/hostedcluster/"
+          "name": "eso_writable_secret_prefix",
+          "value": [
+            "cluster/bu-ist-demo-infra/hostedcluster/"
+          ]
         }
       ],
       "path": "main.tf",
       "phase": 5,
-      "phase_title": "GitOps values and applications in oac-apps",
+      "phase_title": "GitOps values and apps",
       "reason": "The hub can write hosted-cluster secrets at cluster/bu-ist-demo-infra/hostedcluster/.",
       "ref": "main",
       "repository": "CCI-MOC/moc-aws",
@@ -823,7 +850,7 @@
     },
     {
       "actual": {
-        "found": true,
+        "cluster_group": "bu-ist-demo-workload0",
         "host_count": 1
       },
       "blocked_by": [],
@@ -844,8 +871,8 @@
       "next_action": null,
       "observed": [
         {
-          "name": "found",
-          "value": true
+          "name": "cluster_group",
+          "value": "bu-ist-demo-workload0"
         },
         {
           "name": "host_count",
@@ -854,7 +881,7 @@
       ],
       "path": "infra/inventory/00hosts.yaml",
       "phase": 1,
-      "phase_title": "Host inventory entry in oac-infra",
+      "phase_title": "Host inventory entry",
       "present": {
         "cluster_group": "bu-ist-demo-workload0",
         "host_count": 1
@@ -902,7 +929,7 @@
       ],
       "path": "infra/inventory/00hosts.yaml",
       "phase": 2,
-      "phase_title": "Obtain the agent discovery ISO from the hub's InfraEnv and publish it on the bastion",
+      "phase_title": "Hub agent discovery ISO",
       "present": {
         "boot_image_url": "http://10.2.0.82/boot/discovery.iso"
       },
@@ -968,7 +995,7 @@
       ],
       "path": "infra/update-agents.yaml",
       "phase": 5,
-      "phase_title": "Label and approve agents with update-agents.yaml",
+      "phase_title": "Agent labels and approval",
       "present": {
         "checked_host_count": 1,
         "complete_host_count": 1
@@ -1116,18 +1143,18 @@
       "expected": {},
       "gaps": [],
       "id": "workload.api_address_network",
-      "next_action": "Verify hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is readable and correctly formatted.",
+      "next_action": null,
       "observed": [],
       "path": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml",
       "phase": 6,
       "phase_title": "oac-apps values",
-      "reason": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable.",
+      "reason": "Blocked until Workload hosted-cluster values is complete.",
       "ref": "main",
       "repository": "CCI-MOC/oac-apps",
       "scope": "workload",
       "severity": "advisory",
       "stage": "Cross-repository prerequisites",
-      "state": "unknown",
+      "state": "blocked",
       "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml"
     },
     {
@@ -1141,18 +1168,18 @@
       "expected": {},
       "gaps": [],
       "id": "workload.ingress_address_network",
-      "next_action": "Verify hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is readable and correctly formatted.",
+      "next_action": null,
       "observed": [],
       "path": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml",
       "phase": 6,
       "phase_title": "oac-apps values",
-      "reason": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable.",
+      "reason": "Blocked until Workload hosted-cluster values is complete.",
       "ref": "main",
       "repository": "CCI-MOC/oac-apps",
       "scope": "workload",
       "severity": "advisory",
       "stage": "Cross-repository prerequisites",
-      "state": "unknown",
+      "state": "blocked",
       "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml"
     },
     {
@@ -1166,18 +1193,18 @@
       "expected": {},
       "gaps": [],
       "id": "workload.dns_base_domain",
-      "next_action": "Verify hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is readable and correctly formatted.",
+      "next_action": null,
       "observed": [],
       "path": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml",
       "phase": 6,
       "phase_title": "oac-apps values",
-      "reason": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable.",
+      "reason": "Blocked until Workload hosted-cluster values is complete.",
       "ref": "main",
       "repository": "CCI-MOC/oac-apps",
       "scope": "workload",
       "severity": "advisory",
       "stage": "Cross-repository prerequisites",
-      "state": "unknown",
+      "state": "blocked",
       "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml"
     },
     {
@@ -1191,18 +1218,18 @@
       "expected": {},
       "gaps": [],
       "id": "workload.node_pool_hosts",
-      "next_action": "Verify hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is readable and correctly formatted.",
+      "next_action": null,
       "observed": [],
       "path": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml",
       "phase": 6,
       "phase_title": "oac-apps values",
-      "reason": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable.",
+      "reason": "Blocked until Workload hosted-cluster values is complete.",
       "ref": "main",
       "repository": "CCI-MOC/oac-apps",
       "scope": "workload",
       "severity": "advisory",
       "stage": "Cross-repository prerequisites",
-      "state": "unknown",
+      "state": "blocked",
       "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml"
     },
     {
@@ -1216,18 +1243,18 @@
       "expected": {},
       "gaps": [],
       "id": "workload.gpu_without_hosts",
-      "next_action": "Verify hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is readable and correctly formatted.",
+      "next_action": null,
       "observed": [],
       "path": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml",
       "phase": 6,
       "phase_title": "oac-apps values",
-      "reason": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable.",
+      "reason": "Blocked until Workload hosted-cluster values is complete.",
       "ref": "main",
       "repository": "CCI-MOC/oac-apps",
       "scope": "workload",
       "severity": "advisory",
       "stage": "Cross-repository prerequisites",
-      "state": "unknown",
+      "state": "blocked",
       "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml"
     },
     {
@@ -1264,7 +1291,13 @@
         "workload.component_values"
       ],
       "check": "Workload Pure storage realm",
-      "evidence": {},
+      "evidence": {
+        "realm": {
+          "s3_endpoint": "s3.bu-ist-demo-workload0.hcp.bu-ist-demo.int.massopen.cloud",
+          "subnet_prefix": "10.20.28.0/24",
+          "subnet_vlan": 2322
+        }
+      },
       "expected": {
         "fields": [
           "subnet_vlan",
@@ -1303,14 +1336,15 @@
       "url": "https://github.com/CCI-MOC/everpure-moc/blob/main/ansible/group_vars/all/realms.yaml"
     },
     {
-      "actual": "local.defaults, {\n      cluster_name = \"bu-ist-demo-workload0\"",
+      "actual": {
+        "cluster_name": "bu-ist-demo-workload0",
+        "eso_writable_secret_prefixes": []
+      },
       "blocked_by": [
         "workload.component_values"
       ],
       "check": "Workload moc-aws OIDC cluster",
-      "evidence": {
-        "block": "local.defaults, {\n      cluster_name = \"bu-ist-demo-workload0\""
-      },
+      "evidence": {},
       "expected": {
         "cluster_name": "bu-ist-demo-workload0"
       },
@@ -1319,8 +1353,12 @@
       "next_action": null,
       "observed": [
         {
-          "name": "value",
-          "value": "local.defaults, {\n      cluster_name = \"bu-ist-demo-workload0\""
+          "name": "cluster_name",
+          "value": "bu-ist-demo-workload0"
+        },
+        {
+          "name": "eso_writable_secret_prefixes",
+          "value": []
         }
       ],
       "path": "main.tf",
@@ -1426,157 +1464,6 @@
       "stage": "Request",
       "state": "requested",
       "url": "https://github.com/CCI-MOC/MOC-issues/issues/666"
-    },
-    {
-      "actual": {
-        "closed_unmerged_count": 0,
-        "matching_pr_count": 1,
-        "merged_count": 0,
-        "open_count": 1,
-        "repository_counts": {
-          "CCI-MOC/oac-apps": 1
-        }
-      },
-      "blocked_by": [],
-      "check": "Relevant pull requests",
-      "evidence": {
-        "pull_requests": [
-          {
-            "changed_files": [
-              "values/bu-ist-demo-infra/hcp-config.yaml"
-            ],
-            "classification": {
-              "confidence": "exact",
-              "provenance": {
-                "path": "pulls/237",
-                "ref": "all",
-                "repository": "CCI-MOC/oac-apps"
-              },
-              "value": "open"
-            },
-            "head_ref": {
-              "confidence": "exact",
-              "provenance": {
-                "path": "pulls/237",
-                "ref": "all",
-                "repository": "CCI-MOC/oac-apps"
-              },
-              "value": "bu-ist-demo-buildout"
-            },
-            "head_sha": {
-              "confidence": "exact",
-              "provenance": {
-                "path": "pulls/237",
-                "ref": "all",
-                "repository": "CCI-MOC/oac-apps"
-              },
-              "value": "7b528394600996dae5c1e5d497236050d8810edc"
-            },
-            "html_url": {
-              "confidence": "exact",
-              "provenance": {
-                "path": "pulls/237",
-                "ref": "all",
-                "repository": "CCI-MOC/oac-apps"
-              },
-              "value": "https://github.com/CCI-MOC/oac-apps/pull/237"
-            },
-            "merged": {
-              "confidence": "exact",
-              "provenance": {
-                "path": "pulls/237",
-                "ref": "all",
-                "repository": "CCI-MOC/oac-apps"
-              },
-              "value": false
-            },
-            "number": 237,
-            "repository": {
-              "confidence": "exact",
-              "provenance": {
-                "path": "pulls/237",
-                "ref": "all",
-                "repository": "CCI-MOC/oac-apps"
-              },
-              "value": "CCI-MOC/oac-apps"
-            },
-            "state": {
-              "confidence": "exact",
-              "provenance": {
-                "path": "pulls/237",
-                "ref": "all",
-                "repository": "CCI-MOC/oac-apps"
-              },
-              "value": "open"
-            },
-            "title": {
-              "confidence": "exact",
-              "provenance": {
-                "path": "pulls/237",
-                "ref": "all",
-                "repository": "CCI-MOC/oac-apps"
-              },
-              "value": "Added initial values for bu-ist-demo infra cluster"
-            }
-          }
-        ]
-      },
-      "expected": "No open PR changing an environment-owned path",
-      "gaps": [
-        {
-          "expected": 1,
-          "name": "open_prs_to_merge",
-          "observed": null
-        }
-      ],
-      "id": "pull_requests",
-      "missing": {
-        "open_prs_to_merge": 1
-      },
-      "next_action": "Review the relevant pull requests; merge or close any open PR after confirming it is the intended repository change.",
-      "observed": [
-        {
-          "name": "matching_pr_count",
-          "value": 1
-        },
-        {
-          "name": "open_count",
-          "value": 1
-        },
-        {
-          "name": "merged_count",
-          "value": 0
-        },
-        {
-          "name": "closed_unmerged_count",
-          "value": 0
-        },
-        {
-          "name": "repository_counts",
-          "value": {
-            "CCI-MOC/oac-apps": 1
-          }
-        }
-      ],
-      "path": "pulls",
-      "phase": 5,
-      "phase_title": "GitOps values and applications in oac-apps",
-      "present": {
-        "closed_unmerged_pr_count": 0,
-        "matching_pr_count": 1,
-        "merged_pr_count": 0,
-        "open_pr_count": 1,
-        "repository_counts": {
-          "CCI-MOC/oac-apps": 1
-        }
-      },
-      "reason": "1 relevant PRs are still open; their changes are not declared in main.",
-      "ref": "all",
-      "repository": "CCI-MOC/oac-apps",
-      "scope": "shared",
-      "severity": "blocking",
-      "stage": "GitOps configuration",
-      "state": "pr_open"
     }
   ],
   "current_phase": {
@@ -1657,7 +1544,7 @@
         "document": "docs/infra-cluster-deployment.md",
         "heading": "Infrastructure Configuration"
       },
-      "why": "The four repositories read by this tool do not describe the switch, network, or firewall state required for bu-ist-demo-infra."
+      "why": "The repositories read by this tool do not describe the switch, network, or firewall state required for bu-ist-demo-infra."
     },
     {
       "phase": 2,
@@ -1684,7 +1571,7 @@
         "document": "docs/infra-cluster-deployment.md",
         "heading": "Cluster Deployment"
       },
-      "why": "Running the playbook and copying the generated discovery ISO leave no trace that this tool can verify in the four repositories it reads."
+      "why": "Running the playbook and copying the generated discovery ISO leave no trace that this tool can verify in the repositories it reads."
     },
     {
       "phase": 5,
@@ -1712,15 +1599,6 @@
         "heading": "Infrastructure Configuration"
       },
       "why": "Labelling and approving agents with update-agents.yaml changes live hub cluster state that repository configuration cannot prove."
-    },
-    {
-      "phase": 7,
-      "title": "Additional workload prerequisites are not yet documented upstream",
-      "where": {
-        "document": "docs/workload-cluster-deployment.md",
-        "heading": "Cluster Deployment and Configuration"
-      },
-      "why": "The upstream workload deployment guide lists observability (TBD) and ?? as open prerequisite items."
     }
   ],
   "overall_state": "CONFIGURATION IN PROGRESS",
@@ -1732,7 +1610,7 @@
           "heading": "Infrastructure Configuration"
         },
         "phase": 1,
-        "title": "Host inventory entry in oac-infra"
+        "title": "Host inventory entry"
       },
       {
         "guide": {
@@ -1740,7 +1618,7 @@
           "heading": "Cluster Deployment"
         },
         "phase": 2,
-        "title": "Hub-image inventory entry and group variables"
+        "title": "Hub image inventory and vars"
       },
       {
         "guide": {
@@ -1748,7 +1626,7 @@
           "heading": "Cluster Deployment"
         },
         "phase": 3,
-        "title": "Cluster discovery image published and referenced by the inventory"
+        "title": "Discovery image reference"
       },
       {
         "guide": {
@@ -1764,7 +1642,7 @@
           "heading": "Cluster Configuration"
         },
         "phase": 5,
-        "title": "GitOps values and applications in oac-apps"
+        "title": "GitOps values and apps"
       }
     ],
     "workload": [
@@ -1774,7 +1652,7 @@
           "heading": "Infrastructure Configuration"
         },
         "phase": 1,
-        "title": "Host inventory entry in oac-infra"
+        "title": "Host inventory entry"
       },
       {
         "guide": {
@@ -1782,7 +1660,7 @@
           "heading": "Infrastructure Configuration"
         },
         "phase": 2,
-        "title": "Obtain the agent discovery ISO from the hub's InfraEnv and publish it on the bastion"
+        "title": "Hub agent discovery ISO"
       },
       {
         "guide": {
@@ -1790,7 +1668,7 @@
           "heading": "Infrastructure Configuration"
         },
         "phase": 3,
-        "title": "Boot nodes with the agent discovery ISO"
+        "title": "Agent ISO boot"
       },
       {
         "guide": {
@@ -1798,7 +1676,7 @@
           "heading": "Infrastructure Configuration"
         },
         "phase": 4,
-        "title": "Agents appear in the hub's hardware-inventory namespace"
+        "title": "Agent visibility"
       },
       {
         "guide": {
@@ -1806,7 +1684,7 @@
           "heading": "Infrastructure Configuration"
         },
         "phase": 5,
-        "title": "Label and approve agents with update-agents.yaml"
+        "title": "Agent labels and approval"
       },
       {
         "guide": {
@@ -1826,13 +1704,16 @@
       }
     ]
   },
+  "pull_requests": [],
+  "pull_requests_skipped": true,
+  "rate_limited": false,
   "scope": "environment",
   "summary": {
     "advisory_count": 5,
-    "check_count": 30,
+    "check_count": 29,
     "severity_counts": {
       "advisory": 5,
-      "blocking": 9,
+      "blocking": 8,
       "info": 16
     },
     "stages": [
@@ -1855,8 +1736,8 @@
         "check_count": 14,
         "stage": "Cross-repository prerequisites",
         "state_counts": {
-          "declared_in_main": 9,
-          "unknown": 5
+          "blocked": 5,
+          "declared_in_main": 9
         }
       },
       {
@@ -1867,11 +1748,10 @@
         }
       },
       {
-        "check_count": 7,
+        "check_count": 6,
         "stage": "GitOps configuration",
         "state_counts": {
-          "missing": 6,
-          "pr_open": 1
+          "missing": 6
         }
       },
       {
@@ -1883,12 +1763,11 @@
       }
     ],
     "state_counts": {
+      "blocked": 5,
       "declared_in_main": 15,
       "missing": 6,
       "partial": 2,
-      "pr_open": 1,
-      "requested": 1,
-      "unknown": 5
+      "requested": 1
     }
   }
 }

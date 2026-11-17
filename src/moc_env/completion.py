@@ -9,6 +9,7 @@ COMMANDS = (
     "completion",
     "discover-values",
     "document-values",
+    "diff",
     "export-environment",
     "export-infra",
     "export-workload",
@@ -24,6 +25,7 @@ COMMANDS = (
 COMMAND_DESCRIPTIONS = {
     "list": "list hub and workload clusters",
     "status": "report combined hub and workload repository status",
+    "diff": "compare repository status for two environments",
     "status-hub": "report hub-cluster repository status",
     "status-workload": "report workload-cluster repository status",
     "export-infra": "export a draft hub-cluster desired-state document",
