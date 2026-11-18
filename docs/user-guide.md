@@ -300,6 +300,16 @@ uv run moc-env status bu-ist-demo --details
 uv run moc-env status bu-ist-demo --fail-on blocking
 ```
 
+For the four supported Terraform gaps (hub hosted-secret prefixes, workload
+moc-aws OIDC and cert-manager entries, and workload Keycloak clients), next
+actions include suggested HCL copied from the observed upstream file. Text shows
+the code with `--details`; Markdown always includes it; JSON exposes `suggestion`
+or a null suggestion with `suggestion_skipped_reason`. Locations link to the
+commit in Sources. Suggestions are replayed against the same check in memory
+before display, but are not applied and no Terraform plan is run. An incomplete
+open PR is identified when the suggestion corrects its block. moc-env never
+writes to another repository or opens a PR.
+
 Run a hub-scoped report:
 
 ```sh
