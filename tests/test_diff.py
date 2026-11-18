@@ -14,11 +14,13 @@ def report(name: str, files: tuple[str, ...] = ("hcp-config.yaml",)) -> dict:
         "environment": {"name": name, "infra_cluster": hub, "workload_clusters": [workload]},
         "checks": [
             {
-                "id": "hub.component_values", "scope": "hub", "state": "declared_in_main",
+                "id": "hub.component_values", "scope": "hub", "cluster": hub,
+                "state": "declared_in_main",
                 "evidence": {"paths": [f"values/{hub}/{file}" for file in files]},
             },
             {
-                "id": "hub.hosted_cluster_defaults", "scope": "hub", "state": "declared_in_main",
+                "id": "hub.hosted_cluster_defaults", "scope": "hub", "cluster": hub,
+                "state": "declared_in_main",
                 "evidence": {"values": {
                     "baseDomain": f"hcp.{name}.example.org",
                     "hcpExternalDomain": f"hcp.{name}.example.org",
@@ -26,7 +28,8 @@ def report(name: str, files: tuple[str, ...] = ("hcp-config.yaml",)) -> dict:
                 }},
             },
             {
-                "id": "workload.component_values", "scope": "workload", "state": "declared_in_main",
+                "id": "workload.component_values", "scope": "workload",
+                "cluster": workload, "state": "declared_in_main",
                 "path": f"values/{hub}/{workload}",
                 "evidence": {"paths": [f"values/{hub}/{workload}/hcp-config.yaml"]},
             },
@@ -95,6 +98,7 @@ class EnvironmentDiffTest(unittest.TestCase):
         for target, count in ((a, 3), (b, 4)):
             target["checks"].append({
                 "id": "workload.agent_labels_inputs", "scope": "workload", "state": "declared_in_main",
+                "cluster": target["environment"]["workload_clusters"][0],
                 "path": f"values/{target['environment']['infra_cluster']}/{target['environment']['workload_clusters'][0]}",
                 "evidence": {"agent_label_hosts": [{"bm_management": "bmc"}] * count + [{"bm_management": "openstack"}] * 7},
             })

@@ -652,24 +652,11 @@ def _markdown_sources_table(report: dict[str, Any]) -> list[str]:
 def _workload_checks(
     checks: list[dict[str, Any]], workload: str
 ) -> list[dict[str, Any]]:
-    def belongs(check: dict[str, Any]) -> bool:
-        searchable = json.dumps(
-            [
-                check.get("check"),
-                check.get("path"),
-                check.get("reason"),
-                check.get("actual"),
-                check.get("evidence"),
-            ],
-            default=str,
-        )
-        return workload in searchable
-
-    workload_checks = [check for check in checks if check.get("scope") == "workload"]
-    identified = [check for check in workload_checks if belongs(check)]
-    if identified:
-        return identified
-    return workload_checks
+    return [
+        check
+        for check in checks
+        if check.get("cluster") == workload
+    ]
 
 
 def _report_pulls(
@@ -706,19 +693,34 @@ def _unknown_headline(checks: list[dict[str, Any]]) -> str:
 
 def _blocked_summary(report: dict[str, Any]) -> str | None:
     checks = report.get("checks", [])
-    by_id = {check.get("id"): check for check in checks}
+    hub_cluster = report["environment"].get("infra_cluster")
+    by_key = {
+        (check.get("id"), check.get("cluster")): check for check in checks
+    }
     blocked = [check for check in checks if check.get("state") == "blocked"]
     if not blocked:
         return None
-    gaps = _sorted_actions(_action_checks(report))
-    action_numbers = {check.get("id"): number for number, check in enumerate(gaps, 1)}
+    gaps = _sorted_actions(
+        _action_checks(report),
+        hub_cluster,
+    )
+    action_numbers = {
+        (check.get("id"), check.get("cluster")): number
+        for number, check in enumerate(gaps, 1)
+    }
     actions = []
     for check in blocked:
-        blocker_ids = [
-            item for item in check.get("blocked_by", []) if item in by_id
-        ]
-        for blocker_id in blocker_ids:
-            number = action_numbers.get(blocker_id)
+        for blocker_id in check.get("blocked_by", []):
+            same_cluster = (blocker_id, check.get("cluster"))
+            hub_dependency = (blocker_id, hub_cluster)
+            key = (
+                same_cluster
+                if same_cluster in by_key
+                else hub_dependency
+                if hub_dependency in by_key
+                else None
+            )
+            number = action_numbers.get(key) if key is not None else None
             if number is not None and number not in actions:
                 actions.append(number)
     action = ", ".join(str(number) for number in sorted(actions))
@@ -767,6 +769,9 @@ def _action_evidence(check: dict[str, Any], report: dict[str, Any]) -> str:
 
 def _action_description(check: dict[str, Any], report: dict[str, Any]) -> str:
     action = _substitute_action(check.get("next_action") or f"Resolve {check['check']}.", check, report)
+    cluster = check.get("cluster")
+    if check.get("scope") == "workload" and cluster and cluster not in action:
+        action = f"{cluster}: {action}"
     advisory = " (advisory)" if check.get("severity") == "advisory" else ""
     return f"{action}{advisory} {_action_evidence(check, report)}"
 
@@ -776,16 +781,37 @@ def _substitute_action(
 ) -> str:
     environment = report["environment"]
     hub = environment.get("infra_cluster", environment.get("name", ""))
-    path = check.get("path") or ""
-    workloads = environment.get("workload_clusters") or []
-    workload = next((name for name in workloads if name in path), None)
-    cluster = workload if check.get("scope") == "workload" and workload else hub
+    cluster = check.get("cluster") or hub
     return action.replace("<hub>", hub).replace("<cluster>", cluster)
 
 
-def _sorted_actions(gaps: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    by_id = {check.get("id"): check for check in gaps}
-    remaining = set(by_id)
+def _sorted_actions(
+    gaps: list[dict[str, Any]], hub_cluster: str | None = None
+) -> list[dict[str, Any]]:
+    by_key = {
+        (check.get("id"), check.get("cluster")): check for check in gaps
+    }
+    hub_cluster = hub_cluster or next(
+        (
+            check.get("cluster")
+            for check in gaps
+            if check.get("scope") == "hub" and check.get("cluster")
+        ),
+        None,
+    )
+
+    def dependencies(check: dict[str, Any]) -> list[tuple[Any, Any]]:
+        keys: list[tuple[Any, Any]] = []
+        for dependency in check.get("blocked_by", []):
+            same_cluster = (dependency, check.get("cluster"))
+            hub_dependency = (dependency, hub_cluster)
+            if same_cluster in by_key and same_cluster not in keys:
+                keys.append(same_cluster)
+            elif hub_dependency in by_key and hub_dependency not in keys:
+                keys.append(hub_dependency)
+        return keys
+
+    remaining = set(by_key)
     ordered: list[dict[str, Any]] = []
 
     def key(check: dict[str, Any]) -> tuple[Any, ...]:
@@ -794,22 +820,23 @@ def _sorted_actions(gaps: list[dict[str, Any]]) -> list[dict[str, Any]]:
             0 if check.get("severity") == "blocking" else 1,
             check.get("phase") or 0,
             check.get("check") or "",
+            check.get("cluster") or "",
         )
 
     while remaining:
         ready = [
-            by_id[item]
+            by_key[item]
             for item in remaining
             if not any(
                 dependency in remaining
-                for dependency in by_id[item].get("blocked_by", [])
+                for dependency in dependencies(by_key[item])
             )
         ]
         if not ready:
-            ready = [by_id[item] for item in remaining]
+            ready = [by_key[item] for item in remaining]
         selected = min(ready, key=key)
         ordered.append(selected)
-        remaining.remove(selected["id"])
+        remaining.remove((selected.get("id"), selected.get("cluster")))
     return ordered
 
 
@@ -873,6 +900,21 @@ def _open_pr_fix(
 ) -> str | None:
     # File overlap alone is never evidence that a PR fixes a check.
     return "; ".join((check.get("evidence") or {}).get("pr_evaluations", [])) or None
+
+
+def _dependency_action_numbers(
+    check: dict[str, Any],
+    action_numbers: dict[tuple[Any, Any], int],
+    hub_cluster: str | None,
+) -> list[str]:
+    numbers: list[str] = []
+    for dependency in check.get("blocked_by", []):
+        number = action_numbers.get((dependency, check.get("cluster")))
+        if number is None:
+            number = action_numbers.get((dependency, hub_cluster))
+        if number is not None and str(number) not in numbers:
+            numbers.append(str(number))
+    return numbers
 
 
 def _status_command(report: dict[str, Any], suffix: str) -> str:
@@ -1078,7 +1120,13 @@ def render_text(
         phase_table(
             "HUB PHASES",
             _phase_rows(report, "hub"),
-            [(f"HUB {environment['infra_cluster']}", [c for c in checks if c["scope"] == "hub"])],
+            [(
+                f"HUB {environment['infra_cluster']}",
+                [
+                    c for c in checks
+                    if c.get("cluster") == environment["infra_cluster"]
+                ],
+            )],
         )
     if scope in {"environment", "workload"}:
         columns = [
@@ -1089,18 +1137,25 @@ def render_text(
     lines.append("")
 
     lines.append("NEXT")
-    gaps = _sorted_actions([*blocking, *advisories])
+    gaps = _sorted_actions(
+        [*blocking, *advisories],
+        environment["infra_cluster"],
+    )
     if not gaps:
         lines.append("Nothing to do in the repositories this tool reads.")
     else:
         open_pulls = _report_pulls(report, {"open"})
-        action_numbers: dict[str, int] = {}
+        action_numbers: dict[tuple[Any, Any], int] = {}
         for number, check in enumerate(gaps, start=1):
-            action_numbers.setdefault(check["id"], number)
+            action_numbers.setdefault(
+                (check.get("id"), check.get("cluster")), number
+            )
         for number, check in enumerate(gaps, start=1):
             action = _action_description(check, report)
             repository = check["repository"].removeprefix("CCI-MOC/")
-            after = [str(action_numbers[item]) for item in check.get("blocked_by", []) if item in action_numbers]
+            after = _dependency_action_numbers(
+                check, action_numbers, environment["infra_cluster"]
+            )
             suffix = f" (after {', '.join(after)})" if after else ""
             pr_fix = _open_pr_fix(check, open_pulls)
             if pr_fix:
@@ -1472,7 +1527,10 @@ def _markdown_phase_table(report: dict[str, Any]) -> list[str]:
                 _phase_rows(report, "hub"),
                 [(
                     f"HUB {environment['infra_cluster']}",
-                    [c for c in checks if c["scope"] == "hub"],
+                    [
+                        c for c in checks
+                        if c.get("cluster") == environment["infra_cluster"]
+                    ],
                 )],
             )
         )
@@ -1529,26 +1587,28 @@ def _markdown_next_actions(report: dict[str, Any]) -> list[str]:
         and check["state"] != "unknown"
         and check["state"] != "blocked"
     ]
-    gaps = _sorted_actions(gaps)
+    gaps = _sorted_actions(gaps, report["environment"].get("infra_cluster"))
     lines = ["## Next actions", ""]
     if not gaps:
         lines.extend(["Nothing to do in the repositories this tool reads.", ""])
         return lines
     open_pulls = _report_pulls(report, {"open"})
-    action_numbers: dict[str, int] = {}
+    action_numbers: dict[tuple[Any, Any], int] = {}
     for number, check in enumerate(gaps, start=1):
-        action_numbers.setdefault(check["id"], number)
+        action_numbers.setdefault(
+            (check.get("id"), check.get("cluster")), number
+        )
     for number, check in enumerate(gaps, start=1):
         action = _action_description(check, report)
         repository = check["repository"].removeprefix("CCI-MOC/")
         path_url = _markdown_check_url(report, check)
         path_label = _markdown_inline(check.get("path"))
         path = f"[{path_label}]({path_url})" if path_url else path_label
-        after = [
-            str(action_numbers[item])
-            for item in check.get("blocked_by", [])
-            if item in action_numbers
-        ]
+        after = _dependency_action_numbers(
+            check,
+            action_numbers,
+            report["environment"].get("infra_cluster"),
+        )
         suffix = f" (after {', '.join(after)})" if after else ""
         pr_fix = _open_pr_fix(check, open_pulls)
         if pr_fix:

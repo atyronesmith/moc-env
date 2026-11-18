@@ -267,7 +267,9 @@ class StatusChecker:
             )
             environment = observation.environment
             if observation.issue is not None:
-                checks.extend(self._issue_checks(observation.issue))
+                checks.extend(
+                    self._issue_checks(environment, observation.issue)
+                )
             infra_checks, environment = self._infra_checks(
                 environment, observation.infra
             )
@@ -298,7 +300,7 @@ class StatusChecker:
             )
         checks = annotate_and_sort_checks(checks)
         self._apply_source_refs(checks)
-        checks = self._apply_blocked_states(checks)
+        checks = self._apply_blocked_states(checks, environment)
         pulls = self._pull_request_evidence(observation.apps.pull_requests)
         if evaluate_prs and self.include_prs:
             self._evaluate_pr_candidates(
@@ -710,15 +712,22 @@ class StatusChecker:
                 }
 
     @staticmethod
-    def _apply_blocked_states(checks: list[CheckResult]) -> list[CheckResult]:
-        by_id = {check.id: check for check in checks}
+    def _apply_blocked_states(
+        checks: list[CheckResult], environment: Environment
+    ) -> list[CheckResult]:
+        by_key = {
+            (check.id, check.cluster): check for check in checks
+        }
+        hub_cluster = environment.infra_cluster
         results = []
         for check in checks:
-            blockers = [
-                by_id[item]
-                for item in check.blocked_by
-                if item in by_id and by_id[item].state == "missing"
-            ]
+            blockers = []
+            for item in check.blocked_by:
+                blocker = by_key.get((item, check.cluster))
+                if blocker is None:
+                    blocker = by_key.get((item, hub_cluster))
+                if blocker is not None and blocker.state == "missing":
+                    blockers.append(blocker)
             if blockers and check.state == "unknown":
                 blocker_names = ", ".join(blocker.check for blocker in blockers)
                 results.append(
@@ -779,24 +788,32 @@ class StatusChecker:
             ("shared", "workload") if path_scope == "workload" else definitions
         )
         results = []
+        hub_cluster = environment.infra_cluster
         for scope in scopes:
-            for check_id, name, repository, path in definitions[scope]:
-                results.append(
-                    CheckResult(
-                        id=check_id,
-                        stage="Rate limited",
-                        check=name,
-                        scope=scope,
-                        repository=repository,
-                        path=path,
-                        ref="main",
-                        state="unknown",
-                        severity="advisory",
-                        expected=None,
-                        actual=None,
-                        reason="unknown (rate limited)",
+            clusters = (
+                tuple(environment.workload_clusters or ())
+                if scope == "workload"
+                else (hub_cluster,)
+            )
+            for cluster in clusters:
+                for check_id, name, repository, path in definitions[scope]:
+                    results.append(
+                        CheckResult(
+                            id=check_id,
+                            stage="Rate limited",
+                            check=name,
+                            scope=scope,
+                            cluster=cluster,
+                            repository=repository,
+                            path=path,
+                            ref="main",
+                            state="unknown",
+                            severity="advisory",
+                            expected=None,
+                            actual=None,
+                            reason="unknown (rate limited)",
+                        )
                     )
-                )
         return results
 
     def _metadata(self) -> ReportMetadata:
@@ -883,7 +900,9 @@ class StatusChecker:
             )
         return tuple(evidence)
 
-    def _issue_checks(self, observation: IssueObservation) -> list[CheckResult]:
+    def _issue_checks(
+        self, environment: Environment, observation: IssueObservation
+    ) -> list[CheckResult]:
         repository = f"{ORG}/MOC-issues"
         path = f"issues/{observation.issue_number}"
         issue_state = observation.state.value
@@ -909,6 +928,7 @@ class StatusChecker:
                 stage="Request",
                 check="MOC issue",
                 scope="shared",
+                cluster=environment.infra_cluster,
                 repository=repository,
                 path=path,
                 ref="main",
@@ -979,6 +999,7 @@ class StatusChecker:
                     stage="Hardware and inventory",
                     check=f"{cluster} host inventory",
                     scope=inventory_scope,
+                    cluster=cluster,
                     repository=repository,
                     path=inventory_path,
                     ref="main",
@@ -1100,6 +1121,7 @@ class StatusChecker:
                     stage="Hardware and inventory",
                     check=f"{cluster} boot image",
                     scope=boot_scope,
+                    cluster=cluster,
                     repository=repository,
                     path=inventory_path,
                     ref="main",
@@ -1185,6 +1207,7 @@ class StatusChecker:
                 stage="Cluster build",
                 check="Hub image inventory",
                 scope="hub",
+                cluster=environment.infra_cluster,
                 repository=repository,
                 path=hub_inventory_path,
                 ref="main",
@@ -1246,6 +1269,7 @@ class StatusChecker:
                 stage="Cluster build",
                 check="Hub image variables",
                 scope="hub",
+                cluster=environment.infra_cluster,
                 repository=repository,
                 path=vars_path,
                 ref="main",
@@ -1400,6 +1424,7 @@ class StatusChecker:
             stage="Hardware and inventory",
             check=f"{cluster} update-agents inputs",
             scope="workload",
+            cluster=cluster,
             repository=repository,
             path=UPDATE_AGENTS_PATH,
             ref="main",
@@ -1526,6 +1551,7 @@ class StatusChecker:
                 stage="Identity",
                 check="Hub OIDC client",
                 scope="hub",
+                cluster=environment.infra_cluster,
                 repository=repository,
                 path=path,
                 ref="main",
@@ -1576,6 +1602,7 @@ class StatusChecker:
                 [
                     (
                         "workload.hosted_cluster_values",
+                        workload_cluster,
                         "workload",
                         "Workload hosted-cluster values",
                         workload_values,
@@ -1585,6 +1612,7 @@ class StatusChecker:
                     ),
                     (
                         "workload.component_values",
+                        workload_cluster,
                         "workload",
                         "Workload component values",
                         None,
@@ -1598,6 +1626,7 @@ class StatusChecker:
         path_checks = [
             (
                 "hub.hosted_cluster_defaults",
+                environment.infra_cluster,
                 "hub",
                 "Hub hosted-cluster defaults",
                 infra_defaults,
@@ -1607,6 +1636,7 @@ class StatusChecker:
             ),
             (
                 "hub.component_values",
+                environment.infra_cluster,
                 "hub",
                 "Hub-wide component values",
                 None,
@@ -1616,6 +1646,7 @@ class StatusChecker:
             ),
             (
                 "hub.local_cluster_values",
+                environment.infra_cluster,
                 "hub",
                 "Hub local-cluster values",
                 None,
@@ -1628,6 +1659,7 @@ class StatusChecker:
             ),
             (
                 "hub.argocd_apps",
+                environment.infra_cluster,
                 "hub",
                 "Hub ArgoCD applications",
                 None,
@@ -1641,6 +1673,7 @@ class StatusChecker:
         results: list[CheckResult] = []
         for (
             check_id,
+            cluster,
             check_scope,
             label,
             exact,
@@ -1734,6 +1767,7 @@ class StatusChecker:
                     stage="GitOps configuration",
                     check=label,
                     scope=check_scope,
+                    cluster=cluster,
                     repository=repository,
                     path=exact or (prefix or "").rstrip("/"),
                     ref="main",

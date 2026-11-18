@@ -75,7 +75,8 @@
       "severity": "info",
       "stage": "Hardware and inventory",
       "state": "declared_in_main",
-      "url": "https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml"
+      "url": "https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml",
+      "cluster": "oac-prod-infra"
     },
     {
       "actual": {
@@ -111,7 +112,8 @@
       "severity": "info",
       "stage": "Cluster build",
       "state": "declared_in_main",
-      "url": "https://github.com/CCI-MOC/oac-infra/blob/main/hub-images/inventory.yml"
+      "url": "https://github.com/CCI-MOC/oac-infra/blob/main/hub-images/inventory.yml",
+      "cluster": "oac-prod-infra"
     },
     {
       "actual": [
@@ -202,7 +204,8 @@
       "severity": "info",
       "stage": "Cluster build",
       "state": "declared_in_main",
-      "url": "https://github.com/CCI-MOC/oac-infra/blob/main/hub-images/group_vars/oac-prod-infra/vars.yml"
+      "url": "https://github.com/CCI-MOC/oac-infra/blob/main/hub-images/group_vars/oac-prod-infra/vars.yml",
+      "cluster": "oac-prod-infra"
     },
     {
       "actual": {
@@ -255,7 +258,8 @@
       "severity": "info",
       "stage": "Cross-repository prerequisites",
       "state": "declared_in_main",
-      "url": "https://github.com/CCI-MOC/moc-dns/blob/main/zonefiles/ocp.massopen.cloud.zone"
+      "url": "https://github.com/CCI-MOC/moc-dns/blob/main/zonefiles/ocp.massopen.cloud.zone",
+      "cluster": "oac-prod-infra"
     },
     {
       "actual": [
@@ -293,7 +297,8 @@
       "severity": "info",
       "stage": "Hardware and inventory",
       "state": "declared_in_main",
-      "url": "https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml"
+      "url": "https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml",
+      "cluster": "oac-prod-infra"
     },
     {
       "actual": {
@@ -406,7 +411,8 @@
       },
       "stage": "Identity",
       "state": "declared_in_main",
-      "url": "https://github.com/CCI-MOC/moc-keycloak/blob/main/main.tf"
+      "url": "https://github.com/CCI-MOC/moc-keycloak/blob/main/main.tf",
+      "cluster": "oac-prod-infra"
     },
     {
       "actual": {
@@ -459,7 +465,8 @@
       "severity": "info",
       "stage": "GitOps configuration",
       "state": "declared_in_main",
-      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/oac-prod-infra/values.yaml"
+      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/oac-prod-infra/values.yaml",
+      "cluster": "oac-prod-infra"
     },
     {
       "actual": {
@@ -506,7 +513,8 @@
       "severity": "info",
       "stage": "GitOps configuration",
       "state": "declared_in_main",
-      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/values/oac-prod-infra"
+      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/values/oac-prod-infra",
+      "cluster": "oac-prod-infra"
     },
     {
       "actual": {
@@ -581,7 +589,8 @@
       "severity": "info",
       "stage": "GitOps configuration",
       "state": "declared_in_main",
-      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/values/oac-prod-infra/local-cluster"
+      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/values/oac-prod-infra/local-cluster",
+      "cluster": "oac-prod-infra"
     },
     {
       "actual": {
@@ -631,7 +640,8 @@
       "severity": "info",
       "stage": "GitOps configuration",
       "state": "declared_in_main",
-      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/apps/oac-prod-infra"
+      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/apps/oac-prod-infra",
+      "cluster": "oac-prod-infra"
     },
     {
       "actual": {
@@ -685,7 +695,8 @@
       "severity": "info",
       "stage": "Cross-repository prerequisites",
       "state": "declared_in_main",
-      "url": "https://github.com/CCI-MOC/everpure-moc/blob/main/ansible/group_vars/all/realms.yaml"
+      "url": "https://github.com/CCI-MOC/everpure-moc/blob/main/ansible/group_vars/all/realms.yaml",
+      "cluster": "oac-prod-infra"
     },
     {
       "actual": {
@@ -727,7 +738,8 @@
       "severity": "info",
       "stage": "Cross-repository prerequisites",
       "state": "declared_in_main",
-      "url": "https://github.com/CCI-MOC/moc-aws/blob/main/main.tf"
+      "url": "https://github.com/CCI-MOC/moc-aws/blob/main/main.tf",
+      "cluster": "oac-prod-infra"
     },
     {
       "actual": "cert_manager_policy_oac_prod_infra",
@@ -760,7 +772,8 @@
       "severity": "info",
       "stage": "Cross-repository prerequisites",
       "state": "declared_in_main",
-      "url": "https://github.com/CCI-MOC/moc-aws/blob/main/cert-manager-policies.tf"
+      "url": "https://github.com/CCI-MOC/moc-aws/blob/main/cert-manager-policies.tf",
+      "cluster": "oac-prod-infra"
     },
     {
       "actual": {
@@ -797,7 +810,8 @@
       "severity": "info",
       "stage": "Cross-repository prerequisites",
       "state": "declared_in_main",
-      "url": "https://github.com/CCI-MOC/moc-aws/blob/main/main.tf"
+      "url": "https://github.com/CCI-MOC/moc-aws/blob/main/main.tf",
+      "cluster": "oac-prod-infra"
     },
     {
       "actual": {
@@ -898,7 +912,8 @@
       "severity": "info",
       "stage": "Hardware and inventory",
       "state": "declared_in_main",
-      "url": "https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml"
+      "url": "https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml",
+      "cluster": "oac-prod-workload0"
     },
     {
       "actual": [
@@ -936,7 +951,8 @@
       "severity": "info",
       "stage": "Hardware and inventory",
       "state": "declared_in_main",
-      "url": "https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml"
+      "url": "https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml",
+      "cluster": "oac-prod-workload0"
     },
     {
       "actual": [
@@ -1246,7 +1262,8 @@
       "severity": "info",
       "stage": "Hardware and inventory",
       "state": "declared_in_main",
-      "url": "https://github.com/CCI-MOC/oac-infra/blob/main/infra/update-agents.yaml"
+      "url": "https://github.com/CCI-MOC/oac-infra/blob/main/infra/update-agents.yaml",
+      "cluster": "oac-prod-workload0"
     },
     {
       "actual": {
@@ -1293,7 +1310,8 @@
       "severity": "info",
       "stage": "GitOps configuration",
       "state": "declared_in_main",
-      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/oac-prod-infra/oac-prod-workload0/values.yaml"
+      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/oac-prod-infra/oac-prod-workload0/values.yaml",
+      "cluster": "oac-prod-workload0"
     },
     {
       "actual": {
@@ -1342,7 +1360,8 @@
       "severity": "info",
       "stage": "GitOps configuration",
       "state": "declared_in_main",
-      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/values/oac-prod-infra/oac-prod-workload0"
+      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/values/oac-prod-infra/oac-prod-workload0",
+      "cluster": "oac-prod-workload0"
     },
     {
       "actual": "10.20.9.13",
@@ -1374,7 +1393,8 @@
       "severity": "info",
       "stage": "Cross-repository prerequisites",
       "state": "declared_in_main",
-      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/oac-prod-infra/oac-prod-workload0/values.yaml"
+      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/oac-prod-infra/oac-prod-workload0/values.yaml",
+      "cluster": "oac-prod-workload0"
     },
     {
       "actual": "10.20.13.10/32",
@@ -1407,7 +1427,8 @@
       "severity": "info",
       "stage": "Cross-repository prerequisites",
       "state": "declared_in_main",
-      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/oac-prod-infra/oac-prod-workload0/values.yaml"
+      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/oac-prod-infra/oac-prod-workload0/values.yaml",
+      "cluster": "oac-prod-workload0"
     },
     {
       "actual": [
@@ -1440,7 +1461,8 @@
       "severity": "info",
       "stage": "Cross-repository prerequisites",
       "state": "declared_in_main",
-      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/oac-prod-infra/oac-prod-workload0/values.yaml"
+      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/oac-prod-infra/oac-prod-workload0/values.yaml",
+      "cluster": "oac-prod-workload0"
     },
     {
       "actual": [
@@ -1524,7 +1546,8 @@
       "severity": "info",
       "stage": "Cross-repository prerequisites",
       "state": "declared_in_main",
-      "url": "https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml"
+      "url": "https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml",
+      "cluster": "oac-prod-workload0"
     },
     {
       "actual": {
@@ -1557,7 +1580,8 @@
       "severity": "info",
       "stage": "Cross-repository prerequisites",
       "state": "declared_in_main",
-      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/oac-prod-infra/oac-prod-workload0/values.yaml"
+      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/oac-prod-infra/oac-prod-workload0/values.yaml",
+      "cluster": "oac-prod-workload0"
     },
     {
       "actual": {
@@ -1816,7 +1840,8 @@
       "severity": "info",
       "stage": "Cross-repository prerequisites",
       "state": "declared_in_main",
-      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/"
+      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/",
+      "cluster": "oac-prod-workload0"
     },
     {
       "actual": {
@@ -1870,7 +1895,8 @@
       "severity": "info",
       "stage": "Cross-repository prerequisites",
       "state": "declared_in_main",
-      "url": "https://github.com/CCI-MOC/everpure-moc/blob/main/ansible/group_vars/all/realms.yaml"
+      "url": "https://github.com/CCI-MOC/everpure-moc/blob/main/ansible/group_vars/all/realms.yaml",
+      "cluster": "oac-prod-workload0"
     },
     {
       "actual": {
@@ -1908,7 +1934,8 @@
       "severity": "info",
       "stage": "Cross-repository prerequisites",
       "state": "declared_in_main",
-      "url": "https://github.com/CCI-MOC/moc-aws/blob/main/main.tf"
+      "url": "https://github.com/CCI-MOC/moc-aws/blob/main/main.tf",
+      "cluster": "oac-prod-workload0"
     },
     {
       "actual": "cert_manager_policies",
@@ -1941,7 +1968,8 @@
       "severity": "info",
       "stage": "Cross-repository prerequisites",
       "state": "declared_in_main",
-      "url": "https://github.com/CCI-MOC/moc-aws/blob/main/cert-manager-policies.tf"
+      "url": "https://github.com/CCI-MOC/moc-aws/blob/main/cert-manager-policies.tf",
+      "cluster": "oac-prod-workload0"
     },
     {
       "actual": {
@@ -1986,7 +2014,8 @@
       "severity": "info",
       "stage": "Cross-repository prerequisites",
       "state": "declared_in_main",
-      "url": "https://github.com/CCI-MOC/moc-keycloak/blob/main/main.tf"
+      "url": "https://github.com/CCI-MOC/moc-keycloak/blob/main/main.tf",
+      "cluster": "oac-prod-workload0"
     }
   ],
   "current_phase": {
