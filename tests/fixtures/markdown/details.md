@@ -25,7 +25,7 @@ Generated 2026-11-16 12:34 UTC · MOC issue: [#666](https://github.com/CCI-MOC/M
 | 3 Agent ISO boot | verify by hand |
 | 4 Agent visibility | verify by hand |
 | 5 Agent labels and approval | ✅ 1/1 checks |
-| 6 oac-apps values | ❌ 0/7 checks, 5 blocked |
+| 6 oac-apps values | ❌ 1/8 checks, 5 blocked |
 | 7 Shared-service prerequisites | ✅ 3/3 checks |
 
 ## Next actions
@@ -40,11 +40,11 @@ Generated 2026-11-16 12:34 UTC · MOC issue: [#666](https://github.com/CCI-MOC/M
    Guide: [docs/infra-cluster-deployment.md → Cluster Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-configuration)
 5. **oac-apps** — [`apps/bu-ist-demo-infra`](https://github.com/CCI-MOC/oac-apps/tree/main): Add Argo CD application manifests for the hub after its hosted-cluster, hub-wide component, and local-cluster values are present, and reference the correct clusters. apps/bu-ist-demo-infra/keycloak-oauth.yaml is missing; expected present. (after 2, 4, 3)
    Guide: [docs/infra-cluster-deployment.md → Cluster Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-configuration)
-6. **oac-infra** — [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml): Generate and publish the parent hub's agent discovery ISO, then replace the generic boot_image_url for every host in the workload cluster group. boot_image_url is http://10.2.0.82/boot/discovery.iso; expected cluster_specific_image bu-ist-demo-infra-agent-discovery.iso. (after 1)
+6. **oac-infra** — [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml): bu-ist-demo-workload0: Generate and publish the parent hub's agent discovery ISO, then replace the generic boot_image_url for every host in the workload cluster group. boot_image_url is http://10.2.0.82/boot/discovery.iso; expected cluster_specific_image bu-ist-demo-infra-agent-discovery.iso. (after 1)
    Guide: [docs/workload-cluster-deployment.md → Infrastructure Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/workload-cluster-deployment.md#infrastructure-configuration)
-7. **oac-apps** — [`hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/tree/main): Create the missing hosted-cluster values file from the closest existing environment; set the cluster name, parent hub, networking, and node pools before adding components. hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is missing; expected present. (after 2)
+7. **oac-apps** — [`hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/tree/main): bu-ist-demo-workload0: Create the missing hosted-cluster values file from the closest existing environment; set the cluster name, parent hub, networking, and node pools before adding components. hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is missing; expected present. (after 2)
    Guide: [docs/workload-cluster-deployment.md → Cluster Deployment and Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/workload-cluster-deployment.md#cluster-deployment-and-configuration)
-8. **oac-apps** — [`values/bu-ist-demo-infra/bu-ist-demo-workload0`](https://github.com/CCI-MOC/oac-apps/tree/main): Create the workload component-values directory, starting with hcp-config.yaml and only the shared components this workload needs. matched_file_count is 0; expected At least one matching path. (after 7)
+8. **oac-apps** — [`values/bu-ist-demo-infra/bu-ist-demo-workload0`](https://github.com/CCI-MOC/oac-apps/tree/main): bu-ist-demo-workload0: Create the workload component-values directory, starting with hcp-config.yaml and only the shared components this workload needs. matched_file_count is 0; expected At least one matching path. (after 7)
    Guide: [docs/workload-cluster-deployment.md → Cluster Deployment and Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/workload-cluster-deployment.md#cluster-deployment-and-configuration)
 
 ## Not checked — verify by hand

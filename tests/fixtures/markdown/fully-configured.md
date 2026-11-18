@@ -25,7 +25,7 @@ Generated 2026-11-16 12:34 UTC · MOC issue: [#666](https://github.com/CCI-MOC/M
 | 3 Agent ISO boot | verify by hand |
 | 4 Agent visibility | verify by hand |
 | 5 Agent labels and approval | ✅ 1/1 checks |
-| 6 oac-apps values | ✅ 7/7 checks |
+| 6 oac-apps values | ✅ 8/8 checks |
 | 7 Shared-service prerequisites | ✅ 4/4 checks |
 
 ## Next actions

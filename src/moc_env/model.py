@@ -91,6 +91,7 @@ class CheckResult:
     blocked_by: list[str] = field(default_factory=list)
     suggestion: dict[str, Any] | None = None
     suggestion_skipped_reason: str | None = None
+    cluster: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -104,6 +105,7 @@ class CheckResult:
         return {
             "id": data["id"],
             "scope": data["scope"],
+            "cluster": data["cluster"],
             "next_action": data["next_action"],
             **({"suggestion": data["suggestion"]} if self.id in {
                 "hub.moc_aws_hosted_secret_prefix", "workload.moc_aws_oidc_cluster",

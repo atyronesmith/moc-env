@@ -7,6 +7,12 @@ merged `main` branches, and what exists only in an open pull request. It does
 not claim that a cluster is deployed, healthy, or compliant, and it does not
 mutate GitHub or connect to a live cluster.
 
+This tool will be the basis for a system that generates all repo artifacts
+necessary for a new environment deployment.  Ideally, the config for that
+environment will exist in a single file.  The premise is to enhance the
+repeatibility of deployments and reduce errors.  Eventually, the entire
+process of deploying an environment should be completely automated.
+
 ## Quickstart
 
 Install the locked environment and verify the command:

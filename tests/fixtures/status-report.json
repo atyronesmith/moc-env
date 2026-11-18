@@ -7,6 +7,7 @@
       },
       "blocked_by": [],
       "check": "bu-ist-demo-infra host inventory",
+      "cluster": "bu-ist-demo-infra",
       "evidence": {
         "hosts": [
           {
@@ -55,6 +56,7 @@
         "hub.inventory"
       ],
       "check": "Hub image inventory",
+      "cluster": "bu-ist-demo-infra",
       "evidence": {
         "path_present": true
       },
@@ -96,6 +98,7 @@
         "hub.image_inventory"
       ],
       "check": "Hub image variables",
+      "cluster": "bu-ist-demo-infra",
       "evidence": {
         "path_present": true,
         "values": {
@@ -184,6 +187,7 @@
         "hub.image_vars"
       ],
       "check": "Hub moc-dns records",
+      "cluster": "bu-ist-demo-infra",
       "evidence": {
         "records": {
           "*.apps.bu-ist-demo.int.massopen.cloud": "10.20.27.12",
@@ -236,6 +240,7 @@
         "hub.image_vars"
       ],
       "check": "bu-ist-demo-infra boot image",
+      "cluster": "bu-ist-demo-infra",
       "evidence": {
         "check_rule": "The boot-image filename must contain the full cluster name `bu-ist-demo-infra`; generic `discovery.iso` does not satisfy this rule.",
         "generic_discovery_iso": true
@@ -284,6 +289,7 @@
         "hub.boot_image"
       ],
       "check": "Hub OIDC client",
+      "cluster": "bu-ist-demo-infra",
       "evidence": {
         "client": {
           "block_name": {
@@ -395,6 +401,7 @@
         "hub.boot_image"
       ],
       "check": "Hub hosted-cluster defaults",
+      "cluster": "bu-ist-demo-infra",
       "evidence": {
         "expected_path_count": 1,
         "expected_paths": [
@@ -459,6 +466,7 @@
         "hub.hosted_cluster_defaults"
       ],
       "check": "Hub-wide component values",
+      "cluster": "bu-ist-demo-infra",
       "evidence": {
         "expected_path_count": 1,
         "expected_paths": [
@@ -523,6 +531,7 @@
         "hub.hosted_cluster_defaults"
       ],
       "check": "Hub local-cluster values",
+      "cluster": "bu-ist-demo-infra",
       "evidence": {
         "expected_path_count": 13,
         "expected_paths": [
@@ -626,6 +635,7 @@
         "hub.oidc_client"
       ],
       "check": "Hub ArgoCD applications",
+      "cluster": "bu-ist-demo-infra",
       "evidence": {
         "expected_path_count": 1,
         "expected_paths": [
@@ -692,6 +702,7 @@
         "hub.hosted_cluster_defaults"
       ],
       "check": "Hub Pure storage realm",
+      "cluster": "bu-ist-demo-infra",
       "evidence": {
         "realm": {
           "s3_endpoint": "s3.bu-ist-demo.int.massopen.cloud",
@@ -747,6 +758,7 @@
         "hub.hosted_cluster_defaults"
       ],
       "check": "Hub moc-aws OIDC cluster",
+      "cluster": "bu-ist-demo-infra",
       "evidence": {},
       "expected": {
         "cluster_name": "bu-ist-demo-infra"
@@ -784,6 +796,7 @@
         "hub.hosted_cluster_defaults"
       ],
       "check": "Hub moc-aws cert-manager policy",
+      "cluster": "bu-ist-demo-infra",
       "evidence": {
         "block": "\n    \"cert_manager_policy_bu_ist_demo_infra\" = {\n      cluster_subdomain = \"bu-ist-demo.int.massopen.cloud\"\n      policy_name = \"cert-manager-bu-ist-demo-infra\""
       },
@@ -821,6 +834,7 @@
         "hub.moc_aws_oidc_cluster"
       ],
       "check": "Hub hosted-cluster secret prefix",
+      "cluster": "bu-ist-demo-infra",
       "evidence": {},
       "expected": {
         "eso_writable_secret_prefix": "cluster/bu-ist-demo-infra/hostedcluster/"
@@ -855,6 +869,7 @@
       },
       "blocked_by": [],
       "check": "bu-ist-demo-workload0 host inventory",
+      "cluster": "bu-ist-demo-workload0",
       "evidence": {
         "hosts": [
           {
@@ -904,6 +919,7 @@
         "hub.boot_image"
       ],
       "check": "bu-ist-demo-workload0 boot image",
+      "cluster": "bu-ist-demo-workload0",
       "evidence": {
         "check_rule": "The workload boot-image filename may contain the workload name `bu-ist-demo-workload0`, its oac-shortened name, the parent hub name `bu-ist-demo-infra`, or the hub's oac-shortened name. Unrecognized names are advisory because naming is not consistent across environments; generic `discovery.iso` remains a gap.",
         "generic_discovery_iso": true
@@ -957,6 +973,7 @@
         "workload.inventory"
       ],
       "check": "bu-ist-demo-workload0 update-agents inputs",
+      "cluster": "bu-ist-demo-workload0",
       "evidence": {
         "agent_label_hosts": [
           {
@@ -1017,6 +1034,7 @@
         "hub.hosted_cluster_defaults"
       ],
       "check": "Workload hosted-cluster values",
+      "cluster": "bu-ist-demo-workload0",
       "evidence": {
         "expected_path_count": 1,
         "expected_paths": [
@@ -1081,6 +1099,7 @@
         "workload.hosted_cluster_values"
       ],
       "check": "Workload component values",
+      "cluster": "bu-ist-demo-workload0",
       "evidence": {
         "expected_path_count": 0,
         "expected_paths": [],
@@ -1137,6 +1156,7 @@
         "workload.hosted_cluster_values"
       ],
       "check": "Workload API address network",
+      "cluster": "bu-ist-demo-workload0",
       "evidence": {
         "error": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable."
       },
@@ -1162,6 +1182,7 @@
         "workload.hosted_cluster_values"
       ],
       "check": "Workload ingress address network",
+      "cluster": "bu-ist-demo-workload0",
       "evidence": {
         "error": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable."
       },
@@ -1187,6 +1208,7 @@
         "workload.hosted_cluster_values"
       ],
       "check": "Workload DNS base domain",
+      "cluster": "bu-ist-demo-workload0",
       "evidence": {
         "error": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable."
       },
@@ -1212,6 +1234,7 @@
         "workload.hosted_cluster_values"
       ],
       "check": "Workload node-pool host capacity",
+      "cluster": "bu-ist-demo-workload0",
       "evidence": {
         "error": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable."
       },
@@ -1237,6 +1260,7 @@
         "workload.hosted_cluster_values"
       ],
       "check": "Workload GPU feature support",
+      "cluster": "bu-ist-demo-workload0",
       "evidence": {
         "error": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is absent or unavailable."
       },
@@ -1263,6 +1287,7 @@
         "workload.hosted_cluster_values"
       ],
       "check": "Workload address uniqueness",
+      "cluster": "bu-ist-demo-workload0",
       "evidence": {},
       "expected": "No address used by another cluster",
       "gaps": [],
@@ -1291,6 +1316,7 @@
         "workload.component_values"
       ],
       "check": "Workload Pure storage realm",
+      "cluster": "bu-ist-demo-workload0",
       "evidence": {
         "realm": {
           "s3_endpoint": "s3.bu-ist-demo-workload0.hcp.bu-ist-demo.int.massopen.cloud",
@@ -1344,6 +1370,7 @@
         "workload.component_values"
       ],
       "check": "Workload moc-aws OIDC cluster",
+      "cluster": "bu-ist-demo-workload0",
       "evidence": {},
       "expected": {
         "cluster_name": "bu-ist-demo-workload0"
@@ -1379,6 +1406,7 @@
         "workload.component_values"
       ],
       "check": "Workload moc-aws cert-manager policy",
+      "cluster": "bu-ist-demo-workload0",
       "evidence": {
         "block": "\n      cluster_subdomain = \"bu-ist-demo-workload0.hcp.bu-ist-demo.int.massopen.cloud\"\n      policy_name = \"cert-manager-bu-ist-demo-workload0\""
       },
@@ -1410,6 +1438,7 @@
       "actual": "open",
       "blocked_by": [],
       "check": "MOC issue",
+      "cluster": "bu-ist-demo-infra",
       "evidence": {
         "state": {
           "confidence": "exact",

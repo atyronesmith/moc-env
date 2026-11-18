@@ -101,6 +101,7 @@ def _hcl_blocks(text: str | None, error: str | None) -> tuple[list[tuple[str, st
 def _unknown(
     check_id: str,
     scope: str,
+    cluster: str,
     repository: str,
     path: str,
     reason: str,
@@ -111,6 +112,7 @@ def _unknown(
         stage="Cross-repository prerequisites",
         check=_CHECK_LABELS[check_id],
         scope=scope,
+        cluster=cluster,
         repository=repository,
         path=path,
         ref="main",
@@ -147,6 +149,7 @@ _CHECK_LABELS = {
 def _result(
     check_id: str,
     scope: str,
+    cluster: str,
     repository: str,
     path: str,
     state: str,
@@ -162,6 +165,7 @@ def _result(
         stage="Cross-repository prerequisites",
         check=_CHECK_LABELS[check_id],
         scope=scope,
+        cluster=cluster,
         repository=repository,
         path=path,
         ref="main",
@@ -206,17 +210,17 @@ def _realm_check(
     text, error = _read_file(client, EVERPURE_REPOSITORY, EVERPURE_PATH, progress)
     data, parse_error = _parse_yaml(text, error)
     if parse_error or not isinstance(data, dict) or not isinstance(data.get("realms"), list):
-        return _unknown(check_id, scope, EVERPURE_REPOSITORY, EVERPURE_PATH, parse_error or "realms.yaml does not contain a realms list.", {"name": cluster})
+        return _unknown(check_id, scope, cluster, EVERPURE_REPOSITORY, EVERPURE_PATH, parse_error or "realms.yaml does not contain a realms list.", {"name": cluster})
     realms = [item for item in data["realms"] if isinstance(item, dict) and item.get("name") == cluster]
     expected = {"name": cluster, "fields": ["subnet_vlan", "subnet_prefix", "s3_endpoint"]}
     if not realms:
-        return _result(check_id, scope, EVERPURE_REPOSITORY, EVERPURE_PATH, "missing", "blocking", expected, None, f"No Pure storage realm named {cluster} was found.", {"realms": [cluster]})
+        return _result(check_id, scope, cluster, EVERPURE_REPOSITORY, EVERPURE_PATH, "missing", "blocking", expected, None, f"No Pure storage realm named {cluster} was found.", {"realms": [cluster]})
     realm = realms[0]
     missing = [field for field in ("subnet_vlan", "subnet_prefix", "s3_endpoint") if realm.get(field) is None]
     observed = {field: realm.get(field) for field in ("subnet_vlan", "subnet_prefix", "s3_endpoint")}
     if missing:
-        return _result(check_id, scope, EVERPURE_REPOSITORY, EVERPURE_PATH, "partial", "blocking", expected, observed, f"The {cluster} realm is missing: {', '.join(missing)}.", {"fields": missing}, {"realm": realm})
-    return _result(check_id, scope, EVERPURE_REPOSITORY, EVERPURE_PATH, "declared_in_main", "info", expected, observed, f"The {cluster} Pure storage realm is complete.", evidence={"realm": observed})
+        return _result(check_id, scope, cluster, EVERPURE_REPOSITORY, EVERPURE_PATH, "partial", "blocking", expected, observed, f"The {cluster} realm is missing: {', '.join(missing)}.", {"fields": missing}, {"realm": realm})
+    return _result(check_id, scope, cluster, EVERPURE_REPOSITORY, EVERPURE_PATH, "declared_in_main", "info", expected, observed, f"The {cluster} Pure storage realm is complete.", evidence={"realm": observed})
 
 
 def _moc_aws_checks(
@@ -242,19 +246,19 @@ def _moc_aws_checks(
         scope = "hub" if scope_name == "hub" else "workload"
         oidc_id = f"{scope}.moc_aws_oidc_cluster"
         if block_error:
-            results.append(_unknown(oidc_id, scope, MOC_AWS_REPOSITORY, MOC_AWS_MAIN, block_error, {"cluster_name": cluster}))
+            results.append(_unknown(oidc_id, scope, cluster, MOC_AWS_REPOSITORY, MOC_AWS_MAIN, block_error, {"cluster_name": cluster}))
             continue
         matches = [body for _, body in blocks if _hcl_string(body, "cluster_name") == cluster]
         expected = {"cluster_name": cluster}
         if not matches:
-            results.append(_result(oidc_id, scope, MOC_AWS_REPOSITORY, MOC_AWS_MAIN, "missing", "blocking", expected, None, f"No moc-aws OIDC cluster entry has cluster_name {cluster}."))
+            results.append(_result(oidc_id, scope, cluster, MOC_AWS_REPOSITORY, MOC_AWS_MAIN, "missing", "blocking", expected, None, f"No moc-aws OIDC cluster entry has cluster_name {cluster}."))
         else:
             observed = {"cluster_name": _hcl_string(matches[0], "cluster_name"), "eso_writable_secret_prefixes": _hcl_strings(matches[0], "eso_writable_secret_prefixes")}
-            results.append(_result(oidc_id, scope, MOC_AWS_REPOSITORY, MOC_AWS_MAIN, "declared_in_main", "info", expected, observed, f"The moc-aws OIDC cluster entry for {cluster} is present."))
+            results.append(_result(oidc_id, scope, cluster, MOC_AWS_REPOSITORY, MOC_AWS_MAIN, "declared_in_main", "info", expected, observed, f"The moc-aws OIDC cluster entry for {cluster} is present."))
 
         cert_id = f"{scope}.moc_aws_cert_manager_policy"
         if cert_block_error:
-            results.append(_unknown(cert_id, scope, MOC_AWS_REPOSITORY, MOC_AWS_CERT_MANAGER, cert_block_error, {"cluster": cluster}))
+            results.append(_unknown(cert_id, scope, cluster, MOC_AWS_REPOSITORY, MOC_AWS_CERT_MANAGER, cert_block_error, {"cluster": cluster}))
             continue
         cert_matches = [
             (name, body)
@@ -272,22 +276,22 @@ def _moc_aws_checks(
                     "cluster_subdomain": f"{cluster}.{domain}" if domain else None,
                     "policy_name": f"cert-manager-{cluster}",
                 })
-            results.append(_result(cert_id, scope, MOC_AWS_REPOSITORY, MOC_AWS_CERT_MANAGER, "missing", "blocking", expected_policy, None, f"No cert-manager policy entry names {cluster}."))
+            results.append(_result(cert_id, scope, cluster, MOC_AWS_REPOSITORY, MOC_AWS_CERT_MANAGER, "missing", "blocking", expected_policy, None, f"No cert-manager policy entry names {cluster}."))
         else:
             name, body = cert_matches[0]
-            results.append(_result(cert_id, scope, MOC_AWS_REPOSITORY, MOC_AWS_CERT_MANAGER, "declared_in_main", "info", {"cluster": cluster}, name, f"The cert-manager policy entry {name} covers {cluster}.", evidence={"block": body}))
+            results.append(_result(cert_id, scope, cluster, MOC_AWS_REPOSITORY, MOC_AWS_CERT_MANAGER, "declared_in_main", "info", {"cluster": cluster}, name, f"The cert-manager policy entry {name} covers {cluster}.", evidence={"block": body}))
 
     if environment.workload_clusters:
         prefix = f"cluster/{environment.infra_cluster}/hostedcluster/"
         if block_error:
-            results.append(_unknown("hub.moc_aws_hosted_secret_prefix", "hub", MOC_AWS_REPOSITORY, MOC_AWS_MAIN, block_error, [prefix]))
+            results.append(_unknown("hub.moc_aws_hosted_secret_prefix", "hub", environment.infra_cluster, MOC_AWS_REPOSITORY, MOC_AWS_MAIN, block_error, [prefix]))
         else:
             hub = next((body for _, body in blocks if _hcl_string(body, "cluster_name") == environment.infra_cluster), None)
             writable = _hcl_strings(hub, "eso_writable_secret_prefixes") if hub else []
             if prefix in writable:
-                results.append(_result("hub.moc_aws_hosted_secret_prefix", "hub", MOC_AWS_REPOSITORY, MOC_AWS_MAIN, "declared_in_main", "info", {"eso_writable_secret_prefix": prefix}, {"eso_writable_secret_prefix": writable}, f"The hub can write hosted-cluster secrets at {prefix}."))
+                results.append(_result("hub.moc_aws_hosted_secret_prefix", "hub", environment.infra_cluster, MOC_AWS_REPOSITORY, MOC_AWS_MAIN, "declared_in_main", "info", {"eso_writable_secret_prefix": prefix}, {"eso_writable_secret_prefix": writable}, f"The hub can write hosted-cluster secrets at {prefix}."))
             else:
-                results.append(_result("hub.moc_aws_hosted_secret_prefix", "hub", MOC_AWS_REPOSITORY, MOC_AWS_MAIN, "missing", "blocking", [prefix], writable, f"The hub entry does not list {prefix}; it cannot push hosted-cluster secrets.", {"prefix": prefix}))
+                results.append(_result("hub.moc_aws_hosted_secret_prefix", "hub", environment.infra_cluster, MOC_AWS_REPOSITORY, MOC_AWS_MAIN, "missing", "blocking", [prefix], writable, f"The hub entry does not list {prefix}; it cannot push hosted-cluster secrets.", {"prefix": prefix}))
     return results
 
 
@@ -300,7 +304,7 @@ def _dns_records_check(
     domain_parts = [hub_values.get("cluster_domain_name"), hub_values.get("base_domain")]
     api_ip, ingress_ip = hub_values.get("api_ip"), hub_values.get("ingress_ip")
     if not all(isinstance(part, str) and part for part in (*domain_parts, api_ip, ingress_ip)):
-        return _unknown("hub.moc_dns_records", "hub", MOC_DNS_REPOSITORY, "zonefiles/", "Hub-image variables required for DNS validation are unavailable.", {"api": api_ip, "api-int": api_ip, "*.apps": ingress_ip})
+        return _unknown("hub.moc_dns_records", "hub", environment.infra_cluster, MOC_DNS_REPOSITORY, "zonefiles/", "Hub-image variables required for DNS validation are unavailable.", {"api": api_ip, "api-int": api_ip, "*.apps": ingress_ip})
     domain = ".".join(domain_parts)
     _progress(progress, "read DNS zonefiles", MOC_DNS_REPOSITORY, "zonefiles/")
     try:
@@ -318,6 +322,7 @@ def _dns_records_check(
             return _unknown(
                 "hub.moc_dns_records",
                 "hub",
+                environment.infra_cluster,
                 MOC_DNS_REPOSITORY,
                 "zonefiles/",
                 "No DNS zonefile is a suffix of the hub domain.",
@@ -327,7 +332,7 @@ def _dns_records_check(
         zone_path = f"zonefiles/{zone}.zone"
         text = client.get_file(MOC_DNS_REPOSITORY, zone_path)
     except GitHubError as exc:
-        return _unknown("hub.moc_dns_records", "hub", MOC_DNS_REPOSITORY, "zonefiles/", f"moc-dns could not be read: {exc}", {"domain": domain})
+        return _unknown("hub.moc_dns_records", "hub", environment.infra_cluster, MOC_DNS_REPOSITORY, "zonefiles/", f"moc-dns could not be read: {exc}", {"domain": domain})
     records: dict[str, str] = {}
     for line in text.splitlines():
         match = re.match(r"^(\S+?)\.?\s+\d+\s+IN\s+A\s+(\S+)", line)
@@ -338,12 +343,13 @@ def _dns_records_check(
     missing = [name for name, value in observed.items() if value is None]
     mismatched = {name: {"expected": value, "observed": observed[name]} for name, value in expected.items() if observed[name] != value}
     if missing:
-        return _result("hub.moc_dns_records", "hub", MOC_DNS_REPOSITORY, zone_path, "missing", "blocking", expected, observed, "Missing DNS records: " + ", ".join(missing) + ".", {"records": missing})
+        return _result("hub.moc_dns_records", "hub", environment.infra_cluster, MOC_DNS_REPOSITORY, zone_path, "missing", "blocking", expected, observed, "Missing DNS records: " + ", ".join(missing) + ".", {"records": missing})
     if mismatched:
-        return _result("hub.moc_dns_records", "hub", MOC_DNS_REPOSITORY, zone_path, "value_mismatch", "blocking", expected, observed, "One or more DNS records point to the wrong address.", {"records": mismatched})
+        return _result("hub.moc_dns_records", "hub", environment.infra_cluster, MOC_DNS_REPOSITORY, zone_path, "value_mismatch", "blocking", expected, observed, "One or more DNS records point to the wrong address.", {"records": mismatched})
     return _result(
         "hub.moc_dns_records",
         "hub",
+        environment.infra_cluster,
         MOC_DNS_REPOSITORY,
         zone_path,
         "declared_in_main",
@@ -392,13 +398,13 @@ def _keycloak_workload_check(
         return None
     external_domain = (hub_values_file or {}).get("hcpExternalDomain")
     if not isinstance(external_domain, str) or not external_domain:
-        return _unknown("workload.keycloak_oidc_client", "workload", "CCI-MOC/moc-keycloak", "main.tf", "hcpExternalDomain is unavailable from the hub hosted-cluster defaults.", {})
+        return _unknown("workload.keycloak_oidc_client", "workload", workload, "CCI-MOC/moc-keycloak", "main.tf", "hcpExternalDomain is unavailable from the hub hosted-cluster defaults.", {})
     text, error = _read_file(client, "CCI-MOC/moc-keycloak", "main.tf", progress)
     blocks, block_error = _hcl_blocks(text, error)
     if text is not None and not blocks:
         block_error = "CCI-MOC/moc-keycloak/main.tf did not contain readable HCL blocks."
     if block_error:
-        return _unknown("workload.keycloak_oidc_client", "workload", "CCI-MOC/moc-keycloak", "main.tf", block_error, {})
+        return _unknown("workload.keycloak_oidc_client", "workload", workload, "CCI-MOC/moc-keycloak", "main.tf", block_error, {})
     expected = {
         "cluster_name": workload,
         "openshift_redirect_uri": f"https://oauth-{workload}.{external_domain}:443/oauth2callback/mocsso",
@@ -408,9 +414,9 @@ def _keycloak_workload_check(
     observed = {key: _hcl_string(block, key) if block else None for key in expected}
     nonmatching = [key for key, value in expected.items() if observed[key] != value]
     if block and not nonmatching:
-        return _result("workload.keycloak_oidc_client", "workload", "CCI-MOC/moc-keycloak", "main.tf", "declared_in_main", "info", expected, observed, f"The Keycloak OIDC client for {workload} matches.")
+        return _result("workload.keycloak_oidc_client", "workload", workload, "CCI-MOC/moc-keycloak", "main.tf", "declared_in_main", "info", expected, observed, f"The Keycloak OIDC client for {workload} matches.")
     state = "missing" if block is None else "value_mismatch"
-    return _result("workload.keycloak_oidc_client", "workload", "CCI-MOC/moc-keycloak", "main.tf", state, "blocking", expected, observed, f"The Keycloak OIDC client for {workload} is absent or mismatched.", {"fields": nonmatching}, {"block": block})
+    return _result("workload.keycloak_oidc_client", "workload", workload, "CCI-MOC/moc-keycloak", "main.tf", state, "blocking", expected, observed, f"The Keycloak OIDC client for {workload} is absent or mismatched.", {"fields": nonmatching}, {"block": block})
 
 
 def _address_in(value: Any, network: str) -> bool:
@@ -491,7 +497,7 @@ def _workload_value_checks(
         values, values_error = _workload_values(apps, environment, workload)
         if values is None:
             results.extend([
-                _unknown(check_id, "workload", "CCI-MOC/oac-apps", path, values_error, {})
+                _unknown(check_id, "workload", workload, "CCI-MOC/oac-apps", path, values_error, {})
                 for check_id in (
                     "workload.api_address_network", "workload.ingress_address_network",
                     "workload.dns_base_domain", "workload.node_pool_hosts",
@@ -503,12 +509,12 @@ def _workload_value_checks(
         api_ip = _nested(values, ("services", "APIServer", "ipAddress"))
         expected = {"ipAddress": api_ip, "machine_network": machine_network}
         if _address_in(api_ip, machine_network):
-            results.append(_result("workload.api_address_network", "workload", "CCI-MOC/oac-apps", path, "declared_in_main", "info", expected, api_ip, "The API address is inside the hub machine network."))
+            results.append(_result("workload.api_address_network", "workload", workload, "CCI-MOC/oac-apps", path, "declared_in_main", "info", expected, api_ip, "The API address is inside the hub machine network."))
         else:
-            results.append(_result("workload.api_address_network", "workload", "CCI-MOC/oac-apps", path, "value_mismatch", "blocking", expected, api_ip, "The API address is not inside the hub machine network."))
+            results.append(_result("workload.api_address_network", "workload", workload, "CCI-MOC/oac-apps", path, "value_mismatch", "blocking", expected, api_ip, "The API address is not inside the hub machine network."))
 
         if not vlans_available:
-            results.append(_unknown("workload.ingress_address_network", "workload", ANSIBLE_SWITCHES_REPOSITORY, ANSIBLE_SWITCHES_VLANS, vlans_error or vlans_parse or "vlans.yaml does not contain a vlans list.", {}))
+            results.append(_unknown("workload.ingress_address_network", "workload", workload, ANSIBLE_SWITCHES_REPOSITORY, ANSIBLE_SWITCHES_VLANS, vlans_error or vlans_parse or "vlans.yaml does not contain a vlans list.", {}))
         else:
             pool = _nested(values, ("ingress", "poolAddress"))
             vlan = _workload_vlan(vlans, workload)
@@ -521,9 +527,9 @@ def _workload_value_checks(
                 else f" Selected VLAN {vlan['name']} ({vlan.get('subnet4')})."
             )
             if valid:
-                results.append(_result("workload.ingress_address_network", "workload", "CCI-MOC/oac-apps", path, "declared_in_main", "info", expected_pool, pool, "The ingress pool address is on the expected network." + vlan_reason))
+                results.append(_result("workload.ingress_address_network", "workload", workload, "CCI-MOC/oac-apps", path, "declared_in_main", "info", expected_pool, pool, "The ingress pool address is on the expected network." + vlan_reason))
             else:
-                results.append(_result("workload.ingress_address_network", "workload", "CCI-MOC/oac-apps", path, "value_mismatch", "blocking", expected_pool, pool, "The ingress pool address is on the wrong network." + vlan_reason))
+                results.append(_result("workload.ingress_address_network", "workload", workload, "CCI-MOC/oac-apps", path, "value_mismatch", "blocking", expected_pool, pool, "The ingress pool address is on the wrong network." + vlan_reason))
 
         hostnames = [record.get("hostname") for record in (_nested(values, ("dns", "records")) or []) if isinstance(record, dict)]
         external_domain = (hub_values_file or {}).get("hcpExternalDomain")
@@ -543,11 +549,11 @@ def _workload_value_checks(
         ]
         expected_domains = {"baseDomain": base_domain, "hcpExternalDomain": external_domain}
         if not valid_domains:
-            results.append(_unknown("workload.dns_base_domain", "workload", "CCI-MOC/oac-apps", path, "Hosted-cluster baseDomain and hcpExternalDomain are unavailable from the hub hosted-cluster defaults.", expected_domains))
+            results.append(_unknown("workload.dns_base_domain", "workload", workload, "CCI-MOC/oac-apps", path, "Hosted-cluster baseDomain and hcpExternalDomain are unavailable from the hub hosted-cluster defaults.", expected_domains))
         elif not invalid:
-            results.append(_result("workload.dns_base_domain", "workload", "CCI-MOC/oac-apps", path, "declared_in_main", "info", expected_domains, hostnames, "All DNS record hostnames use the hub hosted-cluster domains."))
+            results.append(_result("workload.dns_base_domain", "workload", workload, "CCI-MOC/oac-apps", path, "declared_in_main", "info", expected_domains, hostnames, "All DNS record hostnames use the hub hosted-cluster domains."))
         else:
-            results.append(_result("workload.dns_base_domain", "workload", "CCI-MOC/oac-apps", path, "value_mismatch", "blocking", expected_domains, hostnames, "Some DNS record hostnames do not use the hub hosted-cluster domains.", {"hostnames": invalid}))
+            results.append(_result("workload.dns_base_domain", "workload", workload, "CCI-MOC/oac-apps", path, "value_mismatch", "blocking", expected_domains, hostnames, "Some DNS record hostnames do not use the hub hosted-cluster domains.", {"hostnames": invalid}))
 
         cluster_observation = infra.clusters.get(workload)
         hosts = cluster_observation.hosts.value if cluster_observation else []
@@ -598,9 +604,9 @@ def _workload_value_checks(
             )
             pool_results.append({"name": pool_item.get("name"), "replicas": replicas, "matching_hosts": matching})
         if all(item["matching_hosts"] >= item["replicas"] for item in pool_results):
-            results.append(_result("workload.node_pool_hosts", "workload", "CCI-MOC/oac-infra", "infra/inventory/00hosts.yaml", "declared_in_main", "info", pools, pool_results, "Every node pool has enough matching inventory hosts."))
+            results.append(_result("workload.node_pool_hosts", "workload", workload, "CCI-MOC/oac-infra", "infra/inventory/00hosts.yaml", "declared_in_main", "info", pools, pool_results, "Every node pool has enough matching inventory hosts."))
         else:
-            results.append(_result("workload.node_pool_hosts", "workload", "CCI-MOC/oac-infra", "infra/inventory/00hosts.yaml", "value_mismatch", "blocking", pools, pool_results, "At least one node pool lacks matching inventory hosts."))
+            results.append(_result("workload.node_pool_hosts", "workload", workload, "CCI-MOC/oac-infra", "infra/inventory/00hosts.yaml", "value_mismatch", "blocking", pools, pool_results, "At least one node pool lacks matching inventory hosts."))
 
         gpu_enabled = str(_nested(values, ("clusterLabels", "massopen.cloud/feature-gpu"))).lower() == "true"
         gpu_hosts = [
@@ -622,9 +628,9 @@ def _workload_value_checks(
         }
         gpu_evidence = {"gpu_hosts": [host.get("name") for host in gpu_hosts]}
         if not gpu_enabled or gpu_hosts:
-            results.append(_result("workload.gpu_without_hosts", "workload", "CCI-MOC/oac-apps", path, "declared_in_main", "info", {"gpu_host_count": "At least 1 when clusterLabels.massopen.cloud/feature-gpu is true"}, gpu_observed, "GPU configuration is consistent with the inventory.", evidence=gpu_evidence))
+            results.append(_result("workload.gpu_without_hosts", "workload", workload, "CCI-MOC/oac-apps", path, "declared_in_main", "info", {"gpu_host_count": "At least 1 when clusterLabels.massopen.cloud/feature-gpu is true"}, gpu_observed, "GPU configuration is consistent with the inventory.", evidence=gpu_evidence))
         else:
-            results.append(_result("workload.gpu_without_hosts", "workload", "CCI-MOC/oac-apps", path, "value_mismatch", "advisory", {"gpu_host_count": "At least 1 when clusterLabels.massopen.cloud/feature-gpu is true"}, gpu_observed, "clusterLabels.massopen.cloud/feature-gpu is true, but no GPU hosts were found in the inventory.", evidence=gpu_evidence))
+            results.append(_result("workload.gpu_without_hosts", "workload", workload, "CCI-MOC/oac-apps", path, "value_mismatch", "advisory", {"gpu_host_count": "At least 1 when clusterLabels.massopen.cloud/feature-gpu is true"}, gpu_observed, "clusterLabels.massopen.cloud/feature-gpu is true, but no GPU hosts were found in the inventory.", evidence=gpu_evidence))
 
         keycloak = _keycloak_workload_check(client, environment, workload, values, hub_values_file, progress)
         if keycloak:
@@ -649,13 +655,14 @@ def _workload_value_checks(
         clusters = {cluster for cluster, _ in uses}
         if len(clusters) > 1 and any(cluster in current for cluster in clusters):
             duplicates[address] = uses
+    uniqueness_cluster = next(iter(current), environment.infra_cluster)
     if values_parse_errors:
-        results.append(_unknown("workload.address_uniqueness", "workload", "CCI-MOC/oac-apps", "hosted-clusters/", "One or more hosted-cluster values files could not be parsed: " + ", ".join(values_parse_errors) + ".", "No address used by another cluster"))
+        results.append(_unknown("workload.address_uniqueness", "workload", uniqueness_cluster, "CCI-MOC/oac-apps", "hosted-clusters/", "One or more hosted-cluster values files could not be parsed: " + ", ".join(values_parse_errors) + ".", "No address used by another cluster"))
     elif not duplicates:
-        results.append(_result("workload.address_uniqueness", "workload", "CCI-MOC/oac-apps", "hosted-clusters/", "declared_in_main", "info", "No address used by another cluster", usage, "No workload address is used by another cluster."))
+        results.append(_result("workload.address_uniqueness", "workload", uniqueness_cluster, "CCI-MOC/oac-apps", "hosted-clusters/", "declared_in_main", "info", "No address used by another cluster", usage, "No workload address is used by another cluster."))
     else:
         other_clusters = sorted({cluster for uses in duplicates.values() for cluster, _ in uses if cluster not in current})
-        results.append(_result("workload.address_uniqueness", "workload", "CCI-MOC/oac-apps", "hosted-clusters/", "value_mismatch", "blocking", "No address used by another cluster", duplicates, "Workload addresses are also used by: " + ", ".join(other_clusters) + ".", {"duplicates": duplicates}))
+        results.append(_result("workload.address_uniqueness", "workload", uniqueness_cluster, "CCI-MOC/oac-apps", "hosted-clusters/", "value_mismatch", "blocking", "No address used by another cluster", duplicates, "Workload addresses are also used by: " + ", ".join(other_clusters) + ".", {"duplicates": duplicates}))
     return results
 
 
