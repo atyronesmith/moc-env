@@ -15,6 +15,7 @@ from .credentials import (
     load_credential_environment_file,
 )
 from .checks import Clock, StatusChecker
+from .completion import mark_file_argument
 from .diff_observed import hosted_dns_facts
 from .github import GitHubClient
 from .model import Environment
@@ -33,10 +34,12 @@ def add_credential_arguments(parser: argparse.ArgumentParser) -> None:
         "--bws-secret-id-keychain-account",
         help="macOS Keychain account for the Bitwarden secret UUID (default: current user)",
     )
-    parser.add_argument(
-        "--env-file",
-        default=".env",
-        help="Optional KEY=VALUE file for non-secret credential selectors (default: .env; absent file is ignored)",
+    mark_file_argument(
+        parser.add_argument(
+            "--env-file",
+            default=".env",
+            help="Optional KEY=VALUE file for non-secret credential selectors (default: .env; absent file is ignored)",
+        )
     )
     parser.add_argument("--timeout", type=float, default=20.0, help="GitHub request timeout in seconds")
     cache_mode = parser.add_mutually_exclusive_group()
@@ -45,7 +48,7 @@ def add_credential_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def add_output(parser: argparse.ArgumentParser, help: str) -> None:
-    parser.add_argument("--output", help=help)
+    mark_file_argument(parser.add_argument("--output", help=help))
 
 
 def configure_status(parser: argparse.ArgumentParser) -> None:
@@ -86,12 +89,16 @@ def configure_diff(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("environment_a", help="First environment to compare")
     parser.add_argument("environment_b", help="Second environment to compare")
     parser.add_argument("--format", choices=("text", "markdown", "json"), default="text", help="Output format")
-    parser.add_argument("--output", help="Write the comparison to this file instead of stdout")
+    mark_file_argument(
+        parser.add_argument("--output", help="Write the comparison to this file instead of stdout")
+    )
     parser.add_argument("--no-auth", action="store_true", help="Force unauthenticated GitHub access")
     parser.add_argument("--bws-secret-id", help="Bitwarden Secrets Manager UUID whose key is GITHUB_TOKEN")
     parser.add_argument("--bws-secret-id-keychain-service", help="macOS Keychain service containing the Bitwarden secret UUID (default: moc-env-github-token)")
     parser.add_argument("--bws-secret-id-keychain-account", help="macOS Keychain account for the Bitwarden secret UUID (default: current user)")
-    parser.add_argument("--env-file", default=".env", help="Optional KEY=VALUE file for non-secret credential selectors (default: .env; absent file is ignored)")
+    mark_file_argument(
+        parser.add_argument("--env-file", default=".env", help="Optional KEY=VALUE file for non-secret credential selectors (default: .env; absent file is ignored)")
+    )
     parser.add_argument("--timeout", type=float, default=20.0, help="GitHub request timeout in seconds")
     parser.add_argument(
         "--ref",

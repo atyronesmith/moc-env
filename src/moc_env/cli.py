@@ -14,7 +14,18 @@ from .chart_values import documentation_directory, load_chart_values_manual, ren
 from .chart_value_discovery import build_discovery_report, render_discovery_json, render_discovery_markdown, render_discovery_text
 from .credentials import CredentialError, CredentialResolver
 from .compare import compare_environment, compare_infra, compare_workload, desired_environment, render_comparison_json, render_comparison_markdown, render_comparison_text
-from .completion import COMMANDS, bash_completion_script, command_help_epilog, zsh_completion_script
+from .completion import (
+    COMMANDS,
+    FILE_COMPLETION,
+    argument_completion,
+    bash_completion_script,
+    command_help_epilog,
+    command_option_strings,
+    command_parser,
+    mark_file_argument,
+    option_action,
+    zsh_completion_script,
+)
 from .doc_catalog import DocumentCatalogError, load_catalog_sources, refresh_document_catalog, render_catalog_refresh_json, render_catalog_refresh_text
 from .environment_cache import read_environment_cache, write_environment_cache
 from .export import render_environment_export, render_infra_export, render_workload_export, workload_cluster_name
@@ -67,14 +78,14 @@ def _configure_document_values(parser: argparse.ArgumentParser) -> None:
 
 
 def _configure_refresh_doc_catalog(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--repository-root", default="../MOC", help="Directory containing local MOC repository clones (default: ../MOC)")
-    parser.add_argument("--cache-root", default=".cache/doc-catalog", help="Local documentation cache directory (default: .cache/doc-catalog)")
+    mark_file_argument(parser.add_argument("--repository-root", default="../MOC", help="Directory containing local MOC repository clones (default: ../MOC)"))
+    mark_file_argument(parser.add_argument("--cache-root", default=".cache/doc-catalog", help="Local documentation cache directory (default: .cache/doc-catalog)"))
     _add_report_arguments(parser, formats=("text", "json"), output_help="Write the refresh report to this file instead of stdout")
 
 
 def _configure_discover_values(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--repository-root", default="../MOC", help="Directory containing local MOC repository clones (default: ../MOC)")
-    parser.add_argument("--cache-root", default=".cache/doc-catalog", help="Local documentation cache directory (default: .cache/doc-catalog)")
+    mark_file_argument(parser.add_argument("--repository-root", default="../MOC", help="Directory containing local MOC repository clones (default: ../MOC)"))
+    mark_file_argument(parser.add_argument("--cache-root", default=".cache/doc-catalog", help="Local documentation cache directory (default: .cache/doc-catalog)"))
     _add_report_arguments(
         parser,
         formats=("markdown", "text", "json"),
@@ -104,12 +115,12 @@ def _configure_export_environment(parser: argparse.ArgumentParser) -> None:
 
 
 def _configure_validate(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("file", help="Path to a desired-state YAML file")
+    mark_file_argument(parser.add_argument("file", help="Path to a desired-state YAML file"))
     _add_report_arguments(parser, output_help="Write the validation report to this file instead of stdout")
 
 
 def _configure_check(parser: argparse.ArgumentParser, file_help: str, output_help: str = "Write the comparison report to this file instead of stdout") -> None:
-    parser.add_argument("file", help=file_help)
+    mark_file_argument(parser.add_argument("file", help=file_help))
     _add_report_arguments(
         parser,
         no_prs=True,
@@ -547,6 +558,57 @@ def _complete_environment(arguments: list[str]) -> int:
     return 0
 
 
+def _completion_command_parser(arguments: list[str], mode: str) -> tuple[argparse.ArgumentParser | None, int]:
+    command = arguments[1] if len(arguments) > 1 else ""
+    parser = command_parser(_build_parser(), command)
+    if parser is None:
+        print(f"moc-env: unknown completion command for {mode}: {command}", file=sys.stderr)
+        return None, 2
+    return parser, 0
+
+
+def _complete_options(arguments: list[str]) -> int:
+    parser, exit_code = _completion_command_parser(arguments, "__complete-options")
+    if parser is None:
+        return exit_code
+    prefix = arguments[2] if len(arguments) > 2 else ""
+    for option in command_option_strings(parser):
+        if option.startswith(prefix):
+            print(option)
+    return 0
+
+
+def _complete_option(arguments: list[str]) -> int:
+    parser, exit_code = _completion_command_parser(arguments, "__complete-option")
+    if parser is None:
+        return exit_code
+    option = arguments[2] if len(arguments) > 2 else ""
+    prefix = arguments[3] if len(arguments) > 3 else ""
+    action = option_action(parser, option)
+    if action is not None and argument_completion(action) == FILE_COMPLETION:
+        # The shell completes a filesystem path for this value.
+        return 4
+    if action is None or action.nargs == 0:
+        # The shell treats a non-zero status as "not an option value" and keeps
+        # completing positional arguments or files.
+        return 3
+    for choice in action.choices or ():
+        value = str(choice)
+        if value.startswith(prefix):
+            print(value)
+    return 0
+
+
+def _complete_positional(arguments: list[str]) -> int:
+    parser, exit_code = _completion_command_parser(arguments, "__complete-positional")
+    if parser is None:
+        return exit_code
+    positionals = [action for action in parser._actions if not action.option_strings]
+    if positionals and argument_completion(positionals[0]) == FILE_COMPLETION:
+        return 4
+    return 3
+
+
 def main(argv: list[str] | None = None, clock: Clock | None = None) -> int:
     from .github import run_clients
 
@@ -591,6 +653,12 @@ def _main(argv: list[str] | None = None, clock: Clock | None = None) -> int:
         return 0
     if arguments[0] == "__complete-environment":
         return _complete_environment(arguments)
+    if arguments[0] == "__complete-options":
+        return _complete_options(arguments)
+    if arguments[0] == "__complete-option":
+        return _complete_option(arguments)
+    if arguments[0] == "__complete-positional":
+        return _complete_positional(arguments)
     if arguments[0] in {"-h", "--help"}:
         print(_build_parser().format_help(), end="")
         return 0
