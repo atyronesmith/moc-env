@@ -1106,6 +1106,7 @@ def render_text(
             if pr_fix:
                 suffix += f" · {pr_fix}"
             lines.extend(_wrap(f"{number}. [{repository}] {action}{suffix}", 2))
+            lines.extend(_suggestion_lines(check, markdown=False, details=details))
             guide = _guide(report, check["scope"], check.get("phase", 0))
             if guide:
                 lines.extend(_wrap(f"guide: {guide}", 7))
@@ -1489,6 +1490,34 @@ def _markdown_phase_table(report: dict[str, Any]) -> list[str]:
     return lines
 
 
+def _suggestion_lines(check: dict[str, Any], *, markdown: bool, details: bool = False) -> list[str]:
+    suggestion = check.get("suggestion")
+    indent = "   " if markdown else "       "
+    if not suggestion:
+        reason = check.get("suggestion_skipped_reason")
+        return [indent + reason] if reason else []
+    if not markdown and not details:
+        return [indent + "suggested code available: re-run with --details"]
+    header = (
+        f"Suggested code (modeled on {suggestion['reference']}; "
+        "not applied, no terraform plan run):"
+    )
+    url = github_url(suggestion['repository'], suggestion['path'], suggestion['commit'])
+    url += f"#L{suggestion['after_line']}"
+    path = f"[{suggestion['path']}]({url})" if markdown else suggestion['path']
+    source = (f"File: {suggestion['repository']} {path} @ {suggestion['commit'][:7]}, "
+              f"{suggestion['location']}")
+    if not markdown:
+        source += f" ({url})"
+    lines = ["", indent + header, indent + source]
+    if markdown:
+        lines.extend(["", indent + "```hcl"])
+    lines.extend(indent + line for line in suggestion['code'].splitlines())
+    if markdown:
+        lines.extend([indent + "```", ""])
+    return lines
+
+
 def _markdown_next_actions(report: dict[str, Any]) -> list[str]:
     checks = report["checks"]
     pass_states = {"declared_in_main", "requested", "pr_merged"}
@@ -1525,6 +1554,7 @@ def _markdown_next_actions(report: dict[str, Any]) -> list[str]:
         if pr_fix:
             suffix += f" · {pr_fix}"
         lines.append(f"{number}. **{repository}** — {path}: {action}{suffix}")
+        lines.extend(_suggestion_lines(check, markdown=True))
         guide = _guide(report, check["scope"], check.get("phase", 0))
         if guide:
             document, heading = guide.split(" → ", 1)

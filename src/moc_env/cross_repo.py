@@ -223,6 +223,7 @@ def _moc_aws_checks(
     client: GitHubClient,
     environment: Environment,
     progress: ProgressCallback | None,
+    hub_values_file: dict[str, Any] | None = None,
 ) -> list[CheckResult]:
     main_text, main_error = _read_file(client, MOC_AWS_REPOSITORY, MOC_AWS_MAIN, progress)
     blocks, block_error = _hcl_blocks(main_text, main_error)
@@ -263,7 +264,15 @@ def _moc_aws_checks(
             or cluster.replace("-", "_") in (_hcl_string(body, "policy_name") or "")
         ]
         if not cert_matches:
-            results.append(_result(cert_id, scope, MOC_AWS_REPOSITORY, MOC_AWS_CERT_MANAGER, "missing", "blocking", {"cluster": cluster}, None, f"No cert-manager policy entry names {cluster}."))
+            expected_policy = {"cluster": cluster}
+            if scope == "workload":
+                domain = (hub_values_file or {}).get("hcpExternalDomain")
+                expected_policy.update({
+                    "zone_name": domain,
+                    "cluster_subdomain": f"{cluster}.{domain}" if domain else None,
+                    "policy_name": f"cert-manager-{cluster}",
+                })
+            results.append(_result(cert_id, scope, MOC_AWS_REPOSITORY, MOC_AWS_CERT_MANAGER, "missing", "blocking", expected_policy, None, f"No cert-manager policy entry names {cluster}."))
         else:
             name, body = cert_matches[0]
             results.append(_result(cert_id, scope, MOC_AWS_REPOSITORY, MOC_AWS_CERT_MANAGER, "declared_in_main", "info", {"cluster": cluster}, name, f"The cert-manager policy entry {name} covers {cluster}.", evidence={"block": body}))
@@ -662,7 +671,6 @@ def cross_repository_checks(
     results: list[CheckResult] = [ _realm_check(client, environment.infra_cluster, "hub", progress) ]
     for workload in environment.workload_clusters or ():
         results.append(_realm_check(client, workload, "workload", progress))
-    results.extend(_moc_aws_checks(client, environment, progress))
     hub_values = infra.hub_variables.values.value
     if not isinstance(hub_values, dict):
         hub_values = {}
@@ -677,5 +685,6 @@ def cross_repository_checks(
             hub_values_file = parsed if isinstance(parsed, dict) else None
         except yaml.YAMLError:
             hub_values_file = None
+    results.extend(_moc_aws_checks(client, environment, progress, hub_values_file))
     results.extend(_workload_value_checks(client, environment, infra, apps, hub_values, hub_values_file, progress))
     return results

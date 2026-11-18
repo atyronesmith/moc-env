@@ -38,6 +38,7 @@ from .observed import (
 )
 from .phases import annotate_and_sort_checks
 from .registry import DEFAULT_REGISTRY_PATH, EnvironmentRegistry
+from .suggestions import attach_suggestions
 
 ORG = "CCI-MOC"
 ProgressCallback = Callable[[str, str, str, str], None]
@@ -307,6 +308,12 @@ class StatusChecker:
                 pulls,
                 observation=observation,
             )
+        attach_suggestions(
+            self.client, environment, checks,
+            lambda client: cross_repository_checks(
+                client, environment, observation.infra, observation.apps
+            ),
+        )
         return StatusReport(
             environment=environment,
             checks=checks,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+import subprocess
 from pathlib import Path
 
 
@@ -22,11 +23,14 @@ class SampleReportTest(unittest.TestCase):
                 )
 
     def test_reports_contains_no_stale_synthetic_environment(self) -> None:
-        reports = ROOT / "reports"
+        # Live reports are intentionally ignored local output, not synthetic
+        # samples. Only tracked files can accidentally ship a stale sample.
+        tracked = subprocess.run(
+            ["git", "ls-files", "reports"], cwd=ROOT, check=True,
+            text=True, capture_output=True,
+        ).stdout.splitlines()
         stale = [
-            path
-            for path in reports.iterdir()
-            if path.is_file() and path.name.startswith("bu-ist-demo")
+            path for path in tracked if Path(path).name.startswith("bu-ist-demo")
         ]
         self.assertEqual(stale, [])
 
