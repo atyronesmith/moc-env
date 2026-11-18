@@ -174,12 +174,20 @@ class GitHubClient:
                 cached = self.response_cache.read(url)
                 if cached is not None:
                     self.cache_hits += 1
-                    return json.loads(cached["body"]), headers
+                    return (
+                        json.loads(cached["body"]),
+                        self._headers_with_cached_link(headers, cached),
+                    )
                 raise GitHubError(f"GitHub returned 304 without a usable cached response for {url}")
             data = json.loads(body)
             response_etag = headers.get("ETag")
             if response_etag:
-                self._store_response(url, response_etag, body)
+                self._store_response(
+                    url,
+                    response_etag,
+                    body,
+                    self._next_link(headers),
+                )
             return data, headers
         except HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace")
@@ -189,7 +197,10 @@ class GitHubClient:
                 cached = self.response_cache.read(url)
                 if cached is not None:
                     self.cache_hits += 1
-                    return json.loads(cached["body"]), exc.headers
+                    return (
+                        json.loads(cached["body"]),
+                        self._headers_with_cached_link(exc.headers, cached),
+                    )
                 raise GitHubError(
                     f"GitHub returned 304 without a usable cached response for {url}"
                 ) from exc
@@ -302,7 +313,7 @@ class GitHubClient:
             data = json.loads(cached["body"])
             self.cache_hits += 1
             self._mark_unrevalidated(url, cached)
-            response = (data, None)
+            response = (data, self._cached_headers(cached))
             self._responses[url] = response
             return response
 
@@ -314,16 +325,56 @@ class GitHubClient:
         ):
             self.cache_hits += 1
             self._mark_unrevalidated(url, cached)
-            response = (json.loads(cached["body"]), None)
+            response = (
+                json.loads(cached["body"]),
+                self._cached_headers(cached),
+            )
             self._responses[url] = response
             return response
         response = self._request(url, cached["etag"] if cached else None)
         self._responses[url] = response
         return response
 
-    def _store_response(self, url: str, etag: str, body: str) -> None:
+    @staticmethod
+    def _next_link(headers: Any) -> str | None:
+        link = (headers or {}).get("Link", "")
+        for part in link.split(","):
+            fields = part.split(";", 1)
+            if len(fields) == 2 and 'rel="next"' in fields[1]:
+                return fields[0].strip().strip("<>")
+        return None
+
+    @staticmethod
+    def _cached_headers(cached: dict[str, Any]) -> dict[str, str]:
+        next_url = cached.get("next")
+        return (
+            {"Link": f'<{next_url}>; rel="next"'}
+            if next_url
+            else {}
+        )
+
+    @staticmethod
+    def _headers_with_cached_link(
+        headers: Any, cached: dict[str, Any]
+    ) -> Any:
+        if headers is not None and headers.get("Link"):
+            return headers
+        next_url = cached.get("next")
+        if not next_url:
+            return headers
+        merged = dict(headers.items()) if headers is not None else {}
+        merged["Link"] = f'<{next_url}>; rel="next"'
+        return merged
+
+    def _store_response(
+        self,
+        url: str,
+        etag: str,
+        body: str,
+        next_url: str | None = None,
+    ) -> None:
         try:
-            self.response_cache.write(url, etag, body)
+            self.response_cache.write(url, etag, body, next_url)
         except OSError:
             # A read-only or unwritable cache must not prevent a read-only report.
             pass
@@ -341,14 +392,7 @@ class GitHubClient:
                 raise GitHubError(f"Expected a GitHub list response from {url}")
             yield from data
 
-            next_url = None
-            link = (headers or {}).get("Link", "")
-            for part in link.split(","):
-                fields = part.split(";", 1)
-                if len(fields) == 2 and 'rel="next"' in fields[1]:
-                    next_url = fields[0].strip().strip("<>")
-                    break
-            url = next_url
+            url = self._next_link(headers)
 
     def get_tree(self, repository: str, ref: str = "main") -> dict[str, dict[str, Any]]:
         ref = self.refs.get(repository, ref)

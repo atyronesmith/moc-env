@@ -76,10 +76,12 @@ class GitHubClientTest(unittest.TestCase):
         self.assertIn("Set GITHUB_TOKEN or run gh auth login.", message)
 
     @staticmethod
-    def _response(body: dict, etag: str | None = None):
+    def _response(body: dict, etag: str | None = None, link: str | None = None):
         headers = Message()
         if etag:
             headers["ETag"] = etag
+        if link:
+            headers["Link"] = link
 
         class Response:
             def __init__(self) -> None:
@@ -145,6 +147,119 @@ class GitHubClientTest(unittest.TestCase):
             ):
                 offline_client.get_json(missing_url)
             request.assert_not_called()
+
+    def test_offline_list_follows_cached_next_page(self) -> None:
+        path = "/items"
+        first = "https://api.github.com/items?per_page=1"
+        second = "https://api.github.com/items?per_page=1&page=2"
+        with patch(
+            "moc_env.github.urlopen",
+            side_effect=[
+                self._response([{"id": 1}], '"etag-1"', f'<{second}>; rel="next"'),
+                self._response([{"id": 2}], '"etag-2"'),
+            ],
+        ):
+            online = list(
+                GitHubClient().list(path, {"per_page": "1"})
+            )
+        self.assertEqual(online, [{"id": 1}, {"id": 2}])
+
+        with patch("moc_env.github.urlopen") as request:
+            offline = list(
+                GitHubClient(offline=True).list(path, {"per_page": "1"})
+            )
+        request.assert_not_called()
+        self.assertEqual(offline, online)
+        self.assertIn(first, github_response_cache_path().read_text(encoding="utf-8"))
+
+    def test_offline_list_fails_when_cached_next_page_is_missing(self) -> None:
+        path = "/items"
+        second = "https://api.github.com/items?per_page=1&page=2"
+        with patch(
+            "moc_env.github.urlopen",
+            side_effect=[
+                self._response([{"id": 1}], '"etag-1"', f'<{second}>; rel="next"'),
+                self._response([{"id": 2}], '"etag-2"'),
+            ],
+        ):
+            list(GitHubClient().list(path, {"per_page": "1"}))
+
+        cache_path = github_response_cache_path()
+        document = json.loads(cache_path.read_text(encoding="utf-8"))
+        del document["responses"][second]
+        cache_path.write_text(json.dumps(document), encoding="utf-8")
+
+        with self.assertRaisesRegex(
+            GitHubError,
+            "No cached GitHub response is available",
+        ):
+            list(GitHubClient(offline=True).list(path, {"per_page": "1"}))
+
+    def test_304_without_link_follows_cached_next_page(self) -> None:
+        path = "/items"
+        first = "https://api.github.com/items?per_page=1"
+        second = "https://api.github.com/items?per_page=1&page=2"
+        with patch(
+            "moc_env.github.urlopen",
+            side_effect=[
+                self._response([{"id": 1}], '"etag-1"', f'<{second}>; rel="next"'),
+                self._response([{"id": 2}], '"etag-2"'),
+            ],
+        ):
+            list(GitHubClient().list(path, {"per_page": "1"}))
+
+        errors = [
+            HTTPError(url, 304, "not modified", Message(), io.BytesIO(b""))
+            for url in (first, second)
+        ]
+        with patch("moc_env.github.urlopen", side_effect=errors):
+            items = list(GitHubClient().list(path, {"per_page": "1"}))
+        self.assertEqual(items, [{"id": 1}, {"id": 2}])
+
+    def test_quota_exhausted_cached_list_follows_next_page(self) -> None:
+        path = "/items"
+        second = "https://api.github.com/items?per_page=1&page=2"
+        with patch(
+            "moc_env.github.urlopen",
+            side_effect=[
+                self._response([{"id": 1}], '"etag-1"', f'<{second}>; rel="next"'),
+                self._response([{"id": 2}], '"etag-2"'),
+            ],
+        ):
+            list(GitHubClient().list(path, {"per_page": "1"}))
+
+        client = GitHubClient()
+        client.rate_limit_remaining = 0
+        with patch("moc_env.github.urlopen") as request:
+            items = list(client.list(path, {"per_page": "1"}))
+        request.assert_not_called()
+        self.assertEqual(items, [{"id": 1}, {"id": 2}])
+
+    def test_old_cache_version_is_ignored(self) -> None:
+        url = "https://api.github.com/example"
+        cache_path = github_response_cache_path()
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "responses": {
+                        url: {
+                            "etag": '"etag-1"',
+                            "body": '{"value": "old"}',
+                            "fetched_at": "2026-11-18T00:00:00Z",
+                        }
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with self.assertRaisesRegex(
+            GitHubError,
+            "No cached GitHub response is available",
+        ):
+            GitHubClient(offline=True).get_json(url)
 
     def test_refresh_ignores_disk_cache(self) -> None:
         url = "https://api.github.com/example"

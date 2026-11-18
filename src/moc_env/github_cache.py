@@ -12,7 +12,7 @@ from typing import Any
 from .environment_cache import environment_cache_directory
 
 
-CACHE_VERSION = 1
+CACHE_VERSION = 2
 CACHE_FILENAME = "github-responses.json"
 
 
@@ -37,17 +37,28 @@ class GitHubResponseCache:
             or not isinstance(entry.get("body"), str)
         ):
             return None
+        next_url = entry.get("next")
+        if next_url is not None and not isinstance(next_url, str):
+            return None
         return {
             "etag": entry["etag"],
             "body": entry["body"],
+            "next": next_url,
             "fetched_at": entry.get("fetched_at", "unknown"),
         }
 
-    def write(self, url: str, etag: str, body: str) -> None:
+    def write(
+        self,
+        url: str,
+        etag: str,
+        body: str,
+        next_url: str | None = None,
+    ) -> None:
         document = self._read_document() or {}
         document[url] = {
             "etag": etag,
             "body": body,
+            "next": next_url,
             "fetched_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         }
         self.path.parent.mkdir(parents=True, exist_ok=True)

@@ -8,7 +8,11 @@ from types import SimpleNamespace
 import yaml
 
 from moc_env.checks import StatusChecker
-from moc_env.cross_repo import _dns_records_check, _workload_value_checks
+from moc_env.cross_repo import (
+    _dns_records_check,
+    _moc_aws_checks,
+    _workload_value_checks,
+)
 from moc_env.github import GitHubError
 from moc_env.model import Environment
 from moc_env.observed import parse_hardware_resource_classes
@@ -121,6 +125,17 @@ api.infra.oac.ocp.massopen.cloud. 300 IN A 10.20.9.11
 api-int.infra.oac.ocp.massopen.cloud. 300 IN A 10.20.9.11
 *.apps.infra.oac.ocp.massopen.cloud. 300 IN A 10.20.9.12
 """
+        return super().get_file(repository, path, ref)
+
+
+class CertPolicyClient(CrossRepoFakeGitHubClient):
+    def __init__(self, policies: str) -> None:
+        super().__init__()
+        self.policies = policies
+
+    def get_file(self, repository: str, path: str, ref: str = "main") -> str:
+        if repository == "CCI-MOC/moc-aws" and path == "cert-manager-policies.tf":
+            return self.policies
         return super().get_file(repository, path, ref)
 
 
@@ -335,20 +350,119 @@ class CrossRepositoryChecksTest(unittest.TestCase):
             "declared_in_main",
         )
 
-    def test_unmatched_vlan_checks_only_outside_hub_network(self) -> None:
+    def ingress_state(self, client) -> dict:
+        return self.check(self.report(client), "workload.ingress_address_network")
+
+    def workload_values_ingress_client(self, pool_marker: str | None) -> Pr246Client:
         client = Pr246Client()
-        client.files[client.VLAN_PATH] = "vlans:\n  - name: OAC-PRODUCTION-WORKLOAD0\n    subnet4: 10.20.12.0/23\n"
-        check = self.check(self.report(client), "workload.ingress_address_network")
+        client.files[client.VLAN_PATH] = (
+            "vlans:\n  - name: OAC-PRODUCTION-WORKLOAD0\n"
+            "    subnet4: 10.20.12.0/23\n"
+        )
+        values = yaml.safe_load(client.files[client.WORKLOAD_PATH])
+        if pool_marker is None:
+            values["ingress"].pop("poolAddress", None)
+        else:
+            values["ingress"]["poolAddress"] = pool_marker
+        client.files[client.WORKLOAD_PATH] = yaml.safe_dump(values)
+        return client
+
+    def test_unmatched_vlan_with_missing_pool_is_blocking_missing(self) -> None:
+        check = self.ingress_state(self.workload_values_ingress_client(None))
+        self.assertEqual(check["state"], "missing")
+        self.assertEqual(check["severity"], "blocking")
+
+    def test_unmatched_vlan_with_malformed_pool_is_blocking_mismatch(self) -> None:
+        check = self.ingress_state(
+            self.workload_values_ingress_client("not-an-ip")
+        )
+        self.assertEqual(check["state"], "value_mismatch")
+        self.assertEqual(check["severity"], "blocking")
+
+    def test_unmatched_vlan_with_valid_pool_is_unknown(self) -> None:
+        check = self.ingress_state(
+            self.workload_values_ingress_client("10.20.28.10/32")
+        )
+        self.assertEqual(check["state"], "unknown")
+        self.assertIn("No VLAN matched bu-ist-demo-workload0", check["reason"])
+        self.assertIn("could not be checked", check["reason"])
+
+    def test_matching_vlan_with_address_inside_subnet_passes(self) -> None:
+        client = Pr246Client()
+        values = yaml.safe_load(client.files[client.WORKLOAD_PATH])
+        values["ingress"]["poolAddress"] = "10.20.28.10/32"
+        client.files[client.WORKLOAD_PATH] = yaml.safe_dump(values)
+        check = self.ingress_state(client)
         self.assertEqual(check["state"], "declared_in_main")
-        self.assertIsNone(check["expected"]["vlan_subnet"])
-        self.assertIn("No VLAN matches", check["reason"])
-        client.files[client.WORKLOAD_PATH] = client.files[client.WORKLOAD_PATH].replace(
-            "10.20.7.10/32", "10.20.26.10/32"
+        self.assertEqual(check["expected"]["vlan_subnet"], "10.20.28.0/23")
+
+    def test_matching_vlan_with_missing_pool_is_blocking_missing(self) -> None:
+        client = Pr246Client()
+        values = yaml.safe_load(client.files[client.WORKLOAD_PATH])
+        values["ingress"].pop("poolAddress", None)
+        client.files[client.WORKLOAD_PATH] = yaml.safe_dump(values)
+        check = self.ingress_state(client)
+        self.assertEqual(check["state"], "missing")
+        self.assertEqual(check["severity"], "blocking")
+
+    def cert_check(
+        self, cluster: str, policies: str, *, workload: bool = False
+    ) -> dict:
+        if workload:
+            environment = Environment(
+                name="test", workload_clusters=(cluster,)
+            )
+            check_id = "workload.moc_aws_cert_manager_policy"
+        else:
+            environment = Environment(name=cluster)
+            check_id = "hub.moc_aws_cert_manager_policy"
+        results = _moc_aws_checks(
+            CertPolicyClient(policies),
+            environment,
+            None,
         )
-        self.assertEqual(
-            self.check(self.report(client), "workload.ingress_address_network")["state"],
-            "value_mismatch",
+        return next(
+            result.to_dict()
+            for result in results
+            if result.id == check_id and result.cluster == cluster
         )
+
+    @staticmethod
+    def policies(cluster_subdomain: str, policy_name: str) -> str:
+        return f"""
+locals {{
+  cert_manager_policies = {{
+    policy = {{
+      cluster_subdomain = "{cluster_subdomain}"
+      policy_name = "{policy_name}"
+    }}
+  }}
+}}
+"""
+
+    def test_cert_policy_rejects_longer_cluster_name(self) -> None:
+        check = self.cert_check(
+            "foo-infra",
+            self.policies("foo-infra2.example", "cert-manager-foo-infra2"),
+        )
+        self.assertEqual(check["state"], "missing")
+
+    def test_cert_policy_rejects_longer_prefix_cluster_name(self) -> None:
+        check = self.cert_check(
+            "foo",
+            self.policies("foo2.example", "cert-manager-foo2"),
+            workload=True,
+        )
+        self.assertEqual(check["state"], "missing")
+
+    def test_cert_policy_accepts_bounded_cluster_names(self) -> None:
+        for policies in (
+            self.policies("foo-infra.example", "cert-manager-foo-infra"),
+            self.policies("foo-infra.example", "cert-manager-foo_infra"),
+        ):
+            with self.subTest(policies=policies):
+                check = self.cert_check("foo-infra", policies)
+                self.assertEqual(check["state"], "declared_in_main")
 
     def test_dns_uses_hosted_defaults_and_hostname_boundary(self) -> None:
         client = Pr246Client()

@@ -86,6 +86,17 @@ def _hcl_strings(body: str, key: str) -> list[str]:
     return re.findall(r'"([^"]+)"', match.group("values")) if match else []
 
 
+def _field_names_cluster(value: Any, cluster: str) -> bool:
+    """Match a whole cluster token, not a substring of a longer name."""
+
+    if not isinstance(value, str) or not value:
+        return False
+    return re.search(
+        rf"(?<![A-Za-z0-9]){re.escape(cluster)}(?![A-Za-z0-9])",
+        value,
+    ) is not None
+
+
 def _hcl_blocks(text: str | None, error: str | None) -> tuple[list[tuple[str, str]], str | None]:
     if text is None:
         return [], error
@@ -274,9 +285,14 @@ def _moc_aws_checks(
         cert_matches = [
             (name, body)
             for name, body in cert_blocks
-            if cluster in (_hcl_string(body, "cluster_subdomain") or "")
-            or cluster in (_hcl_string(body, "policy_name") or "")
-            or cluster.replace("-", "_") in (_hcl_string(body, "policy_name") or "")
+            if _field_names_cluster(
+                _hcl_string(body, "cluster_subdomain"), cluster
+            )
+            or _field_names_cluster(_hcl_string(body, "policy_name"), cluster)
+            or _field_names_cluster(
+                _hcl_string(body, "policy_name"),
+                cluster.replace("-", "_"),
+            )
         ]
         if not cert_matches:
             expected_policy = {"cluster": cluster}
@@ -612,6 +628,19 @@ def _address_in(value: Any, network: str) -> bool:
         return False
 
 
+def _is_address_or_interface(value: Any) -> bool:
+    if not isinstance(value, str) or not value:
+        return False
+    try:
+        if "/" in value:
+            ipaddress.ip_interface(value)
+        else:
+            ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    return True
+
+
 def _workload_vlan(vlans: list[Any], workload: str) -> dict[str, Any] | None:
     """Match a full workload name, allowing documented network-name aliases."""
 
@@ -700,17 +729,18 @@ def _workload_value_checks(
             pool = _nested(values, ("ingress", "poolAddress"))
             vlan = _workload_vlan(vlans, workload)
             expected_pool = {"poolAddress": pool, "machine_network": machine_network, "vlan_subnet": vlan.get("subnet4") if vlan else None}
-            valid = not _address_in(pool, machine_network) and (vlan is None or _address_in(pool, vlan.get("subnet4")))
-            vlan_reason = (
-                f" No VLAN matches {workload}; only the address being outside "
-                "the hub machine network was checked."
-                if vlan is None
-                else f" Selected VLAN {vlan['name']} ({vlan.get('subnet4')})."
-            )
-            if valid:
-                results.append(_result("workload.ingress_address_network", "workload", workload, "CCI-MOC/oac-apps", path, "declared_in_main", "info", expected_pool, pool, "The ingress pool address is on the expected network." + vlan_reason))
+            if pool is None:
+                results.append(_result("workload.ingress_address_network", "workload", workload, "CCI-MOC/oac-apps", path, "missing", "blocking", expected_pool, None, "The ingress pool address is absent from ingress.poolAddress."))
+            elif not _is_address_or_interface(pool):
+                results.append(_result("workload.ingress_address_network", "workload", workload, "CCI-MOC/oac-apps", path, "value_mismatch", "blocking", expected_pool, pool, f"The ingress pool address {pool!r} is not a valid IP address or interface."))
+            elif vlan is None:
+                results.append(_unknown("workload.ingress_address_network", "workload", workload, "CCI-MOC/oac-apps", path, f"No VLAN matched {workload}, so ingress pool address membership could not be checked.", expected_pool))
             else:
-                results.append(_result("workload.ingress_address_network", "workload", workload, "CCI-MOC/oac-apps", path, "value_mismatch", "blocking", expected_pool, pool, "The ingress pool address is on the wrong network." + vlan_reason))
+                vlan_reason = f" Selected VLAN {vlan['name']} ({vlan.get('subnet4')})."
+                if not _address_in(pool, machine_network) and _address_in(pool, vlan.get("subnet4")):
+                    results.append(_result("workload.ingress_address_network", "workload", workload, "CCI-MOC/oac-apps", path, "declared_in_main", "info", expected_pool, pool, "The ingress pool address is on the expected network." + vlan_reason))
+                else:
+                    results.append(_result("workload.ingress_address_network", "workload", workload, "CCI-MOC/oac-apps", path, "value_mismatch", "blocking", expected_pool, pool, "The ingress pool address is on the wrong network." + vlan_reason))
 
         hostnames = [record.get("hostname") for record in (_nested(values, ("dns", "records")) or []) if isinstance(record, dict)]
         external_domain = (hub_values_file or {}).get("hcpExternalDomain")
