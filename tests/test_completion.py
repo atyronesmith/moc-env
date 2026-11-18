@@ -86,6 +86,59 @@ class CompletionTest(unittest.TestCase):
         self.assertEqual(stdout, "bu-ist-demo\n")
         self.assertEqual(stderr, "GitHub API: 0 requests, 0 counted against quota, 0 from cache\n")
 
+    def test_hidden_completion_lists_command_options(self) -> None:
+        exit_code, stdout, _ = self.run_cli(["__complete-options", "status", "--"])
+
+        self.assertEqual(exit_code, 0)
+        options = stdout.splitlines()
+        for option in (
+            "--format",
+            "--no-prs",
+            "--ref",
+            "--details",
+            "--fail-on",
+            "--offline",
+            "--refresh",
+            "--output",
+        ):
+            self.assertIn(option, options)
+        self.assertNotIn("--workload", options)
+
+    def test_hidden_completion_lists_option_choices(self) -> None:
+        exit_code, stdout, _ = self.run_cli(
+            ["__complete-option", "status", "--format", "m"]
+        )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stdout, "markdown\n")
+
+        exit_code, stdout, _ = self.run_cli(
+            ["__complete-option", "status", "--no-prs", ""]
+        )
+
+        self.assertEqual(exit_code, 3)
+        self.assertEqual(stdout, "")
+
+        exit_code, stdout, _ = self.run_cli(
+            ["__complete-option", "status", "--output", "reports/"]
+        )
+
+        self.assertEqual(exit_code, 4)
+        self.assertEqual(stdout, "")
+
+    def test_hidden_completion_identifies_file_positionals(self) -> None:
+        exit_code, _, _ = self.run_cli(["__complete-positional", "validate"])
+        self.assertEqual(exit_code, 4)
+
+        exit_code, _, _ = self.run_cli(["__complete-positional", "list"])
+        self.assertEqual(exit_code, 3)
+
+    def test_hidden_completion_rejects_an_unknown_command(self) -> None:
+        exit_code, _, stderr = self.run_cli(["__complete-options", "nope", "--"])
+
+        self.assertEqual(exit_code, 2)
+        self.assertIn("unknown completion command", stderr)
+
     def test_completion_scripts_are_printed(self) -> None:
         for shell in ("bash", "zsh"):
             with self.subTest(shell=shell):
@@ -98,6 +151,9 @@ class CompletionTest(unittest.TestCase):
                 self.assertIn("status-workload", stdout)
                 self.assertIn("uv run moc-env", stdout)
                 self.assertIn("MOC_ENV_COMPLETION_COMMAND", stdout)
+                self.assertIn("__complete-options", stdout)
+                self.assertIn("__complete-option", stdout)
+                self.assertIn("__complete-positional", stdout)
                 if shell == "bash":
                     self.assertIn("complete -o default", stdout)
                 else:
@@ -119,6 +175,8 @@ class CompletionTest(unittest.TestCase):
                 for words, cword, expected in (
                     ("moc-env status-", 1, "status-hub\nstatus-workload\n"),
                     ("moc-env status-hub bu-ist-", 2, "bu-ist-demo\n"),
+                    ("moc-env status --for", 2, "--format\n"),
+                    ("moc-env status --format ", 3, "text\njson\nmarkdown\n"),
                 ):
                     with self.subTest(words=words):
                         completion = subprocess.run(
@@ -130,6 +188,39 @@ class CompletionTest(unittest.TestCase):
                                 + '_moc_env_complete; printf \'%s\\n\' "${COMPREPLY[@]}"',
                             ],
                             cwd=os.getcwd(),
+                            text=True,
+                            capture_output=True,
+                            check=True,
+                        )
+                        self.assertEqual(completion.stdout, expected)
+
+    def test_bash_completion_offers_files_for_file_arguments(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            for name in ("report.md", "doc.yaml"):
+                with open(os.path.join(temporary_directory, name), "w", encoding="utf-8"):
+                    pass
+            with patch.dict(
+                os.environ,
+                {
+                    "MOC_ENV_CACHE_DIR": temporary_directory,
+                    "MOC_ENV_COMPLETION_COMMAND": f"{sys.executable} -m moc_env.cli",
+                },
+            ):
+                script = self.run_cli(["completion", "bash"])[1]
+                for words, cword, expected in (
+                    ("moc-env status --output rep", 3, "report.md\n"),
+                    ("moc-env validate doc", 2, "doc.yaml\n"),
+                ):
+                    with self.subTest(words=words):
+                        completion = subprocess.run(
+                            [
+                                "bash",
+                                "-c",
+                                script
+                                + f'\nCOMP_WORDS=({words}); COMP_CWORD={cword}; '
+                                + '_moc_env_complete; printf \'%s\\n\' "${COMPREPLY[@]}"',
+                            ],
+                            cwd=temporary_directory,
                             text=True,
                             capture_output=True,
                             check=True,
