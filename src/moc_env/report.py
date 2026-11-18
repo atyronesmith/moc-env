@@ -1084,8 +1084,14 @@ def _detail_section(check: dict[str, Any], ascii_mode: bool) -> list[str]:
             2,
         ),
         f"  Source: {check['repository']} · {check['path']} @ {check['ref']} ({short_sha})",
-        f"  {'Field':<{field_width}}  {'Expected':<{expected_width}}  Observed",
     ]
+    if check.get("verifies"):
+        lines.extend(_wrap(f"Verifies: {check['verifies']}", 2))
+    if check.get("not_verified"):
+        lines.extend(_wrap(f"Not verified: {check['not_verified']}", 2))
+    lines.append(
+        f"  {'Field':<{field_width}}  {'Expected':<{expected_width}}  Observed"
+    )
     if check.get("id") == "pull_requests":
         pulls = (check.get("evidence") or {}).get("pull_requests", [])
         by_repository: dict[str, int] = {}
@@ -1451,28 +1457,24 @@ def _check_markdown_details(
         f"Source: {check['repository']} · {path_text} @ {check['ref']} ({short_sha})",
         "",
     ]
+    if check.get("verifies"):
+        lines.append(f"Verifies: {check['verifies']}")
+    if check.get("not_verified"):
+        lines.append(f"Not verified: {check['not_verified']}")
+    if check.get("verifies") or check.get("not_verified"):
+        lines.append("")
     if check_rule:
         lines.extend([f"Status rule: {check_rule}", ""])
     field_rows = _expanded_field_rows(_detail_field_rows(check, report))
-    if check["state"] in {"declared_in_main", "requested", "pr_merged"}:
-        rows = [
-            [
-                field if isinstance(field, MarkdownCell) else _markdown_human_value(field),
-                _markdown_human_value(observed),
-            ]
-            for field, _expected, observed in field_rows
+    rows = [
+        [
+            field if isinstance(field, MarkdownCell) else _markdown_human_value(field),
+            _markdown_human_value(expected),
+            _markdown_human_value(observed),
         ]
-        lines.extend(_markdown_table(["Field", "Observed"], rows))
-    else:
-        rows = [
-            [
-                field if isinstance(field, MarkdownCell) else _markdown_human_value(field),
-                _markdown_human_value(expected),
-                _markdown_human_value(observed),
-            ]
-            for field, expected, observed in field_rows
-        ]
-        lines.extend(_markdown_table(["Field", "Expected", "Observed"], rows))
+        for field, expected, observed in field_rows
+    ]
+    lines.extend(_markdown_table(["Field", "Expected", "Observed"], rows))
     if check.get("id") == "hub.local_cluster_values":
         required = set(evidence.get("expected_paths") or [])
         found = set(evidence.get("paths") or [])

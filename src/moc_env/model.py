@@ -80,6 +80,8 @@ class CheckResult:
     expected: Any
     actual: Any
     reason: str
+    verifies: str | None = None
+    not_verified: str | None = None
     present: Any = None
     missing: Any = None
     evidence: dict[str, Any] = field(default_factory=dict)

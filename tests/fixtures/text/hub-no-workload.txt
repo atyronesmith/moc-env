@@ -33,7 +33,7 @@ NEXT
   not found; expected cluster/dizzy-infra/keycloak-oidc. (after 2)
        guide: docs/infra-cluster-deployment.md → Cluster Configuration
   4. [oac-apps] Create or complete the hub hosted-cluster defaults file at
-  hosted-clusters/dizzy-infra/values.yaml in CCI-MOC/oac-infra.
+  hosted-clusters/dizzy-infra/values.yaml in CCI-MOC/oac-apps.
   hosted-clusters/dizzy-infra/values.yaml is missing; expected present. (after 2)
        guide: docs/infra-cluster-deployment.md → Cluster Configuration
   5. [everpure-moc] Add or correct the hub realm in everpure-moc realms.yaml. name is not found;
@@ -62,7 +62,7 @@ NEXT
   8. [moc-aws] Add a cert-manager policy entry for the hub. policy entry is not found; expected
   covers dizzy-infra. (after 4)
        guide: docs/infra-cluster-deployment.md → Cluster Configuration
-  9. [oac-apps] Create or complete values/dizzy-infra/hcp-config.yaml in CCI-MOC/oac-infra for
+  9. [oac-apps] Create or complete values/dizzy-infra/hcp-config.yaml in CCI-MOC/oac-apps for
   hub-wide HCP and secret-selector values. values/dizzy-infra/hcp-config.yaml is missing;
   expected present. (after 4)
        guide: docs/infra-cluster-deployment.md → Cluster Configuration

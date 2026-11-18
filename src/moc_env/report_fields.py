@@ -38,8 +38,55 @@ def field_rows(check: dict[str, Any]) -> list[list[Any]]:
     if check_id.endswith(".inventory"):
         return [
             ["cluster_group", expected, actual_map.get("cluster_group")],
-            ["host_count", "at least 1", actual_map.get("host_count")],
+            ["host_count", "reported (not required)", actual_map.get("host_count")],
         ]
+    if check_id == "workload.component_values":
+        found = [str(path) for path in evidence.get("paths") or []]
+        scope = str(check.get("path") or "values/")
+        return [
+            [path, "exists in main", "present"] for path in found
+        ] + [[scope, "at least 1 file", f"{len(found)} file(s)"]]
+    if check_id.endswith(".moc_aws_oidc_cluster"):
+        return [
+            ["cluster_name", expected_map.get("cluster_name"), actual_map.get("cluster_name")],
+            [
+                "eso_writable_secret_prefixes",
+                "not constrained by this check",
+                actual_map.get("eso_writable_secret_prefixes") or "none listed",
+            ],
+        ]
+    if check_id == "workload.identity_provider":
+        explicit = "oauth.identityProviders" in actual_map
+        rows = [
+            [
+                "oauth.mocsso.enabled",
+                (
+                    "false or absent, with a non-empty "
+                    "oauth.identityProviders list"
+                    if explicit
+                    else True
+                ),
+                actual_map.get("oauth.mocsso.enabled"),
+            ]
+        ]
+        client_fields = evidence.get("client_fields")
+        if isinstance(client_fields, dict):
+            rows.extend(
+                [
+                    [f"moc-keycloak {name}", item.get("expected"), item.get("observed")]
+                    for name, item in client_fields.items()
+                    if isinstance(item, dict)
+                ]
+            )
+        elif "oauth.identityProviders" in actual_map:
+            rows.append(
+                [
+                    "oauth.identityProviders",
+                    "non-empty list when mocsso is disabled",
+                    actual_map.get("oauth.identityProviders"),
+                ]
+            )
+        return rows
     if check_id == "workload.api_address_network":
         return [["services.APIServer.ipAddress", f"inside {expected_map.get('machine_network')}", actual]]
     if check_id == "workload.ingress_address_network":
@@ -70,10 +117,19 @@ def field_rows(check: dict[str, Any]) -> list[list[Any]]:
             for item in actual or [] if isinstance(item, dict)
         ]
     if check_id == "workload.address_uniqueness":
-        return [
-            [address, "used by only one cluster", "; ".join(f"{cluster}: {field}" for cluster, field in uses)]
-            for address, uses in actual_map.items()
-        ]
+        rows = []
+        for item in evidence.get("address_rows") or []:
+            if not isinstance(item, dict):
+                continue
+            others = item.get("used_by_others") or []
+            rows.append(
+                [
+                    f"{item.get('field')} {item.get('address')}",
+                    "used by no other cluster",
+                    ", ".join(str(other) for other in others) or "none",
+                ]
+            )
+        return rows
     paths = evidence.get("expected_paths")
     if isinstance(paths, list) and paths:
         found = set(evidence.get("paths") or [])
