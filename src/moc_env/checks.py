@@ -11,6 +11,7 @@ import yaml
 
 from . import __version__
 
+from .check_descriptions import DescriptionContext, apply_descriptions
 from .github import GitHubClient, GitHubError, RateLimitError, github_url
 from .report_fields import field_rows, failing_field_rows, plain
 from .cross_repo import cross_repository_checks
@@ -84,10 +85,10 @@ _NEXT_ACTIONS = {
     ),
     "hub.hosted_cluster_defaults": (
         "Create or complete the hub hosted-cluster defaults file at "
-        "hosted-clusters/<hub>/values.yaml in CCI-MOC/oac-infra."
+        "hosted-clusters/<hub>/values.yaml in CCI-MOC/oac-apps."
     ),
     "hub.component_values": (
-        "Create or complete values/<hub>/hcp-config.yaml in CCI-MOC/oac-infra "
+        "Create or complete values/<hub>/hcp-config.yaml in CCI-MOC/oac-apps "
         "for hub-wide HCP and secret-selector values."
     ),
     "hub.local_cluster_values": (
@@ -290,6 +291,9 @@ class StatusChecker:
             checks = annotate_and_sort_checks(
                 self._rate_limited_checks(environment, path_scope)
             )
+            apply_descriptions(
+                checks, self._description_context(environment, None)
+            )
             self._apply_source_refs(checks)
             checks = self._apply_deferred(checks, environment)
             return StatusReport(
@@ -300,6 +304,9 @@ class StatusChecker:
                 rate_limited=True,
             )
         checks = annotate_and_sort_checks(checks)
+        apply_descriptions(
+            checks, self._description_context(environment, observation)
+        )
         self._apply_source_refs(checks)
         checks = self._apply_blocked_states(checks, environment)
         checks = self._apply_deferred(checks, environment)
@@ -709,6 +716,12 @@ class StatusChecker:
             ref = self.client.ref_for(check.repository)
             check.ref = ref
             check.reason = check.reason.replace("in main", f"in {ref}").replace("from main", f"from {ref}")
+            if check.verifies:
+                check.verifies = check.verifies.replace("in main", f"in {ref}")
+            if check.not_verified:
+                check.not_verified = check.not_verified.replace(
+                    "in main", f"in {ref}"
+                )
             if check.url and "/blob/" in check.url:
                 check.url = github_url(check.repository, check.path, ref)
             if check.source is not None:
@@ -873,6 +886,49 @@ class StatusChecker:
                         )
                     )
         return results
+
+    def _description_context(
+        self,
+        environment: Environment,
+        observation: Any = None,
+    ) -> DescriptionContext:
+        """Collect the values that check descriptions substitute."""
+
+        hub_values: dict[str, Any] = {}
+        hub_defaults: dict[str, Any] = {}
+        if observation is not None:
+            values = observation.infra.hub_variables.values.value
+            if isinstance(values, dict):
+                hub_values = values
+            files = getattr(observation.apps, "files", {}) or {}
+            try:
+                parsed = yaml.safe_load(
+                    files.get(
+                        f"hosted-clusters/{environment.infra_cluster}/values.yaml",
+                        "",
+                    )
+                )
+            except yaml.YAMLError:
+                parsed = None
+            if isinstance(parsed, dict):
+                hub_defaults = parsed
+
+        def text(value: Any) -> str | None:
+            return value if isinstance(value, str) and value else None
+
+        return DescriptionContext(
+            hub=environment.infra_cluster,
+            workload=environment.workload_cluster,
+            workloads=tuple(environment.workload_clusters or ()),
+            issue=environment.issue_number,
+            domain=environment.domain,
+            machine_network=text(hub_values.get("machine_network")),
+            base_domain=text(hub_defaults.get("baseDomain")),
+            hcp_external_domain=text(hub_defaults.get("hcpExternalDomain")),
+            required_components=self.registry.required_components(environment.name),
+            optional_components=self.registry.optional_components(environment.name),
+            keycloak_client=self.registry.keycloak_client_name(environment.name),
+        )
 
     def _metadata(self) -> ReportMetadata:
         generated_at = self.clock().astimezone(timezone.utc).isoformat().replace(
@@ -1310,7 +1366,10 @@ class StatusChecker:
         ]
         if observation.hub_variables.path_present.value and not missing_fields:
             state = "declared_in_main"
-            reason = "All required hub-image variables are present in main."
+            reason = (
+                "All six required hub-image variables are present in main; their "
+                "values are not validated."
+            )
         elif observation.hub_variables.path_present.value:
             state = "partial"
             reason = (
@@ -1781,18 +1840,57 @@ class StatusChecker:
             else:
                 state = "declared_in_main" if found else "missing"
 
+            scope_label = (
+                (prefix or "").rstrip("/")
+                or (exact or "").rsplit("/", 1)[0]
+                or (exact or "")
+            )
+            required_total = len(required_paths)
+            required_names = ", ".join(
+                path.rsplit("/", 1)[-1] for path in required_paths
+            )
+            required_verb = "exists" if required_total == 1 else "exist"
             if state == "declared_in_main":
-                reason = f"All expected files for {purpose} are present in main."
+                if required_paths:
+                    reason = (
+                        f"{len(required_found)} of {required_total} required "
+                        f"{'file' if required_total == 1 else 'files'} "
+                        f"{required_verb} in "
+                        f"main under {scope_label} ({required_names}). "
+                        "File contents are not read."
+                    )
+                else:
+                    found_verb = "file exists" if len(found) == 1 else "files exist"
+                    reason = (
+                        f"{len(found)} {found_verb} in main under {scope_label}; "
+                        "at least 1 is required. File contents are not read."
+                    )
                 missing = None
             elif state == "partial":
                 missing_paths = required_missing + optional_missing
                 reason = (
-                    f"Some files for {purpose} are present, but expected paths "
-                    "are missing: " + ", ".join(missing_paths) + "."
+                    f"{len(required_found)} of {required_total} required "
+                    f"{'file' if required_total == 1 else 'files'} "
+                    f"{required_verb} in "
+                    f"main under {scope_label}; missing: "
+                    + ", ".join(missing_paths)
+                    + ". File contents are not read."
                 )
                 missing = {"paths": missing_paths}
+            elif required_paths:
+                reason = (
+                    f"None of the {required_total} required "
+                    f"{'file' if required_total == 1 else 'files'} exist in main "
+                    f"under {scope_label}. Missing: "
+                    + ", ".join(expected_paths or [search_path])
+                    + ". File contents are not read."
+                )
+                missing = {"paths": expected_paths or [search_path]}
             else:
-                reason = f"No merged main paths were found for {purpose}."
+                reason = (
+                    f"No files exist in main under {scope_label}; at least 1 is "
+                    "required. File contents are not read."
+                )
                 missing = {"paths": expected_paths or [search_path]}
 
             severity = "info"
@@ -1805,7 +1903,7 @@ class StatusChecker:
             expected = (
                 {
                     "file_count": len(expected_paths),
-                    "scope": (exact or prefix or "").rstrip("/"),
+                    "scope": scope_label,
                 }
                 if expected_paths
                 else "At least one matching path"

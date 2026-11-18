@@ -242,7 +242,7 @@ def _realm_check(
     observed = {field: realm.get(field) for field in ("subnet_vlan", "subnet_prefix", "s3_endpoint")}
     if missing:
         return _result(check_id, scope, cluster, EVERPURE_REPOSITORY, EVERPURE_PATH, "partial", "blocking", expected, observed, f"The {cluster} realm is missing: {', '.join(missing)}.", {"fields": missing}, {"realm": realm})
-    return _result(check_id, scope, cluster, EVERPURE_REPOSITORY, EVERPURE_PATH, "declared_in_main", "info", expected, observed, f"The {cluster} Pure storage realm is complete.", evidence={"realm": observed})
+    return _result(check_id, scope, cluster, EVERPURE_REPOSITORY, EVERPURE_PATH, "declared_in_main", "info", expected, observed, f"The {cluster} Pure storage realm reports subnet_vlan, subnet_prefix and s3_endpoint.", evidence={"realm": observed})
 
 
 def _moc_aws_checks(
@@ -306,7 +306,7 @@ def _moc_aws_checks(
             results.append(_result(cert_id, scope, cluster, MOC_AWS_REPOSITORY, MOC_AWS_CERT_MANAGER, "missing", "blocking", expected_policy, None, f"No cert-manager policy entry names {cluster}."))
         else:
             name, body = cert_matches[0]
-            results.append(_result(cert_id, scope, cluster, MOC_AWS_REPOSITORY, MOC_AWS_CERT_MANAGER, "declared_in_main", "info", {"cluster": cluster}, name, f"The cert-manager policy entry {name} covers {cluster}.", evidence={"block": body}))
+            results.append(_result(cert_id, scope, cluster, MOC_AWS_REPOSITORY, MOC_AWS_CERT_MANAGER, "declared_in_main", "info", {"cluster": cluster}, name, f"The cert-manager policy entry {name} names {cluster} in policy_name or cluster_subdomain.", evidence={"block": body}))
 
     if environment.workload_clusters:
         prefix = f"cluster/{environment.infra_cluster}/hostedcluster/"
@@ -471,7 +471,7 @@ def _keycloak_workload_check(
     block = evaluation["block"]
     nonmatching = evaluation["nonmatching"]
     if block and not nonmatching:
-        return _result("workload.keycloak_oidc_client", "workload", workload, "CCI-MOC/moc-keycloak", "main.tf", "declared_in_main", "info", expected, observed, f"The Keycloak OIDC client for {workload} matches.")
+        return _result("workload.keycloak_oidc_client", "workload", workload, "CCI-MOC/moc-keycloak", "main.tf", "declared_in_main", "info", expected, observed, f"The Keycloak OIDC client for {workload} matches cluster_name, openshift_redirect_uri and client_secret_name.")
     state = "missing" if block is None else "value_mismatch"
     return _result("workload.keycloak_oidc_client", "workload", workload, "CCI-MOC/moc-keycloak", "main.tf", state, "blocking", expected, observed, f"The Keycloak OIDC client for {workload} is absent or mismatched.", {"fields": nonmatching}, {"block": block})
 
@@ -536,6 +536,7 @@ def _identity_provider_check(
             "oauth.mocsso.enabled is false or absent, but an explicit identity "
             "provider is configured in oauth.identityProviders, so the cluster "
             "has an identity provider.",
+            evidence={"identity_providers": identity_providers},
         )
     evaluation = _evaluate_keycloak_client(
         client, environment, workload, hub_values_file, progress
@@ -552,6 +553,13 @@ def _identity_provider_check(
         )
     matches = evaluation["matches"]
     expected = {"oauth.mocsso.enabled": True}
+    client_fields = {
+        name: {
+            "expected": value,
+            "observed": evaluation["observed"].get(name),
+        }
+        for name, value in evaluation["expected"].items()
+    }
     if enabled and matches:
         return _result(
             "workload.identity_provider",
@@ -563,7 +571,9 @@ def _identity_provider_check(
             "info",
             expected,
             {"oauth.mocsso.enabled": True, "keycloak_oidc_client": "matches"},
-            f"mocsso is enabled and the Keycloak OIDC client for {workload} matches.",
+            f"mocsso is enabled and the Keycloak OIDC client for {workload} matches "
+            "cluster_name, openshift_redirect_uri and client_secret_name.",
+            evidence={"client_fields": client_fields},
         )
     if enabled:
         state = "missing" if evaluation["block"] is None else "value_mismatch"
@@ -584,7 +594,10 @@ def _identity_provider_check(
             },
             f"mocsso is enabled but workload.keycloak_oidc_client reports the "
             f"Keycloak OIDC client for {workload} as absent or mismatched.",
-            evidence={"keycloak_oidc_client": "missing or mismatched"},
+            evidence={
+                "keycloak_oidc_client": "missing or mismatched",
+                "client_fields": client_fields,
+            },
         )
         return replace(
             result,
@@ -612,6 +625,7 @@ def _identity_provider_check(
         {"oauth.mocsso.enabled": False, "keycloak_oidc_client": client_state},
         "mocsso is disabled; the cluster has no identity provider.",
         {"oauth.mocsso.enabled": True},
+        evidence={"client_fields": client_fields},
         next_action=next_action,
     )
 
@@ -728,7 +742,12 @@ def _workload_value_checks(
         else:
             pool = _nested(values, ("ingress", "poolAddress"))
             vlan = _workload_vlan(vlans, workload)
-            expected_pool = {"poolAddress": pool, "machine_network": machine_network, "vlan_subnet": vlan.get("subnet4") if vlan else None}
+            expected_pool = {
+                "poolAddress": pool,
+                "machine_network": machine_network,
+                "vlan_name": vlan.get("name") if vlan else None,
+                "vlan_subnet": vlan.get("subnet4") if vlan else None,
+            }
             if pool is None:
                 results.append(_result("workload.ingress_address_network", "workload", workload, "CCI-MOC/oac-apps", path, "missing", "blocking", expected_pool, None, "The ingress pool address is absent from ingress.poolAddress."))
             elif not _is_address_or_interface(pool):
@@ -871,14 +890,46 @@ def _workload_value_checks(
         clusters = {cluster for cluster, _ in uses}
         if len(clusters) > 1 and any(cluster in current for cluster in clusters):
             duplicates[address] = uses
+    address_rows = []
+    for path, values in all_values.items():
+        cluster = path.split("/")[2]
+        if cluster not in current:
+            continue
+        own_fields = {
+            "services.APIServer.ipAddress": _nested(
+                values, ("services", "APIServer", "ipAddress")
+            ),
+            "ingress.poolAddress": _nested(values, ("ingress", "poolAddress")),
+            "services.APIServer.externalIpAddress": _nested(
+                values, ("services", "APIServer", "externalIpAddress")
+            ),
+            "ingress.externalIpAddress": _nested(
+                values, ("ingress", "externalIpAddress")
+            ),
+        }
+        for field, address in own_fields.items():
+            if address is None:
+                continue
+            address_rows.append(
+                {
+                    "cluster": cluster,
+                    "field": field,
+                    "address": str(address),
+                    "used_by_others": sorted(
+                        f"{other}: {name}"
+                        for other, name in usage.get(str(address), [])
+                        if other not in current
+                    ),
+                }
+            )
     uniqueness_cluster = next(iter(current), environment.infra_cluster)
     if values_parse_errors:
         results.append(_unknown("workload.address_uniqueness", "workload", uniqueness_cluster, "CCI-MOC/oac-apps", "hosted-clusters/", "One or more hosted-cluster values files could not be parsed: " + ", ".join(values_parse_errors) + ".", "No address used by another cluster"))
     elif not duplicates:
-        results.append(_result("workload.address_uniqueness", "workload", uniqueness_cluster, "CCI-MOC/oac-apps", "hosted-clusters/", "declared_in_main", "info", "No address used by another cluster", usage, "No workload address is used by another cluster."))
+        results.append(_result("workload.address_uniqueness", "workload", uniqueness_cluster, "CCI-MOC/oac-apps", "hosted-clusters/", "declared_in_main", "info", "No address used by another cluster", usage, "No workload address is used by another cluster.", evidence={"address_rows": address_rows}))
     else:
         other_clusters = sorted({cluster for uses in duplicates.values() for cluster, _ in uses if cluster not in current})
-        results.append(_result("workload.address_uniqueness", "workload", uniqueness_cluster, "CCI-MOC/oac-apps", "hosted-clusters/", "value_mismatch", "blocking", "No address used by another cluster", duplicates, "Workload addresses are also used by: " + ", ".join(other_clusters) + ".", {"duplicates": duplicates}))
+        results.append(_result("workload.address_uniqueness", "workload", uniqueness_cluster, "CCI-MOC/oac-apps", "hosted-clusters/", "value_mismatch", "blocking", "No address used by another cluster", duplicates, "Workload addresses are also used by: " + ", ".join(other_clusters) + ".", {"duplicates": duplicates}, {"address_rows": address_rows}))
     return results
 
 

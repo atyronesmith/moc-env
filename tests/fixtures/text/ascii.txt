@@ -30,7 +30,7 @@ NEXT
   bu-ist-demo-infra-agent-discovery.iso.
        guide: docs/infra-cluster-deployment.md → Cluster Deployment
   2. [oac-apps] Create or complete the hub hosted-cluster defaults file at
-  hosted-clusters/bu-ist-demo-infra/values.yaml in CCI-MOC/oac-infra.
+  hosted-clusters/bu-ist-demo-infra/values.yaml in CCI-MOC/oac-apps.
   hosted-clusters/bu-ist-demo-infra/values.yaml is missing; expected present. (after 1)
        guide: docs/infra-cluster-deployment.md → Cluster Configuration
   3. [oac-apps] Copy the required local-cluster component files from an existing hub environment
@@ -50,7 +50,7 @@ NEXT
   values/bu-ist-demo-infra/local-cluster/user-workload-monitoring.yaml is missing; expected
   present. (after 2)
        guide: docs/infra-cluster-deployment.md → Cluster Configuration
-  4. [oac-apps] Create or complete values/bu-ist-demo-infra/hcp-config.yaml in CCI-MOC/oac-infra
+  4. [oac-apps] Create or complete values/bu-ist-demo-infra/hcp-config.yaml in CCI-MOC/oac-apps
   for hub-wide HCP and secret-selector values. values/bu-ist-demo-infra/hcp-config.yaml is
   missing; expected present. (after 2)
        guide: docs/infra-cluster-deployment.md → Cluster Configuration
@@ -69,8 +69,9 @@ NEXT
   is missing; expected present. (after 2)
        guide: docs/workload-cluster-deployment.md → Cluster Deployment and Configuration
   8. [oac-apps] bu-ist-demo-workload0: Create the workload component-values directory, starting
-  with hcp-config.yaml and only the shared components this workload needs. matched_file_count is
-  0; expected At least one matching path. (after 7)
+  with hcp-config.yaml and only the shared components this workload needs.
+  values/bu-ist-demo-infra/bu-ist-demo-workload0 is 0 file(s); expected at least 1 file. (after
+  7)
        guide: docs/workload-cluster-deployment.md → Cluster Deployment and Configuration
 
 NOT CHECKED — verify by hand:

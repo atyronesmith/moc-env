@@ -131,7 +131,8 @@ class ReviewRegressionTest(unittest.TestCase):
         report = StatusChecker(RealPrClient(refs={"CCI-MOC/oac-apps": "pull/246/head"}), include_prs=False,
                                command=["status", "bu-ist-demo", "--ref", "oac-apps=pull/246/head", "--scope", "workload"], tool_version="test").run(Environment("bu-ist-demo", 666)).to_dict()
         text = render_text(report, details=True)
-        self.assertIn("present in pull/246/head", text)
+        self.assertIn("in pull/246/head under", text)
+        self.assertNotIn("All expected files for", text)
         self.assertNotIn("Details:", text)
         self.assertIn("--ref oac-apps=pull/246/head --scope workload --format markdown", text)
 
