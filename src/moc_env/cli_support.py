@@ -15,7 +15,7 @@ from .credentials import (
     load_credential_environment_file,
 )
 from .checks import Clock, StatusChecker
-from .completion import mark_file_argument
+from .completion import mark_environment_argument, mark_file_argument
 from .diff_observed import hosted_dns_facts
 from .github import GitHubClient
 from .model import Environment
@@ -52,10 +52,12 @@ def add_output(parser: argparse.ArgumentParser, help: str) -> None:
 
 
 def configure_status(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument(
-        "environment",
-        nargs="?",
-        help="Environment name, such as bu-ist-demo; omit it for the fleet view",
+    mark_environment_argument(
+        parser.add_argument(
+            "environment",
+            nargs="?",
+            help="Environment name, such as bu-ist-demo; omit it for the fleet view",
+        )
     )
     parser.add_argument("--issue", type=int, help="MOC-issues number; overrides the packaged environment registry")
     parser.add_argument("--format", choices=("text", "json", "markdown"), default="text", help="Output format")
@@ -86,8 +88,8 @@ def configure_status(parser: argparse.ArgumentParser) -> None:
 
 
 def configure_diff(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("environment_a", help="First environment to compare")
-    parser.add_argument("environment_b", help="Second environment to compare")
+    mark_environment_argument(parser.add_argument("environment_a", help="First environment to compare"))
+    mark_environment_argument(parser.add_argument("environment_b", help="Second environment to compare"))
     parser.add_argument("--format", choices=("text", "markdown", "json"), default="text", help="Output format")
     mark_file_argument(
         parser.add_argument("--output", help="Write the comparison to this file instead of stdout")

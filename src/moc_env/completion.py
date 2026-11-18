@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 
 FILE_COMPLETION = "file"
+ENVIRONMENT_COMPLETION = "environment"
+WORKLOAD_COMPLETION = "workload"
 COMPLETION_ATTRIBUTE = "moc_env_completion"
 
 COMMANDS = (
@@ -97,11 +99,29 @@ def option_action(parser: argparse.ArgumentParser, option: str) -> argparse.Acti
     return None
 
 
+def mark_argument(action: argparse.Action, completion: str) -> argparse.Action:
+    """Declare how a parser argument should be completed."""
+
+    setattr(action, COMPLETION_ATTRIBUTE, completion)
+    return action
+
+
 def mark_file_argument(action: argparse.Action) -> argparse.Action:
     """Mark an argument whose value is a filesystem path."""
 
-    setattr(action, COMPLETION_ATTRIBUTE, FILE_COMPLETION)
-    return action
+    return mark_argument(action, FILE_COMPLETION)
+
+
+def mark_environment_argument(action: argparse.Action) -> argparse.Action:
+    """Mark a positional argument that names an environment."""
+
+    return mark_argument(action, ENVIRONMENT_COMPLETION)
+
+
+def mark_workload_argument(action: argparse.Action) -> argparse.Action:
+    """Mark a positional argument that names a workload cluster."""
+
+    return mark_argument(action, WORKLOAD_COMPLETION)
 
 
 def argument_completion(action: argparse.Action) -> str | None:
@@ -111,11 +131,38 @@ def argument_completion(action: argparse.Action) -> str | None:
     return completion if isinstance(completion, str) else None
 
 
+def positional_actions(parser: argparse.ArgumentParser) -> list[argparse.Action]:
+    """Return the parser's positional actions in declaration order."""
+
+    return [action for action in parser._actions if not action.option_strings]
+
+
+def positional_index(parser: argparse.ArgumentParser, tokens: list[str]) -> int:
+    """Count completed positional values in the tokens typed so far."""
+
+    index = 0
+    skip_value = False
+    for token in tokens:
+        if skip_value:
+            skip_value = False
+            continue
+        if token.startswith("-") and token != "-":
+            if token.startswith("--") and "=" in token:
+                continue
+            action = option_action(parser, token)
+            if action is not None and action.nargs != 0:
+                skip_value = True
+            continue
+        index += 1
+    return index
+
+
 def bash_completion_script() -> str:
     commands = " ".join(COMMANDS)
     return f"""\
 _moc_env_complete() {{
-  local cur prev subcommand mode completion option_output option_status
+  local cur prev subcommand completion option_output option_status
+  local positional_output positional_status
   local -a executable_command
   if [[ -n "${{MOC_ENV_COMPLETION_COMMAND:-}}" ]]; then
     read -ra executable_command <<< "$MOC_ENV_COMPLETION_COMMAND"
@@ -171,34 +218,20 @@ _moc_env_complete() {{
     done < <("${{executable_command[@]}}" __complete-options "$subcommand" "")
   fi
 
-  case "$subcommand" in
-    status|status-hub|status-workload|export-infra|export-environment)
-      mode=environment
-      ;;
-    export-workload)
-      if (( COMP_CWORD == 2 )); then
-        mode=environment
-      elif (( COMP_CWORD == 3 )); then
-        mode=workload
-      fi
-      ;;
-  esac
-
-  if [[ -n "$mode" ]]; then
+  positional_output="$("${{executable_command[@]}}" __complete-positional "$subcommand" "$COMP_CWORD" "${{COMP_WORDS[@]}}")"
+  positional_status=$?
+  if (( positional_status == 4 )); then
     while IFS= read -r completion; do
       COMPREPLY+=("$completion")
-    done < <("${{executable_command[@]}}" __complete-environment "$cur" "$mode")
-  else
-    "${{executable_command[@]}}" __complete-positional "$subcommand" >/dev/null 2>&1
-    if (( $? == 4 )); then
-      while IFS= read -r completion; do
-        COMPREPLY+=("$completion")
-      done < <(compgen -f -- "$cur")
-    fi
+    done < <(compgen -f -- "$cur")
+  elif (( positional_status == 0 )) && [[ -n "$positional_output" ]]; then
+    while IFS= read -r completion; do
+      COMPREPLY+=("$completion")
+    done <<< "$positional_output"
   fi
 }}
 
-complete -o default -o filenames -F _moc_env_complete moc-env
+complete -o filenames -F _moc_env_complete moc-env
 """
 
 
@@ -206,7 +239,7 @@ def zsh_completion_script() -> str:
     commands = " ".join(COMMANDS)
     return f"""\
 _moc-env() {{
-  local subcommand values option_output option_status
+  local subcommand values option_output option_status positional_output positional_status
   local -a executable_command
   if [[ -n "${{MOC_ENV_COMPLETION_COMMAND:-}}" ]]; then
     executable_command=(${{(z)MOC_ENV_COMPLETION_COMMAND}})
@@ -258,35 +291,14 @@ _moc-env() {{
     fi
   fi
 
-  case "$subcommand" in
-    status|status-hub|status-workload|export-infra|export-environment)
-      if (( CURRENT >= 3 )); then
-        local environment_output
-        environment_output="$("${{executable_command[@]}}" __complete-environment "${{words[CURRENT]}}" environment)"
-        values=(${{(f)environment_output}})
-        _describe -t environments 'environment' values
-      fi
-      ;;
-    export-workload)
-      if (( CURRENT == 3 )); then
-        local environment_output
-        environment_output="$("${{executable_command[@]}}" __complete-environment "${{words[CURRENT]}}" environment)"
-        values=(${{(f)environment_output}})
-        _describe -t environments 'environment' values
-      elif (( CURRENT == 4 )); then
-        local workload_output
-        workload_output="$("${{executable_command[@]}}" __complete-environment "${{words[CURRENT]}}" workload)"
-        values=(${{(f)workload_output}})
-        _describe -t workloads 'workload cluster' values
-      fi
-      ;;
-    *)
-      "${{executable_command[@]}}" __complete-positional "$subcommand" >/dev/null 2>&1
-      if (( $? == 4 )); then
-        _files
-      fi
-      ;;
-  esac
+  positional_output="$("${{executable_command[@]}}" __complete-positional "$subcommand" "$((CURRENT - 1))" "${{words[@]}}")"
+  positional_status=$?
+  if (( positional_status == 4 )); then
+    _files
+  elif (( positional_status == 0 )) && [[ -n "$positional_output" ]]; then
+    values=(${{(f)positional_output}})
+    _describe -t candidates 'candidate' values
+  fi
 }}
 
 if ! (( $+functions[compdef] )); then
