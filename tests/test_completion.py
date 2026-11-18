@@ -11,6 +11,7 @@ import unittest
 from unittest.mock import patch
 
 from moc_env import cli
+from moc_env.completion import argument_completion, positional_actions
 from moc_env.environment_cache import environment_cache_path
 
 from fakes import FakeGitHubClient
@@ -127,11 +128,81 @@ class CompletionTest(unittest.TestCase):
         self.assertEqual(stdout, "")
 
     def test_hidden_completion_identifies_file_positionals(self) -> None:
-        exit_code, _, _ = self.run_cli(["__complete-positional", "validate"])
+        exit_code, _, _ = self.run_cli(
+            ["__complete-positional", "validate", "2", "moc-env", "validate", ""]
+        )
         self.assertEqual(exit_code, 4)
 
-        exit_code, _, _ = self.run_cli(["__complete-positional", "list"])
+        exit_code, _, _ = self.run_cli(
+            ["__complete-positional", "list", "2", "moc-env", "list", ""]
+        )
         self.assertEqual(exit_code, 3)
+
+    def test_hidden_completion_follows_positional_actions(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            with patch.dict(os.environ, {"MOC_ENV_CACHE_DIR": temporary_directory}):
+                exit_code, _, _ = self.run_cli(["list", "--format", "json"])
+                self.assertEqual(exit_code, 0)
+
+                for arguments, expected in (
+                    (
+                        ["__complete-positional", "diff", "2", "moc-env", "diff", "bu-ist-"],
+                        "bu-ist-demo\n",
+                    ),
+                    (
+                        [
+                            "__complete-positional",
+                            "diff",
+                            "3",
+                            "moc-env",
+                            "diff",
+                            "bu-ist-demo",
+                            "bu-ist-",
+                        ],
+                        "bu-ist-demo\n",
+                    ),
+                    (
+                        [
+                            "__complete-positional",
+                            "status",
+                            "3",
+                            "moc-env",
+                            "status",
+                            "--details",
+                            "bu-ist-",
+                        ],
+                        "bu-ist-demo\n",
+                    ),
+                    (
+                        [
+                            "__complete-positional",
+                            "export-workload",
+                            "3",
+                            "moc-env",
+                            "export-workload",
+                            "bu-ist-demo",
+                            "bu-ist-",
+                        ],
+                        "bu-ist-demo-workload0\n",
+                    ),
+                    (
+                        ["__complete-positional", "completion", "2", "moc-env", "completion", "b"],
+                        "bash\n",
+                    ),
+                    (
+                        [
+                            "__complete-option",
+                            "status-workload",
+                            "--workload",
+                            "bu-ist-",
+                        ],
+                        "bu-ist-demo-workload0\n",
+                    ),
+                ):
+                    with self.subTest(arguments=arguments):
+                        exit_code, stdout, _ = self.run_cli(arguments)
+                        self.assertEqual(exit_code, 0)
+                        self.assertEqual(stdout, expected)
 
     def test_hidden_completion_rejects_an_unknown_command(self) -> None:
         exit_code, _, stderr = self.run_cli(["__complete-options", "nope", "--"])
@@ -139,12 +210,28 @@ class CompletionTest(unittest.TestCase):
         self.assertEqual(exit_code, 2)
         self.assertIn("unknown completion command", stderr)
 
+    def test_every_command_positional_declares_completion(self) -> None:
+        parser = cli.build_parser()
+        for action in parser._actions:
+            if not hasattr(action, "choices") or not isinstance(action.choices, dict):
+                continue
+            for command, command_parser in action.choices.items():
+                for positional in positional_actions(command_parser):
+                    with self.subTest(command=command, positional=positional.dest):
+                        if positional.choices:
+                            self.assertIsNone(argument_completion(positional))
+                        else:
+                            self.assertIn(
+                                argument_completion(positional),
+                                {"environment", "workload", "file"},
+                            )
+
     def test_completion_scripts_are_printed(self) -> None:
         for shell in ("bash", "zsh"):
             with self.subTest(shell=shell):
                 exit_code, stdout, _ = self.run_cli(["completion", shell])
                 self.assertEqual(exit_code, 0)
-                self.assertIn("__complete-environment", stdout)
+                self.assertIn("__complete-positional", stdout)
                 self.assertIn("export-workload", stdout)
                 self.assertIn("status", stdout)
                 self.assertIn("status-hub", stdout)
@@ -153,9 +240,8 @@ class CompletionTest(unittest.TestCase):
                 self.assertIn("MOC_ENV_COMPLETION_COMMAND", stdout)
                 self.assertIn("__complete-options", stdout)
                 self.assertIn("__complete-option", stdout)
-                self.assertIn("__complete-positional", stdout)
                 if shell == "bash":
-                    self.assertIn("complete -o default", stdout)
+                    self.assertIn("complete -o filenames", stdout)
                 else:
                     self.assertIn("compdef _moc-env moc-env", stdout)
 
@@ -177,6 +263,10 @@ class CompletionTest(unittest.TestCase):
                     ("moc-env status-hub bu-ist-", 2, "bu-ist-demo\n"),
                     ("moc-env status --for", 2, "--format\n"),
                     ("moc-env status --format ", 3, "text\njson\nmarkdown\n"),
+                    ("moc-env diff bu-ist-", 2, "bu-ist-demo\n"),
+                    ("moc-env diff bu-ist-demo bu-ist-", 3, "bu-ist-demo\n"),
+                    ("moc-env status --details bu-ist-", 3, "bu-ist-demo\n"),
+                    ("moc-env completion b", 2, "bash\n"),
                 ):
                     with self.subTest(words=words):
                         completion = subprocess.run(

@@ -16,14 +16,20 @@ from .credentials import CredentialError, CredentialResolver
 from .compare import compare_environment, compare_infra, compare_workload, desired_environment, render_comparison_json, render_comparison_markdown, render_comparison_text
 from .completion import (
     COMMANDS,
+    ENVIRONMENT_COMPLETION,
     FILE_COMPLETION,
+    WORKLOAD_COMPLETION,
     argument_completion,
     bash_completion_script,
     command_help_epilog,
     command_option_strings,
     command_parser,
+    mark_environment_argument,
     mark_file_argument,
+    mark_workload_argument,
     option_action,
+    positional_actions,
+    positional_index,
     zsh_completion_script,
 )
 from .doc_catalog import DocumentCatalogError, load_catalog_sources, refresh_document_catalog, render_catalog_refresh_json, render_catalog_refresh_text
@@ -95,20 +101,20 @@ def _configure_discover_values(parser: argparse.ArgumentParser) -> None:
 
 
 def _configure_export_infra(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("environment", help="Environment name, such as bu-ist-demo")
+    mark_environment_argument(parser.add_argument("environment", help="Environment name, such as bu-ist-demo"))
     _add_output(parser, "Write the YAML snapshot to this file instead of stdout; the command never creates or updates GitHub content")
     _add_credential_arguments(parser)
 
 
 def _configure_export_workload(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("environment", help="Environment name, such as bu-ist-demo")
-    parser.add_argument("workload", help="Workload name, such as workload0 or bu-ist-demo-workload0")
+    mark_environment_argument(parser.add_argument("environment", help="Environment name, such as bu-ist-demo"))
+    mark_workload_argument(parser.add_argument("workload", help="Workload name, such as workload0 or bu-ist-demo-workload0"))
     _add_output(parser, "Write the YAML snapshot to this file instead of stdout; the command never creates or updates GitHub content")
     _add_credential_arguments(parser)
 
 
 def _configure_export_environment(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("environment", help="Environment name, such as bu-ist-demo")
+    mark_environment_argument(parser.add_argument("environment", help="Environment name, such as bu-ist-demo"))
     parser.add_argument("--issue", type=int, help="MOC-issues number; defaults to the known issue for the environment")
     _add_output(parser, "Write the YAML bundle to this file instead of stdout; the command never creates or updates GitHub content")
     _add_credential_arguments(parser)
@@ -161,7 +167,9 @@ def _build_parser() -> argparse.ArgumentParser:
         command_parser = subparsers.add_parser(name, description=description, help=description)
         configure(command_parser)
         if name == "status-workload":
-            command_parser.add_argument("--workload", help="Workload name, such as workload1 or oac-dev-workload1")
+            mark_workload_argument(
+                command_parser.add_argument("--workload", help="Workload name, such as workload1 or oac-dev-workload1")
+            )
         command_parser.set_defaults(handler=handler)
     return parser
 
@@ -534,12 +542,7 @@ def _diff_handler(
         return 2
 
 
-def _complete_environment(arguments: list[str]) -> int:
-    prefix = arguments[1] if len(arguments) > 1 else ""
-    mode = arguments[2] if len(arguments) > 2 else "environment"
-    if mode not in {"environment", "workload"}:
-        print("moc-env: unknown completion mode", file=sys.stderr)
-        return 2
+def _environment_completion_values(mode: str) -> list[str]:
     clusters = read_environment_cache()
     if not clusters:
         try:
@@ -549,9 +552,17 @@ def _complete_environment(arguments: list[str]) -> int:
             clusters = []
     key = "environment" if mode == "environment" else "cluster"
     if mode == "environment":
-        values = sorted({cluster[key] for cluster in clusters if isinstance(cluster.get(key), str)})
-    else:
-        values = sorted(cluster[key] for cluster in clusters if cluster.get("type") == "workload" and isinstance(cluster.get(key), str))
+        return sorted({cluster[key] for cluster in clusters if isinstance(cluster.get(key), str)})
+    return sorted(cluster[key] for cluster in clusters if cluster.get("type") == "workload" and isinstance(cluster.get(key), str))
+
+
+def _complete_environment(arguments: list[str]) -> int:
+    prefix = arguments[1] if len(arguments) > 1 else ""
+    mode = arguments[2] if len(arguments) > 2 else "environment"
+    if mode not in {"environment", "workload"}:
+        print("moc-env: unknown completion mode", file=sys.stderr)
+        return 2
+    values = _environment_completion_values(mode)
     for value in values:
         if value.startswith(prefix):
             print(value)
@@ -585,15 +596,21 @@ def _complete_option(arguments: list[str]) -> int:
     option = arguments[2] if len(arguments) > 2 else ""
     prefix = arguments[3] if len(arguments) > 3 else ""
     action = option_action(parser, option)
-    if action is not None and argument_completion(action) == FILE_COMPLETION:
+    completion = argument_completion(action) if action is not None else None
+    if completion == FILE_COMPLETION:
         # The shell completes a filesystem path for this value.
         return 4
     if action is None or action.nargs == 0:
         # The shell treats a non-zero status as "not an option value" and keeps
         # completing positional arguments or files.
         return 3
-    for choice in action.choices or ():
-        value = str(choice)
+    if completion == ENVIRONMENT_COMPLETION:
+        values = _environment_completion_values("environment")
+    elif completion == WORKLOAD_COMPLETION:
+        values = _environment_completion_values("workload")
+    else:
+        values = [str(choice) for choice in action.choices or ()]
+    for value in values:
         if value.startswith(prefix):
             print(value)
     return 0
@@ -603,10 +620,34 @@ def _complete_positional(arguments: list[str]) -> int:
     parser, exit_code = _completion_command_parser(arguments, "__complete-positional")
     if parser is None:
         return exit_code
-    positionals = [action for action in parser._actions if not action.option_strings]
-    if positionals and argument_completion(positionals[0]) == FILE_COMPLETION:
+    try:
+        cword = int(arguments[2])
+    except (IndexError, ValueError):
+        print("moc-env: invalid completion position", file=sys.stderr)
+        return 2
+    words = arguments[3:]
+    tokens = words[2:cword] if cword > 2 else []
+    positionals = positional_actions(parser)
+    index = positional_index(parser, tokens)
+    if index >= len(positionals):
+        return 3
+    action = positionals[index]
+    prefix = words[cword] if cword < len(words) else ""
+    completion = argument_completion(action)
+    if completion == FILE_COMPLETION:
         return 4
-    return 3
+    if completion == ENVIRONMENT_COMPLETION:
+        values = _environment_completion_values("environment")
+    elif completion == WORKLOAD_COMPLETION:
+        values = _environment_completion_values("workload")
+    elif action.choices:
+        values = [str(choice) for choice in action.choices]
+    else:
+        return 3
+    for value in values:
+        if value.startswith(prefix):
+            print(value)
+    return 0
 
 
 def main(argv: list[str] | None = None, clock: Clock | None = None) -> int:

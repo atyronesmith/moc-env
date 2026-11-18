@@ -580,16 +580,18 @@ Use `moc-env` rather than `uv run moc-env` after initialization. Shell
 completion is attached to the command name `moc-env`; with
 `uv run moc-env`, the shell asks `uv` for completion instead.
 
-Completion supplies top-level command names such as `status`, `status-hub`, and
-`status-workload`. It also supplies environment names for those status commands
-and `export-infra`, `export-workload`, and `export-environment`. For
-`export-workload`, it also supplies full workload-cluster names. After a
-command name, Tab also offers that command's options, taken from the same
-parser that renders `--help`; options with a fixed choice list, such as
-`--format`, complete their values as well. File-valued arguments such as
-`--output`, `--env-file`, `--repository-root`, and `--cache-root` use normal
-filesystem completion, as do the YAML path arguments of `validate`,
-`check-infra`, `check-workload`, `check-environment`, and `plan-infra`.
+Completion supplies top-level command names and follows each command's parser
+definition. Tab offers environment names wherever a command accepts one,
+including both arguments of `diff`, the optional environment of the `status`
+commands, and the environment arguments of the `export-*` commands. It also
+supplies workload-cluster names for `export-workload` and the
+`status-workload --workload` option. After a command name, Tab also offers that
+command's options, taken from the same parser that renders `--help`; options
+with a fixed choice list, such as `--format`, complete their values as well.
+File-valued arguments such as `--output`, `--env-file`, `--repository-root`,
+and `--cache-root` use normal filesystem completion, as do the YAML path
+arguments of `validate`, `check-infra`, `check-workload`,
+`check-environment`, and `plan-infra`.
 
 ### 4. Export draft desired-state documents
 
