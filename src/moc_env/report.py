@@ -681,7 +681,11 @@ def _report_pulls(
 
 
 def _unknown_headline(checks: list[dict[str, Any]]) -> str:
-    unknown = [check for check in checks if check["state"] == "unknown"]
+    unknown = [
+        check
+        for check in checks
+        if check["state"] == "unknown" and not check.get("deferred")
+    ]
     if not unknown:
         return ""
     names = [check["check"] for check in unknown]
@@ -697,7 +701,11 @@ def _blocked_summary(report: dict[str, Any]) -> str | None:
     by_key = {
         (check.get("id"), check.get("cluster")): check for check in checks
     }
-    blocked = [check for check in checks if check.get("state") == "blocked"]
+    blocked = [
+        check
+        for check in checks
+        if check.get("state") == "blocked" and not check.get("deferred")
+    ]
     if not blocked:
         return None
     gaps = _sorted_actions(
@@ -731,6 +739,7 @@ def _blocked_summary(report: dict[str, Any]) -> str | None:
 def _action_checks(report: dict[str, Any]) -> list[dict[str, Any]]:
     return [
         check for check in report.get("checks", [])
+        if not check.get("deferred")
         if check.get("severity") in {"blocking", "advisory"}
         and check.get("state") not in {"declared_in_main", "requested", "pr_merged", "unknown", "blocked"}
     ]
@@ -752,6 +761,75 @@ def _cache_header_lines(report: dict[str, Any]) -> list[str]:
         for source in (report.get("metadata") or {}).get("sources", [])
         if source.get("from_cache")
     ]
+
+
+def _deferred_checks(report: dict[str, Any]) -> list[dict[str, Any]]:
+    return [check for check in report.get("checks", []) if check.get("deferred")]
+
+
+def _resolved_deferred_checks(report: dict[str, Any]) -> list[dict[str, Any]]:
+    resolved = [
+        check
+        for check in report.get("checks", [])
+        if check.get("deferred_resolved")
+    ]
+    seen: set[tuple[Any, Any]] = set()
+    unique = []
+    for check in resolved:
+        key = (check.get("id"), check.get("cluster"))
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(check)
+    return unique
+
+
+def _expired_deferred_checks(report: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        check
+        for check in report.get("checks", [])
+        if check.get("deferred_expired")
+    ]
+
+
+def _deferred_text_lines(report: dict[str, Any]) -> list[str]:
+    deferred = _deferred_checks(report)
+    resolved = _resolved_deferred_checks(report)
+    expired = _expired_deferred_checks(report)
+    if not deferred and not resolved and not expired:
+        return []
+    lines = ["", "Deferred"]
+    for check in deferred:
+        until = (
+            f"; deferred until {check['defer_until']}"
+            if check.get("defer_until")
+            else ""
+        )
+        lines.extend(
+            _wrap(
+                f"- {check.get('check')} ({check.get('id')}, "
+                f"{check.get('cluster')}) — {check.get('defer_reason')}{until}",
+                2,
+            )
+        )
+    for check in expired:
+        lines.extend(
+            _wrap(
+                f"- {check.get('check')} ({check.get('id')}, "
+                f"{check.get('cluster')}) — {check.get('defer_reason')}; "
+                f"deferral expired {check.get('defer_until')}",
+                2,
+            )
+        )
+    for check in resolved:
+        lines.extend(
+            _wrap(
+                f"- {check.get('check')} ({check.get('id')}): deferred item "
+                "resolved; remove it from the registry.",
+                2,
+            )
+        )
+    return lines
 
 
 def _action_evidence(check: dict[str, Any], report: dict[str, Any]) -> str:
@@ -1056,22 +1134,23 @@ def render_text(
     lines = [first, *_cache_header_lines(report), ""]
 
     checks = report["checks"]
+    active_checks = [check for check in checks if not check.get("deferred")]
     pass_states = {"declared_in_main", "requested", "pr_merged"}
-    passing = sum(check["state"] in pass_states for check in checks)
+    passing = sum(check["state"] in pass_states for check in active_checks)
     blocking = [
-        check for check in checks
+        check for check in active_checks
         if check["severity"] == "blocking"
         and check["state"] not in pass_states
         and check["state"] != "unknown"
     ]
     advisories = [
-        check for check in checks
+        check for check in active_checks
         if check["severity"] == "advisory"
         and check["state"] not in pass_states
         and check["state"] != "unknown"
         and check["state"] != "blocked"
     ]
-    unknown = [check for check in checks if check["state"] == "unknown"]
+    unknown = [check for check in active_checks if check["state"] == "unknown"]
     scope_blocking = {
         cluster: sum(check["scope"] == "workload" for check in blocking)
         for cluster in environment.get("workload_clusters", [])
@@ -1086,7 +1165,7 @@ def render_text(
     else:
         result = (
             f"RESULT: {len(blocking)} blocking gaps{scope_text} · "
-            f"{len(advisories)} advisories · {passing} of {len(checks)} checks pass"
+            f"{len(advisories)} advisories · {passing} of {len(active_checks)} checks pass"
         )
     lines.extend(_wrap(result))
     if unknown:
@@ -1125,12 +1204,20 @@ def render_text(
                 [
                     c for c in checks
                     if c.get("cluster") == environment["infra_cluster"]
+                    and not c.get("deferred")
                 ],
             )],
         )
     if scope in {"environment", "workload"}:
         columns = [
-            (f"WORKLOAD {workload}", _workload_checks(checks, workload))
+            (
+                f"WORKLOAD {workload}",
+                [
+                    c
+                    for c in _workload_checks(checks, workload)
+                    if not c.get("deferred")
+                ],
+            )
             for workload in environment.get("workload_clusters", [])
         ]
         phase_table("WORKLOAD PHASES", _workload_phase_rows(report), columns)
@@ -1166,6 +1253,7 @@ def render_text(
             if guide:
                 lines.extend(_wrap(f"guide: {guide}", 7))
 
+    lines.extend(_deferred_text_lines(report))
     lines.extend(["", "NOT CHECKED — verify by hand:"])
     titles = [entry["title"] for entry in report.get("not_checked", [])]
     if titles:
@@ -1436,29 +1524,30 @@ def _identity_source_url(report: dict[str, Any], check_name: str) -> str | None:
 
 def _markdown_verdict(report: dict[str, Any]) -> str:
     checks = report["checks"]
+    active_checks = [check for check in checks if not check.get("deferred")]
     pass_states = {"declared_in_main", "requested", "pr_merged"}
     blocking = [
         check
-        for check in checks
+        for check in active_checks
         if check["severity"] == "blocking"
         and check["state"] not in pass_states
         and check["state"] != "unknown"
     ]
     advisories = [
         check
-        for check in checks
+        for check in active_checks
         if check["severity"] == "advisory"
         and check["state"] not in pass_states
         and check["state"] != "unknown"
         and check["state"] != "blocked"
     ]
-    unknown = [check for check in checks if check["state"] == "unknown"]
-    passing = sum(check["state"] in pass_states for check in checks)
+    unknown = [check for check in active_checks if check["state"] == "unknown"]
+    passing = sum(check["state"] in pass_states for check in active_checks)
     if not blocking and not advisories and not unknown:
         return "No deployment gaps in repository configuration."
     verdict = (
         f"{len(blocking)} blocking gaps, {len(advisories)} advisories, "
-        f"and {passing} of {len(checks)} checks pass"
+        f"and {passing} of {len(active_checks)} checks pass"
     )
     unknown_headline = _unknown_headline(checks)
     if unknown_headline:
@@ -1510,7 +1599,12 @@ def _markdown_phase_table(report: dict[str, Any]) -> list[str]:
         for phase, title in phase_rows:
             cells = [
                 _phase_cell(
-                    [check for check in scope_checks if check.get("phase") == phase],
+                    [
+                        check
+                        for check in scope_checks
+                        if check.get("phase") == phase
+                        and not check.get("deferred")
+                    ],
                     False,
                 )
                 for _header, scope_checks in columns
@@ -1530,6 +1624,7 @@ def _markdown_phase_table(report: dict[str, Any]) -> list[str]:
                     [
                         c for c in checks
                         if c.get("cluster") == environment["infra_cluster"]
+                        and not c.get("deferred")
                     ],
                 )],
             )
@@ -1540,7 +1635,14 @@ def _markdown_phase_table(report: dict[str, Any]) -> list[str]:
                 "Workload phases",
                 _workload_phase_rows(report),
                 [
-                    (f"WORKLOAD {workload}", _workload_checks(checks, workload))
+                    (
+                        f"WORKLOAD {workload}",
+                        [
+                            c
+                            for c in _workload_checks(checks, workload)
+                            if not c.get("deferred")
+                        ],
+                    )
                     for workload in environment.get("workload_clusters", [])
                 ],
             )
@@ -1582,6 +1684,7 @@ def _markdown_next_actions(report: dict[str, Any]) -> list[str]:
     gaps = [
         check
         for check in checks
+        if not check.get("deferred")
         if check["severity"] in {"blocking", "advisory"}
         and check["state"] not in pass_states
         and check["state"] != "unknown"
@@ -1642,6 +1745,38 @@ def _markdown_manual_checks(report: dict[str, Any]) -> list[str]:
         lines.append(
             f"- [ ] **{entry['title']}** (phase {entry['phase']}) — {entry['why']} "
             f"Documented at [{where['document']} → {where['heading']}]({guide_url}#{where['heading'].lower().replace(' ', '-')})."
+        )
+    lines.append("")
+    return lines
+
+
+def _markdown_deferred(report: dict[str, Any]) -> list[str]:
+    deferred = _deferred_checks(report)
+    resolved = _resolved_deferred_checks(report)
+    expired = _expired_deferred_checks(report)
+    if not deferred and not resolved and not expired:
+        return []
+    lines = ["## Deferred", ""]
+    for check in deferred:
+        until = (
+            f" (deferred until {check['defer_until']})"
+            if check.get("defer_until")
+            else ""
+        )
+        lines.append(
+            f"- **{check.get('check')}** (`{check.get('id')}`, "
+            f"{check.get('cluster')}) — {check.get('defer_reason')}{until}"
+        )
+    for check in expired:
+        lines.append(
+            f"- **{check.get('check')}** (`{check.get('id')}`, "
+            f"{check.get('cluster')}) — {check.get('defer_reason')}; "
+            f"deferral expired {check.get('defer_until')}"
+        )
+    for check in resolved:
+        lines.append(
+            f"- **{check.get('check')}** (`{check.get('id')}`): deferred item "
+            "resolved; remove it from the registry."
         )
     lines.append("")
     return lines
@@ -1785,6 +1920,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     ]
     lines.extend(_markdown_phase_table(report))
     lines.extend(_markdown_next_actions(report))
+    lines.extend(_markdown_deferred(report))
     lines.extend(_markdown_manual_checks(report))
     lines.extend(["## Details", ""])
     sources = (report.get("metadata") or {}).get("sources", [])

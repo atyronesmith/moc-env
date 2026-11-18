@@ -36,6 +36,24 @@ class GitHubClientTest(unittest.TestCase):
         self.assertEqual(warnings, [59])
         self.assertEqual(client.rate_limit_remaining, 58)
 
+    def test_counted_endpoints_exclude_free_and_not_modified_responses(self) -> None:
+        client = GitHubClient()
+        client._count_quota(
+            "https://api.github.com/repos/CCI-MOC/oac-apps/commits/main", 200
+        )
+        client._count_quota(
+            "https://api.github.com/repos/CCI-MOC/oac-apps/commits/main", 304
+        )
+        client._count_quota("https://api.github.com/rate_limit", 200)
+        client._count_quota(
+            "https://raw.githubusercontent.com/CCI-MOC/oac-apps/sha/values.yaml",
+            200,
+        )
+        self.assertEqual(
+            client.counted_endpoints,
+            ["/repos/CCI-MOC/oac-apps/commits/main"],
+        )
+
     def test_rate_limit_error_names_reset_and_quick_fixes(self) -> None:
         headers = Message()
         headers["X-RateLimit-Remaining"] = "0"

@@ -287,6 +287,7 @@ CHECK_PHASES: dict[str, CheckPhase] = {
     "workload.moc_aws_cert_manager_policy": CheckPhase(7, "Shared-service prerequisites", ("workload.component_values",)),
     "hub.moc_aws_hosted_secret_prefix": CheckPhase(5, "GitOps values and apps", ("hub.moc_aws_oidc_cluster",)),
     "workload.keycloak_oidc_client": CheckPhase(7, "Shared-service prerequisites", ("workload.hosted_cluster_values",)),
+    "workload.identity_provider": CheckPhase(7, "Shared-service prerequisites", ("workload.keycloak_oidc_client",)),
     "hub.moc_dns_records": CheckPhase(2, "Hub image inventory and vars", ("hub.image_vars",)),
     "workload.api_address_network": CheckPhase(6, "oac-apps values", ("workload.hosted_cluster_values",)),
     "workload.ingress_address_network": CheckPhase(6, "oac-apps values", ("workload.hosted_cluster_values",)),

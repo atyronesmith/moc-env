@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,16 @@ import yaml
 
 class RegistryError(ValueError):
     """Raised when the environment registry is malformed."""
+
+
+@dataclass(frozen=True)
+class DeferredCheck:
+    """One check intentionally deferred for an environment."""
+
+    check: str
+    reason: str
+    cluster: str | None = None
+    until: str | None = None
 
 
 DEFAULT_REGISTRY_PATH = (
@@ -22,6 +33,7 @@ _ALLOWED_KEYS = {
     "required_local_cluster_components",
     "optional_local_cluster_components",
     "keycloak_client_name",
+    "deferred",
 }
 
 _ALLOWED_ROOT_KEYS = {"defaults", "environments"}
@@ -35,6 +47,7 @@ class EnvironmentRegistry:
     required_local_cluster_components: dict[str, tuple[str, ...]]
     optional_local_cluster_components: dict[str, tuple[str, ...]]
     keycloak_client_names: dict[str, str]
+    deferred_checks: dict[str, tuple[DeferredCheck, ...]]
     default_required_components: tuple[str, ...] = ()
 
     @classmethod
@@ -77,6 +90,7 @@ class EnvironmentRegistry:
         required: dict[str, tuple[str, ...]] = {}
         optional: dict[str, tuple[str, ...]] = {}
         keycloak_names: dict[str, str] = {}
+        deferred: dict[str, tuple[DeferredCheck, ...]] = {}
 
         for environment, settings in environments.items():
             if not isinstance(environment, str) or not environment:
@@ -122,11 +136,17 @@ class EnvironmentRegistry:
                 )
             keycloak_names[environment] = keycloak_name
 
+            deferred[environment] = _deferred_list(
+                settings.get("deferred", ()),
+                f"{section}.deferred",
+            )
+
         return cls(
             issues=issues,
             required_local_cluster_components=required,
             optional_local_cluster_components=optional,
             keycloak_client_names=keycloak_names,
+            deferred_checks=deferred,
             default_required_components=_component_list(
                 defaults.get("required_local_cluster_components"),
                 "defaults.required_local_cluster_components",
@@ -146,6 +166,9 @@ class EnvironmentRegistry:
 
     def keycloak_client_name(self, environment: str) -> str:
         return self.keycloak_client_names.get(environment, f"{environment}-infra")
+
+    def deferred(self, environment: str) -> tuple[DeferredCheck, ...]:
+        return self.deferred_checks.get(environment, ())
 
 
 def _validate_section(path: str, settings: dict[str, Any]) -> None:
@@ -170,6 +193,8 @@ def _validate_section(path: str, settings: dict[str, Any]) -> None:
             raise RegistryError(
                 f"{path}.keycloak_client_name must be a non-empty string"
             )
+    if "deferred" in settings:
+        _deferred_list(settings["deferred"], f"{path}.deferred")
 
 
 def _issue_number(value: Any, path: str) -> int:
@@ -186,3 +211,69 @@ def _component_list(value: Any, path: str) -> tuple[str, ...]:
     if len(value) != len(set(value)):
         raise RegistryError(f"{path} must not contain duplicate file names")
     return tuple(value)
+
+
+def _deferred_list(value: Any, path: str) -> tuple[DeferredCheck, ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, (list, tuple)):
+        raise RegistryError(f"{path} must be a list")
+    entries: list[DeferredCheck] = []
+    seen: set[tuple[str, str | None]] = set()
+    for index, item in enumerate(value):
+        entry_path = f"{path}[{index}]"
+        if not isinstance(item, dict):
+            raise RegistryError(f"{entry_path} must be a mapping")
+        if "date" in item:
+            raise RegistryError(
+                f"{entry_path}.date is not supported; rename it to until"
+            )
+        unknown = sorted(
+            set(item) - {"check", "check_id", "id", "reason", "cluster", "until"}
+        )
+        if unknown:
+            raise RegistryError(
+                f"{entry_path}.{unknown[0]} is not a supported registry key"
+            )
+        check = item.get("check", item.get("check_id", item.get("id")))
+        if not isinstance(check, str) or not check:
+            raise RegistryError(f"{entry_path}.check must be a non-empty string")
+        reason = item.get("reason")
+        if not isinstance(reason, str) or not reason.strip():
+            raise RegistryError(f"{entry_path}.reason must be a non-empty string")
+        cluster = item.get("cluster")
+        if cluster is not None and (not isinstance(cluster, str) or not cluster):
+            raise RegistryError(
+                f"{entry_path}.cluster must be a non-empty string"
+            )
+        deferred_until = item.get("until")
+        if deferred_until is not None:
+            if isinstance(deferred_until, date):
+                deferred_until = deferred_until.isoformat()
+            if not isinstance(deferred_until, str):
+                raise RegistryError(
+                    f"{entry_path}.until must be a YYYY-MM-DD string"
+                )
+            try:
+                date.fromisoformat(deferred_until)
+            except ValueError as exc:
+                raise RegistryError(
+                    f"{entry_path}.until must be a YYYY-MM-DD string"
+                ) from exc
+        key = (check, cluster)
+        if key in seen:
+            raise RegistryError(
+                f"{path} lists {check}"
+                + (f" for {cluster}" if cluster else "")
+                + " more than once"
+            )
+        seen.add(key)
+        entries.append(
+            DeferredCheck(
+                check=check,
+                reason=reason.strip(),
+                cluster=cluster,
+                until=deferred_until,
+            )
+        )
+    return tuple(entries)

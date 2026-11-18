@@ -11,11 +11,13 @@ import yaml
 
 from .github import GitHubClient, GitHubError
 from .model import Environment
+from .repositories import (
+    MOC_ISSUES_REPOSITORY,
+    MOC_KEYCLOAK_REPOSITORY,
+    OAC_APPS_REPOSITORY,
+    OAC_INFRA_REPOSITORY,
+)
 
-OAC_INFRA_REPOSITORY = "CCI-MOC/oac-infra"
-MOC_ISSUES_REPOSITORY = "CCI-MOC/MOC-issues"
-MOC_KEYCLOAK_REPOSITORY = "CCI-MOC/moc-keycloak"
-OAC_APPS_REPOSITORY = "CCI-MOC/oac-apps"
 INVENTORY_PATH = "infra/inventory/00hosts.yaml"
 UPDATE_AGENTS_PATH = "infra/update-agents.yaml"
 HARDWARE_NETWORK_DOC_PATH = (
@@ -575,9 +577,10 @@ def read_issue_observation(
             repository,
             path,
         )
-    # MOC-issues is otherwise read through its issue endpoint. Fetch its tree
-    # once so report metadata can record the repository ref SHA.
-    client.get_tree(repository)
+    # MOC-issues is otherwise read through its issue endpoint. Resolve the ref
+    # so report metadata can record the repository SHA without downloading a
+    # tree whose paths are never used.
+    client.resolve_commit(repository)
     issue = client.get_json(f"/repos/{repository}/{path}")
     source = (repository, path)
     return IssueObservation(
@@ -609,8 +612,12 @@ def read_keycloak_observation(
             repository,
             KEYCLOAK_PATH,
         )
-    tree = client.get_tree(repository)
-    if KEYCLOAK_PATH not in tree:
+    try:
+        client.resolve_commit(repository)
+        text = client.get_file(repository, KEYCLOAK_PATH)
+    except GitHubError as exc:
+        if "(404)" not in str(exc):
+            raise
         return KeycloakObservation(
             path_present=SourceValue(False, repository, KEYCLOAK_PATH),
             client=None,
@@ -618,8 +625,6 @@ def read_keycloak_observation(
             source_repository=repository,
             source_path=KEYCLOAK_PATH,
         )
-
-    text = client.get_file(repository, KEYCLOAK_PATH)
 
     cluster = client_name or environment.infra_cluster
     pattern = re.compile(

@@ -92,6 +92,11 @@ class CheckResult:
     suggestion: dict[str, Any] | None = None
     suggestion_skipped_reason: str | None = None
     cluster: str | None = None
+    deferred: bool = False
+    defer_reason: str | None = None
+    defer_until: str | None = None
+    deferred_expired: bool = False
+    deferred_resolved: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -115,8 +120,33 @@ class CheckResult:
             **{
                 key: value
                 for key, value in data.items()
-                if value is not None and key not in {"id", "scope", "next_action"}
+                if value is not None
+                and key
+                not in {
+                    "id",
+                    "scope",
+                    "next_action",
+                    "deferred",
+                    "defer_reason",
+                    "defer_until",
+                    "deferred_expired",
+                    "deferred_resolved",
+                }
             },
+            **({"deferred": True} if self.deferred else {}),
+            **(
+                {"defer_reason": self.defer_reason}
+                if (self.deferred or self.deferred_expired)
+                and self.defer_reason
+                else {}
+            ),
+            **(
+                {"defer_until": self.defer_until}
+                if (self.deferred or self.deferred_expired) and self.defer_until
+                else {}
+            ),
+            **({"deferred_expired": True} if self.deferred_expired else {}),
+            **({"deferred_resolved": True} if self.deferred_resolved else {}),
         }
 
 
@@ -185,7 +215,8 @@ class StatusReport:
     def to_dict(self) -> dict[str, Any]:
         state_counts: dict[str, int] = {}
         severity_counts: dict[str, int] = {}
-        for check in self.checks:
+        active_checks = [check for check in self.checks if not check.deferred]
+        for check in active_checks:
             state_counts[check.state] = state_counts.get(check.state, 0) + 1
             severity_counts[check.severity] = (
                 severity_counts.get(check.severity, 0) + 1
@@ -193,7 +224,7 @@ class StatusReport:
 
         stages: list[str] = []
         stage_counts: dict[str, dict[str, int]] = {}
-        for check in self.checks:
+        for check in active_checks:
             if check.stage not in stage_counts:
                 stages.append(check.stage)
                 stage_counts[check.stage] = {}
@@ -211,6 +242,10 @@ class StatusReport:
             "not_checked": self._not_checked(),
             "summary": {
                 "check_count": len(self.checks),
+                "deferred_count": sum(check.deferred for check in self.checks),
+                "deferred_resolved_count": sum(
+                    check.deferred_resolved for check in self.checks
+                ),
                 "state_counts": dict(sorted(state_counts.items())),
                 "severity_counts": dict(sorted(severity_counts.items())),
                 "advisory_count": severity_counts.get("advisory", 0),
@@ -287,6 +322,7 @@ class StatusReport:
             for check in self.checks
             if check.scope == scope
             and check.severity == "blocking"
+            and not check.deferred
             and check.phase is not None
             and check.state != "declared_in_main"
         ]

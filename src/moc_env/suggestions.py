@@ -215,6 +215,9 @@ class _Overlay:
     def get_tree(self, repository, ref="main"):
         return self.client.get_tree(repository, ref)
 
+    def resolve_commit(self, repository, ref="main"):
+        return self.client.resolve_commit(repository, ref)
+
 
 def _identity(check: CheckResult):
     """Distinguish workloads when several checks share an ID."""
@@ -270,7 +273,7 @@ def attach_suggestions(
 ) -> None:
     """Attach guidance only to the four scoped gaps, after successful replay."""
     for check in checks:
-        if check.id not in SUPPORTED or not check.next_action:
+        if check.id not in SUPPORTED or not check.next_action or check.deferred:
             continue
         try:
             if check.state in {"unknown", "blocked"}:

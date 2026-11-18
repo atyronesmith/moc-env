@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from moc_env.github import GitHubClient
 
 
@@ -35,6 +37,11 @@ class FakeGitHubClient(GitHubClient):
         self.rate_limit_remaining = 4999
 
     def get_json(self, path_or_url: str):
+        match = re.fullmatch(
+            r"/repos/([^/]+/[^/]+)/commits/(.+)", path_or_url
+        )
+        if match and match.group(1) in self.SOURCE_SHAS:
+            return {"sha": self.SOURCE_SHAS[match.group(1)]}
         if path_or_url == "/repos/CCI-MOC/MOC-issues/issues/666":
             return {
                 "state": "open",

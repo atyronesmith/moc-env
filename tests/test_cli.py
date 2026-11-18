@@ -72,6 +72,7 @@ class CliDispatchTest(unittest.TestCase):
             def __init__(self, *args, **kwargs) -> None:
                 super().__init__(*args, **kwargs)
                 self.report_count = 0
+                self.oac_apps_trees = 0
 
             def get_json(self, path_or_url):
                 self.report_count += 1
@@ -83,9 +84,11 @@ class CliDispatchTest(unittest.TestCase):
 
             def get_tree(self, repository: str, ref: str = "main"):
                 tree = super().get_tree(repository, ref)
+                if repository == "CCI-MOC/oac-apps":
+                    self.oac_apps_trees += 1
                 if (
                     repository == "CCI-MOC/oac-apps"
-                    and not self.complete_report
+                    and self.oac_apps_trees > 1
                 ):
                     return {}
                 return tree
@@ -302,6 +305,23 @@ class CliDispatchTest(unittest.TestCase):
         # imperative. The detailed ledger must still remain opt-in.
         self.assertLessEqual(len(stdout.splitlines()), 115)
         self.assertNotIn("DETAILED CHECKS", stdout)
+
+    def test_verbose_prints_the_quota_counted_endpoints(self) -> None:
+        class EndpointClient(FakeGitHubClient):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.counted_endpoints = [
+                    "/repos/CCI-MOC/oac-apps/commits/main"
+                ]
+
+        exit_code, _, stderr = self.run_cli(
+            ["status", "bu-ist-demo", "--format", "text", "--no-prs", "--verbose"],
+            client_class=EndpointClient,
+        )
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("GitHub API quota-counted endpoints:", stderr)
+        self.assertIn("GET /repos/CCI-MOC/oac-apps/commits/main", stderr)
 
     def test_status_fail_on_severity(self) -> None:
         cases = (
@@ -521,7 +541,7 @@ class CliDispatchTest(unittest.TestCase):
         self.assertIn("oac-dev-workload1 host inventory", checks)
         self.assertIn("Workload hosted-cluster values", checks)
 
-    def test_full_status_without_prs_uses_at_most_seventeen_api_calls(self) -> None:
+    def test_full_status_without_prs_uses_at_most_twelve_api_calls(self) -> None:
         class CountingClient(FakeGitHubClient):
             def __init__(self, *args, **kwargs):
                 super().__init__(*args, **kwargs)
@@ -561,10 +581,11 @@ class CliDispatchTest(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertEqual(stderr, "")
         self.assertTrue(instances)
-        # Eight repositories each need one commit resolution and one tree;
-        # the MOC issue itself is one additional request. Repeated reads reuse
-        # the same pinned snapshots rather than resolving mutable refs again.
-        self.assertEqual(instances[0].api_requests, 17)
+        # Trees are needed only for oac-infra, oac-apps, and moc-dns (zonefile
+        # discovery); fixed-path repositories read files directly from raw at
+        # the resolved commit. The MOC issue adds one request. Repeated reads
+        # reuse pinned snapshots instead of resolving mutable refs again.
+        self.assertEqual(instances[0].api_requests, 12)
 
     def test_unauthenticated_status_skips_pull_requests_by_default(self) -> None:
         exit_code, stdout, _ = self.run_cli(
