@@ -48,6 +48,7 @@ class GitHubClient:
         self.on_response: Callable[[int], None] | None = None
         self._rate_limit_warning_sent = False
         self.api_calls_used = 0
+        self.counted_endpoints: list[str] = []
         self.requests_made = 0
         self.cache_hits = 0
         clients = run_clients.get()
@@ -96,14 +97,28 @@ class GitHubClient:
     def _is_commit_sha(value: Any) -> bool:
         return isinstance(value, str) and re.fullmatch(r"[0-9a-fA-F]{40}", value) is not None
 
-    def snapshot_request_urls(self, repository: str, ref: str = "main") -> list[str]:
-        """Estimate commit and tree requests without resolving refs remotely."""
+    def snapshot_request_urls(
+        self,
+        repository: str,
+        ref: str = "main",
+        *,
+        include_tree: bool = True,
+    ) -> list[str]:
+        """Estimate commit and tree requests without resolving refs remotely.
+
+        Fixed-path readers resolve only the commit; passing ``include_tree``
+        as false keeps their speculative tree out of the quota estimate.
+        """
 
         ref = self.refs.get(repository, ref)
         prefix = f"{self.base_url}/repos/{repository}"
         if self._is_commit_sha(ref):
+            if not include_tree:
+                return []
             return [f"{prefix}/git/trees/{ref}?recursive=1"]
         commit_url = f"{prefix}/commits/{quote(ref, safe='/')}"
+        if not include_tree:
+            return [commit_url]
         cached = None if self.refresh else self.response_cache.read(commit_url)
         try:
             data = json.loads(cached["body"]) if cached else None
@@ -222,6 +237,7 @@ class GitHubClient:
     def _count_quota(self, url: str, status: int) -> None:
         if url.startswith(self.base_url + "/") and not url.endswith("/rate_limit") and status != 304:
             self.api_calls_used += 1
+            self.counted_endpoints.append(url.removeprefix(self.base_url))
 
     def _mark_unrevalidated(self, url: str, cached: dict[str, Any]) -> None:
         """Keep the oldest cached fetch time used for each repository."""
@@ -355,8 +371,7 @@ class GitHubClient:
         ref = self.refs.get(repository, ref)
         sha = self.source_snapshots.get((repository, ref))
         if sha is None:
-            self.get_tree(repository, ref)
-            sha = self.source_snapshots[(repository, ref)]
+            sha = self.resolve_commit(repository, ref)
         return self._get_raw_file(repository, sha, path)
 
     def _get_raw_file(self, repository: str, sha: str, path: str) -> str:

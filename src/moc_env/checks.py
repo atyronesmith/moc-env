@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 
 import yaml
@@ -37,7 +37,7 @@ from .observed import (
     read_environment_observation,
 )
 from .phases import annotate_and_sort_checks
-from .registry import DEFAULT_REGISTRY_PATH, EnvironmentRegistry
+from .registry import DEFAULT_REGISTRY_PATH, EnvironmentRegistry, RegistryError
 from .suggestions import attach_suggestions
 
 ORG = "CCI-MOC"
@@ -291,6 +291,7 @@ class StatusChecker:
                 self._rate_limited_checks(environment, path_scope)
             )
             self._apply_source_refs(checks)
+            checks = self._apply_deferred(checks, environment)
             return StatusReport(
                 environment=environment,
                 checks=checks,
@@ -301,6 +302,7 @@ class StatusChecker:
         checks = annotate_and_sort_checks(checks)
         self._apply_source_refs(checks)
         checks = self._apply_blocked_states(checks, environment)
+        checks = self._apply_deferred(checks, environment)
         pulls = self._pull_request_evidence(observation.apps.pull_requests)
         if evaluate_prs and self.include_prs:
             self._evaluate_pr_candidates(
@@ -379,6 +381,7 @@ class StatusChecker:
             "workload.node_pool_hosts",
             "workload.gpu_without_hosts",
             "workload.keycloak_oidc_client",
+            "workload.identity_provider",
         }:
             for path in workload_values:
                 add(apps, path)
@@ -393,6 +396,7 @@ class StatusChecker:
             if check.id in {
                 "workload.dns_base_domain",
                 "workload.keycloak_oidc_client",
+                "workload.identity_provider",
             }:
                 add(apps, hub_defaults)
             if check.id in {
@@ -401,7 +405,10 @@ class StatusChecker:
             }:
                 add(infra, "infra/inventory/00hosts.yaml")
                 add(infra, HARDWARE_NETWORK_DOC_PATH)
-            if check.id == "workload.keycloak_oidc_client":
+            if check.id in {
+                "workload.keycloak_oidc_client",
+                "workload.identity_provider",
+            }:
                 add("CCI-MOC/moc-keycloak", "main.tf")
         elif check.id == "workload.address_uniqueness":
             # The check compares every hosted-cluster values file to detect
@@ -743,6 +750,56 @@ class StatusChecker:
                 results.append(check)
         return results
 
+    def _apply_deferred(
+        self, checks: list[CheckResult], environment: Environment
+    ) -> list[CheckResult]:
+        """Mark registry-deferred gaps and report deferred items that now pass."""
+
+        deferred = self.registry.deferred(environment.name)
+        if not deferred:
+            return checks
+        today = self.clock().date()
+        workload_count = len(environment.workload_clusters or ())
+        passing = {"declared_in_main", "requested", "pr_merged"}
+        results = list(checks)
+        for entry in deferred:
+            if (
+                entry.check.startswith("workload.")
+                and workload_count > 1
+                and not entry.cluster
+            ):
+                raise RegistryError(
+                    f"deferred entry for {entry.check} must name a cluster "
+                    f"because {environment.name} has {workload_count} workloads"
+                )
+            expired = bool(
+                entry.until and today > date.fromisoformat(entry.until)
+            )
+            for index, check in enumerate(results):
+                if check.id != entry.check:
+                    continue
+                if entry.cluster and check.cluster != entry.cluster:
+                    continue
+                check = results[index]
+                if check.state in passing:
+                    results[index] = replace(check, deferred_resolved=True)
+                elif expired:
+                    results[index] = replace(
+                        check,
+                        deferred=False,
+                        deferred_expired=True,
+                        defer_reason=entry.reason,
+                        defer_until=entry.until,
+                    )
+                elif check.state != "unknown":
+                    results[index] = replace(
+                        check,
+                        deferred=True,
+                        defer_reason=entry.reason,
+                        defer_until=entry.until,
+                    )
+        return results
+
     def _rate_limited_checks(
         self, environment: Environment, path_scope: str
     ) -> list[CheckResult]:
@@ -776,6 +833,7 @@ class StatusChecker:
                 ("workload.moc_aws_oidc_cluster", "Workload moc-aws OIDC cluster", "CCI-MOC/moc-aws", "main.tf"),
                 ("workload.moc_aws_cert_manager_policy", "Workload moc-aws cert-manager policy", "CCI-MOC/moc-aws", "cert-manager-policies.tf"),
                 ("workload.keycloak_oidc_client", "Workload Keycloak OIDC client", "CCI-MOC/moc-keycloak", "main.tf"),
+                ("workload.identity_provider", "Workload identity provider", "CCI-MOC/oac-apps", "hosted-clusters"),
                 ("workload.api_address_network", "Workload API address network", "CCI-MOC/oac-apps", "hosted-clusters"),
                 ("workload.ingress_address_network", "Workload ingress address network", "CCI-MOC/ansible-switches", "group_vars/all/vlans.yaml"),
                 ("workload.address_uniqueness", "Workload address uniqueness", "CCI-MOC/oac-apps", "hosted-clusters"),
@@ -1833,7 +1891,10 @@ class StatusChecker:
 
     @staticmethod
     def _overall_state(checks: list[CheckResult]) -> str:
-        if any(check.severity == "blocking" for check in checks):
+        if any(
+            check.severity == "blocking" and not check.deferred
+            for check in checks
+        ):
             return "CONFIGURATION IN PROGRESS"
         if checks:
             return "DECLARED IN MAIN"

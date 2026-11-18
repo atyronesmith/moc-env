@@ -481,10 +481,10 @@ class StatusCheckerTest(unittest.TestCase):
 
     def test_read_environment_observation_handles_missing_keycloak(self) -> None:
         class MissingKeycloakClient(FakeGitHubClient):
-            def get_tree(self, repository, ref="main"):
+            def get_file(self, repository, path, ref="main"):
                 if repository == "CCI-MOC/moc-keycloak":
-                    return {}
-                return super().get_tree(repository, ref)
+                    raise GitHubError("GitHub raw download failed (404) for main.tf")
+                return super().get_file(repository, path, ref)
 
         observation = read_environment_observation(
             MissingKeycloakClient(),
@@ -602,6 +602,11 @@ dizzy = {
                 }:
                     return {}
                 return super().get_tree(repository, ref)
+
+            def get_file(self, repository, path, ref="main"):
+                if repository == "CCI-MOC/moc-keycloak":
+                    raise GitHubError("GitHub raw download failed (404) for main.tf")
+                return super().get_file(repository, path, ref)
 
             def pulls(self, repository, state="all"):
                 return

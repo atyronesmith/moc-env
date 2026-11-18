@@ -129,7 +129,8 @@ preflight is free, and immutable-SHA raw downloads do not consume REST quota.
 `from cache` counts response bodies served from the local cache, including
 offline reads and successful `304` revalidation. Commands that do not create a
 GitHub client, such as completion when its environment cache is already warm,
-do not print this line.
+do not print this line. With `--verbose`, the command also lists each endpoint
+that was counted against quota.
 
 For a reproducible measurement, on 2026-11-17 an authenticated run was made
 with an isolated response cache. The counts below are observations for those
@@ -1014,7 +1015,14 @@ uv run moc-env status example-env --issue 123
 ```
 
 The same registry defines default and per-environment required and optional
-local-cluster components, plus an optional Keycloak client-name override. The
+local-cluster components, plus an optional Keycloak client-name override. An
+environment may also list `deferred` checks with a reason, optional cluster,
+and optional `until` date. A workload check in a multi-workload environment
+must name its cluster. Active deferrals are reported under a Deferred heading
+and excluded from blocking and advisory counts; once `until` passes, the gap
+counts again and the report says the deferral expired. A deferred entry whose
+check now passes is reported as resolved so it can be removed from the
+registry. The
 overall status is driven only by `blocking` gaps; `advisory` gaps are counted
 separately and do not make an environment partially configured.
 

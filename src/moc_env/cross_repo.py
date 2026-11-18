@@ -5,6 +5,7 @@ from __future__ import annotations
 import ipaddress
 import re
 from collections.abc import Callable
+from dataclasses import replace
 from typing import Any
 
 import yaml
@@ -12,11 +13,12 @@ import yaml
 from .github import GitHubClient, GitHubError, github_url
 from .model import CheckResult, Environment
 from .observed import AppsObservation, InfraObservation
-
-EVERPURE_REPOSITORY = "CCI-MOC/everpure-moc"
-MOC_AWS_REPOSITORY = "CCI-MOC/moc-aws"
-MOC_DNS_REPOSITORY = "CCI-MOC/moc-dns"
-ANSIBLE_SWITCHES_REPOSITORY = "CCI-MOC/ansible-switches"
+from .repositories import (
+    ANSIBLE_SWITCHES_REPOSITORY,
+    EVERPURE_REPOSITORY,
+    MOC_AWS_REPOSITORY,
+    MOC_DNS_REPOSITORY,
+)
 
 EVERPURE_PATH = "ansible/group_vars/all/realms.yaml"
 MOC_AWS_MAIN = "main.tf"
@@ -53,11 +55,11 @@ def _read_file(
 ) -> tuple[str | None, str | None]:
     _progress(progress, f"read {path}", repository, path)
     try:
-        tree = client.get_tree(repository)
-        if path not in tree:
-            return None, f"{repository}/{path} is absent or unavailable."
+        client.resolve_commit(repository)
         return client.get_file(repository, path), None
     except GitHubError as exc:
+        if "(404)" in str(exc):
+            return None, f"{repository}/{path} is absent or unavailable."
         return None, f"{repository} could not be read: {exc}"
 
 
@@ -136,6 +138,7 @@ _CHECK_LABELS = {
     "workload.moc_aws_cert_manager_policy": "Workload moc-aws cert-manager policy",
     "hub.moc_aws_hosted_secret_prefix": "Hub hosted-cluster secret prefix",
     "workload.keycloak_oidc_client": "Workload Keycloak OIDC client",
+    "workload.identity_provider": "Workload identity provider",
     "hub.moc_dns_records": "Hub moc-dns records",
     "workload.api_address_network": "Workload API address network",
     "workload.ingress_address_network": "Workload ingress address network",
@@ -159,6 +162,7 @@ def _result(
     reason: str,
     missing: Any = None,
     evidence: dict[str, Any] | None = None,
+    next_action: str | None = None,
 ) -> CheckResult:
     return CheckResult(
         id=check_id,
@@ -177,7 +181,13 @@ def _result(
         missing=missing,
         evidence=evidence or {},
         url=github_url(repository, path),
-        next_action=None if state == "declared_in_main" else _NEXT_ACTION[check_id],
+        next_action=(
+            next_action
+            if next_action is not None
+            else None
+            if state == "declared_in_main"
+            else _NEXT_ACTION[check_id]
+        ),
     )
 
 
@@ -189,7 +199,8 @@ _NEXT_ACTION = {
     "hub.moc_aws_cert_manager_policy": "Add a cert-manager policy entry for the hub.",
     "workload.moc_aws_cert_manager_policy": "Add a cert-manager policy entry for the workload.",
     "hub.moc_aws_hosted_secret_prefix": "Add cluster/<hub>/hostedcluster/ to the hub's eso_writable_secret_prefixes.",
-    "workload.keycloak_oidc_client": "Add or correct the workload Keycloak OIDC client.",
+    "workload.keycloak_oidc_client": "Merge and apply the workload Keycloak OIDC client in CCI-MOC/moc-keycloak BEFORE enabling oauth.mocsso.enabled; the hosted cluster waits on the client secret.",
+    "workload.identity_provider": "Re-enable oauth.mocsso.enabled or add the Keycloak OIDC client in moc-keycloak first.",
     "hub.moc_dns_records": "Add or correct api, api-int, and *.apps records in moc-dns.",
     "workload.api_address_network": "Move services.APIServer.ipAddress into the hub machine network.",
     "workload.ingress_address_network": "Move ingress.poolAddress outside the hub machine network and into the workload VLAN.",
@@ -385,6 +396,44 @@ def _workload_values(
     return data if isinstance(data, dict) else None, "The hosted-cluster values file is not a mapping."
 
 
+def _evaluate_keycloak_client(
+    client: GitHubClient,
+    environment: Environment,
+    workload: str,
+    hub_values_file: dict[str, Any] | None,
+    progress: ProgressCallback | None,
+) -> dict[str, Any]:
+    """Read moc-keycloak main.tf once and compare the workload client."""
+
+    external_domain = (hub_values_file or {}).get("hcpExternalDomain")
+    if not isinstance(external_domain, str) or not external_domain:
+        return {
+            "error": "hcpExternalDomain is unavailable from the hub hosted-cluster defaults.",
+        }
+    text, error = _read_file(client, "CCI-MOC/moc-keycloak", "main.tf", progress)
+    blocks, block_error = _hcl_blocks(text, error)
+    if text is not None and not blocks:
+        block_error = "CCI-MOC/moc-keycloak/main.tf did not contain readable HCL blocks."
+    if block_error:
+        return {"error": block_error}
+    expected = {
+        "cluster_name": workload,
+        "openshift_redirect_uri": f"https://oauth-{workload}.{external_domain}:443/oauth2callback/mocsso",
+        "client_secret_name": f"cluster/{environment.infra_cluster}/hostedcluster/{workload}/keycloak-oidc",
+    }
+    block = next((body for _, body in blocks if _hcl_string(body, "cluster_name") == workload), None)
+    observed = {key: _hcl_string(block, key) if block else None for key in expected}
+    nonmatching = [key for key, value in expected.items() if observed[key] != value]
+    return {
+        "expected": expected,
+        "observed": observed,
+        "block": block,
+        "nonmatching": nonmatching,
+        "matches": block is not None and not nonmatching,
+        "error": None,
+    }
+
+
 def _keycloak_workload_check(
     client: GitHubClient,
     environment: Environment,
@@ -396,27 +445,159 @@ def _keycloak_workload_check(
     enabled = _nested(values or {}, ("oauth", "mocsso", "enabled")) is True
     if not enabled:
         return None
-    external_domain = (hub_values_file or {}).get("hcpExternalDomain")
-    if not isinstance(external_domain, str) or not external_domain:
-        return _unknown("workload.keycloak_oidc_client", "workload", workload, "CCI-MOC/moc-keycloak", "main.tf", "hcpExternalDomain is unavailable from the hub hosted-cluster defaults.", {})
-    text, error = _read_file(client, "CCI-MOC/moc-keycloak", "main.tf", progress)
-    blocks, block_error = _hcl_blocks(text, error)
-    if text is not None and not blocks:
-        block_error = "CCI-MOC/moc-keycloak/main.tf did not contain readable HCL blocks."
-    if block_error:
-        return _unknown("workload.keycloak_oidc_client", "workload", workload, "CCI-MOC/moc-keycloak", "main.tf", block_error, {})
-    expected = {
-        "cluster_name": workload,
-        "openshift_redirect_uri": f"https://oauth-{workload}.{external_domain}:443/oauth2callback/mocsso",
-        "client_secret_name": f"cluster/{environment.infra_cluster}/hostedcluster/{workload}/keycloak-oidc",
-    }
-    block = next((body for _, body in blocks if _hcl_string(body, "cluster_name") == workload), None)
-    observed = {key: _hcl_string(block, key) if block else None for key in expected}
-    nonmatching = [key for key, value in expected.items() if observed[key] != value]
+    evaluation = _evaluate_keycloak_client(
+        client, environment, workload, hub_values_file, progress
+    )
+    if evaluation["error"]:
+        return _unknown("workload.keycloak_oidc_client", "workload", workload, "CCI-MOC/moc-keycloak", "main.tf", evaluation["error"], {})
+    expected = evaluation["expected"]
+    observed = evaluation["observed"]
+    block = evaluation["block"]
+    nonmatching = evaluation["nonmatching"]
     if block and not nonmatching:
         return _result("workload.keycloak_oidc_client", "workload", workload, "CCI-MOC/moc-keycloak", "main.tf", "declared_in_main", "info", expected, observed, f"The Keycloak OIDC client for {workload} matches.")
     state = "missing" if block is None else "value_mismatch"
     return _result("workload.keycloak_oidc_client", "workload", workload, "CCI-MOC/moc-keycloak", "main.tf", state, "blocking", expected, observed, f"The Keycloak OIDC client for {workload} is absent or mismatched.", {"fields": nonmatching}, {"block": block})
+
+
+def _open_keycloak_pulls(apps: AppsObservation) -> list[str]:
+    """Name open moc-keycloak pull requests that touch main.tf."""
+
+    labels = []
+    for pull in getattr(apps, "pull_requests", ()):
+        if (
+            pull.repository.value == "CCI-MOC/moc-keycloak"
+            and pull.classification.value == "open"
+            and any(
+                path == "main.tf"
+                for path in pull.changed_files.value
+            )
+        ):
+            labels.append(f"moc-keycloak#{pull.number.value}")
+    return labels
+
+
+def _identity_provider_check(
+    client: GitHubClient,
+    environment: Environment,
+    workload: str,
+    values: dict[str, Any] | None,
+    hub_values_file: dict[str, Any] | None,
+    apps: AppsObservation,
+    progress: ProgressCallback | None,
+) -> CheckResult | None:
+    """Check that mocsso and the Keycloak OIDC client agree."""
+
+    if values is None:
+        return None
+    mocsso_enabled = _nested(values, ("oauth", "mocsso", "enabled"))
+    enabled = mocsso_enabled is True
+    identity_providers = _nested(values, ("oauth", "identityProviders"))
+    if (
+        not enabled
+        and isinstance(identity_providers, list)
+        and identity_providers
+    ):
+        path = (
+            f"hosted-clusters/{environment.infra_cluster}/{workload}/values.yaml"
+        )
+        return _result(
+            "workload.identity_provider",
+            "workload",
+            workload,
+            "CCI-MOC/oac-apps",
+            path,
+            "declared_in_main",
+            "info",
+            {
+                "oauth.mocsso.enabled": False,
+                "oauth.identityProviders": identity_providers,
+            },
+            {
+                "oauth.mocsso.enabled": mocsso_enabled,
+                "oauth.identityProviders": identity_providers,
+            },
+            "oauth.mocsso.enabled is false or absent, but an explicit identity "
+            "provider is configured in oauth.identityProviders, so the cluster "
+            "has an identity provider.",
+        )
+    evaluation = _evaluate_keycloak_client(
+        client, environment, workload, hub_values_file, progress
+    )
+    if evaluation["error"]:
+        return _unknown(
+            "workload.identity_provider",
+            "workload",
+            workload,
+            "CCI-MOC/moc-keycloak",
+            "main.tf",
+            evaluation["error"],
+            {"oauth.mocsso.enabled": True, "keycloak_oidc_client": "matching"},
+        )
+    matches = evaluation["matches"]
+    expected = {"oauth.mocsso.enabled": True}
+    if enabled and matches:
+        return _result(
+            "workload.identity_provider",
+            "workload",
+            workload,
+            "CCI-MOC/moc-keycloak",
+            "main.tf",
+            "declared_in_main",
+            "info",
+            expected,
+            {"oauth.mocsso.enabled": True, "keycloak_oidc_client": "matches"},
+            f"mocsso is enabled and the Keycloak OIDC client for {workload} matches.",
+        )
+    if enabled:
+        state = "missing" if evaluation["block"] is None else "value_mismatch"
+        result = _result(
+            "workload.identity_provider",
+            "workload",
+            workload,
+            "CCI-MOC/moc-keycloak",
+            "main.tf",
+            state,
+            "advisory",
+            expected,
+            {
+                "oauth.mocsso.enabled": True,
+                "keycloak_oidc_client": (
+                    "missing" if evaluation["block"] is None else "mismatched"
+                ),
+            },
+            f"mocsso is enabled but workload.keycloak_oidc_client reports the "
+            f"Keycloak OIDC client for {workload} as absent or mismatched.",
+            evidence={"keycloak_oidc_client": "missing or mismatched"},
+        )
+        return replace(
+            result,
+            state="blocked",
+            next_action=None,
+        )
+    if matches:
+        next_action = "re-enable oauth.mocsso.enabled."
+        client_state = "matches"
+    else:
+        pulls = _open_keycloak_pulls(apps)
+        next_action = "add the client in moc-keycloak first."
+        if pulls:
+            next_action += " Open PR: " + ", ".join(pulls) + "."
+        client_state = "missing" if evaluation["block"] is None else "mismatched"
+    return _result(
+        "workload.identity_provider",
+        "workload",
+        workload,
+        "CCI-MOC/moc-keycloak",
+        "main.tf",
+        "value_mismatch",
+        "advisory",
+        expected,
+        {"oauth.mocsso.enabled": False, "keycloak_oidc_client": client_state},
+        "mocsso is disabled; the cluster has no identity provider.",
+        {"oauth.mocsso.enabled": True},
+        next_action=next_action,
+    )
 
 
 def _address_in(value: Any, network: str) -> bool:
@@ -635,6 +816,11 @@ def _workload_value_checks(
         keycloak = _keycloak_workload_check(client, environment, workload, values, hub_values_file, progress)
         if keycloak:
             results.append(keycloak)
+        identity = _identity_provider_check(
+            client, environment, workload, values, hub_values_file, apps, progress
+        )
+        if identity:
+            results.append(identity)
 
     # Address uniqueness across all workload values files.
     usage: dict[str, list[tuple[str, str]]] = {}

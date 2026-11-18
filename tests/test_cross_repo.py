@@ -91,10 +91,10 @@ services:
 
 
 class UnavailableEverpureClient(CrossRepoFakeGitHubClient):
-    def get_tree(self, repository: str, ref: str = "main"):
+    def get_file(self, repository: str, path: str, ref: str = "main"):
         if repository == "CCI-MOC/everpure-moc":
             raise GitHubError("repository unavailable")
-        return super().get_tree(repository, ref)
+        return super().get_file(repository, path, ref)
 
 
 class ZoneSuffixClient(CrossRepoFakeGitHubClient):
@@ -150,6 +150,7 @@ class CrossRepositoryChecksTest(unittest.TestCase):
             "workload.moc_aws_cert_manager_policy",
             "hub.moc_aws_hosted_secret_prefix",
             "workload.keycloak_oidc_client",
+            "workload.identity_provider",
             "hub.moc_dns_records",
             "workload.api_address_network",
             "workload.ingress_address_network",

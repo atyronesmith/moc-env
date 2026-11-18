@@ -26,7 +26,7 @@ Generated 2026-11-16 12:34 UTC · MOC issue: [#666](https://github.com/CCI-MOC/M
 | 4 Agent visibility | verify by hand |
 | 5 Agent labels and approval | ✅ 1/1 checks |
 | 6 oac-apps values | ✅ 8/8 checks |
-| 7 Shared-service prerequisites | ✅ 4/4 checks |
+| 7 Shared-service prerequisites | ✅ 5/5 checks |
 
 ## Next actions
 
@@ -441,6 +441,18 @@ Source: CCI-MOC/moc-keycloak · [`main.tf`](https://github.com/CCI-MOC/moc-keycl
 | `cluster_name` | `bu-ist-demo-workload0` |
 | `openshift_redirect_uri` | `https://oauth-bu-ist-demo-workload0.hcp.bu-ist-demo.int.massopen.cloud:443/oauth2callback/mocsso` |
 | `client_secret_name` | `cluster/bu-ist-demo-infra/hostedcluster/bu-ist-demo-workload0/keycloak-oidc` |
+
+</details>
+
+<details>
+<summary>✅ Workload identity provider — mocsso is enabled and the Keycloak OIDC client for bu-ist-demo-workload0 matches.</summary>
+
+Source: CCI-MOC/moc-keycloak · [`main.tf`](https://github.com/CCI-MOC/moc-keycloak/blob/main/main.tf) @ main (4444444)
+
+| Field | Observed |
+|---|---|
+| `oauth.mocsso.enabled` | `Yes` |
+| `keycloak_oidc_client` | `matches` |
 
 </details>
 

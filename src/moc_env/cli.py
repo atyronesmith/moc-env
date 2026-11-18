@@ -23,6 +23,7 @@ from .model import Environment
 from .observed import read_apps_observation, read_chart_values_reference_observation, read_infra_observation, read_issue_observation
 from .plan import build_infra_change_plan, render_change_plan_json, render_change_plan_markdown, render_change_plan_text
 from .registry import DEFAULT_REGISTRY_PATH, EnvironmentRegistry, RegistryError
+from .repositories import status_request_urls
 from .report import render_environment_list_json, render_environment_list_text, render_json, render_markdown, render_text
 from .cli_support import ProgressReporter, _print_unauthenticated_warning, add_credential_arguments, add_output, configure_diff, configure_status, diff_handler, print_unknown_environment, resolve_github_token, resolve_workload_argument, sanitize_command, write_output
 from .validate import load_environment_document, load_infra_cluster_document, load_validation_result, load_yaml_document, render_validation_json, render_validation_markdown, render_validation_text, validate_workload_cluster
@@ -430,25 +431,7 @@ def _status_handler(
         repository_refs[f"CCI-MOC/{repository}"] = ref
     client = _new_github_client(args, _resolve_github_token(args), repository_refs)
     include_prs = args.prs or (client.authenticated and not args.no_prs)
-    repositories = (
-        "CCI-MOC/oac-infra",
-        "CCI-MOC/oac-apps",
-        "CCI-MOC/moc-keycloak",
-        "CCI-MOC/everpure-moc",
-        "CCI-MOC/moc-aws",
-        "CCI-MOC/moc-dns",
-        "CCI-MOC/ansible-switches",
-    )
-    candidate_urls = [
-        url
-        for repository in repositories
-        for url in client.snapshot_request_urls(repository)
-    ]
-    if issue_number is not None:
-        candidate_urls.extend(client.snapshot_request_urls("CCI-MOC/MOC-issues"))
-        candidate_urls.append(
-            f"https://api.github.com/repos/CCI-MOC/MOC-issues/issues/{issue_number}"
-        )
+    candidate_urls = status_request_urls(client, issue_number)
     # Optional PR discovery must not prevent the configuration report merely
     # because its speculative request budget exceeds the remaining quota.
     estimated_calls = len(candidate_urls)
@@ -574,6 +557,20 @@ def main(argv: list[str] | None = None, clock: Clock | None = None) -> int:
     finally:
         run_clients.reset(token)
         if clients:
+            arguments = argv if argv is not None else sys.argv[1:]
+            if "--verbose" in arguments:
+                endpoints = [
+                    endpoint
+                    for client in clients
+                    for endpoint in client.counted_endpoints
+                ]
+                if endpoints:
+                    print(
+                        "GitHub API quota-counted endpoints:",
+                        file=sys.stderr,
+                    )
+                    for endpoint in endpoints:
+                        print(f"  GET {endpoint}", file=sys.stderr)
             print(
                 f"GitHub API: {sum(c.requests_made for c in clients)} requests, "
                 f"{sum(c.api_calls_used for c in clients)} counted against quota, "
