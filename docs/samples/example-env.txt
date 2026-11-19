@@ -2,8 +2,8 @@ SAMPLE — generated from a synthetic fixture, not a live environment.
 
 example-env · hub + workload · repo config as of 2026-11-16 12:34 UTC
 
-RESULT: 8 blocking gaps (workload 3) · 0 advisories · 15 of 28 checks pass
-5 checks blocked by action 7
+RESULT: 8 blocking gaps (workload 3) · 0 advisories · 15 of 29 checks pass
+6 checks blocked by action 7
 Pull requests: skipped (--no-prs)
 
 
@@ -22,14 +22,13 @@ PHASE                        WORKLOAD example-env-workload0
 3 Agent ISO boot             verify by hand
 4 Agent visibility           verify by hand
 5 Agent labels and approval  ✅ 1/1 checks
-6 oac-apps values            ❌ 1/8 checks, 5 blocked
+6 oac-apps values            ❌ 1/9 checks, 6 blocked
 7 Shared-service…            ✅ 3/3 checks
 
 NEXT
   1. [oac-infra] Generate and publish a hub-specific discovery ISO, then replace the generic
   boot_image_url for every host in the hub cluster group. boot_image_url is
-  http://10.2.0.82/boot/discovery.iso; expected cluster_specific_image
-  example-env-infra-agent-discovery.iso.
+  http://10.2.0.82/boot/discovery.iso; expected filename contains example-env-infra.
        guide: docs/infra-cluster-deployment.md → Cluster Deployment
   2. [oac-apps] Create or complete the hub hosted-cluster defaults file at
   hosted-clusters/example-env-infra/values.yaml in CCI-MOC/oac-apps.
@@ -62,8 +61,8 @@ NEXT
        guide: docs/infra-cluster-deployment.md → Cluster Configuration
   6. [oac-infra] example-env-workload0: Generate and publish the parent hub's agent discovery
   ISO, then replace the generic boot_image_url for every host in the workload cluster group.
-  boot_image_url is http://10.2.0.82/boot/discovery.iso; expected cluster_specific_image
-  example-env-infra-agent-discovery.iso. (after 1)
+  boot_image_url is http://10.2.0.82/boot/discovery.iso; expected filename contains
+  example-env-workload0 or example-env-infra. (after 1)
        guide: docs/workload-cluster-deployment.md → Infrastructure Configuration
   7. [oac-apps] example-env-workload0: Create the missing hosted-cluster values file from the
   closest existing environment; set the cluster name, parent hub, networking, and node pools

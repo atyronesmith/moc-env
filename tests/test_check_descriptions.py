@@ -124,7 +124,7 @@ class CheckDescriptionCoverageTest(unittest.TestCase):
     def test_every_emitted_check_id_has_a_description(self) -> None:
         ids = emitted_check_ids()
 
-        self.assertEqual(len(ids), 31, sorted(ids))
+        self.assertEqual(len(ids), 34, sorted(ids))
         self.assertEqual(set(CHECK_DESCRIPTIONS), ids)
 
     def test_descriptions_are_multi_sentence_and_render_cleanly(self) -> None:

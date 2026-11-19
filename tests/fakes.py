@@ -186,7 +186,7 @@ services:
     externalIpAddress: 10.20.29.10
 ingress:
   poolAddress: 10.20.28.10
-  externalIpAddress: 10.20.29.10
+  externalIpAddress: 10.20.29.11
 dns:
   records:
     - hostname: api.bu-ist-demo-workload0.int.massopen.cloud
@@ -332,7 +332,7 @@ services:
     externalIpAddress: 10.20.29.10
 ingress:
   poolAddress: 10.20.28.10
-  externalIpAddress: 10.20.29.10
+  externalIpAddress: 10.20.29.11
 dns:
   records:
     - hostname: api.bu-ist-demo-workload0.int.massopen.cloud
@@ -352,7 +352,54 @@ nodePools:
         return super().get_file(repository, path, ref)
 
 
-class FullyConfiguredFakeGitHubClient(CrossRepoFakeGitHubClient):
+class FeatureChartsFakeGitHubClient(CrossRepoFakeGitHubClient):
+    """Cross-repository fixture that also serves feature placements and charts."""
+
+    def get_tree(self, repository: str, ref: str = "main"):
+        tree = super().get_tree(repository, ref)
+        if repository == "CCI-MOC/oac-apps":
+            paths = {
+                "applicationsets/templates/managed/example-clusters.yaml",
+                "values/bu-ist-demo-infra/local-cluster/acm-placements.yaml",
+            }
+            tree.update({path: {"path": path} for path in paths})
+        return tree
+
+    def get_file(self, repository: str, path: str, ref: str = "main") -> str:
+        if (
+            repository == "CCI-MOC/oac-apps"
+            and path == "applicationsets/templates/managed/example-clusters.yaml"
+        ):
+            return """
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: example-clusters
+spec:
+  generators:
+    - clusterDecisionResource:
+        configMapRef: acm-placement
+        labelSelector:
+          matchLabels:
+            cluster.open-cluster-management.io/placement: all-managed-clusters
+    - list:
+        elements:
+          - component: example
+"""
+        if (
+            repository == "CCI-MOC/oac-apps"
+            and path == "values/bu-ist-demo-infra/local-cluster/acm-placements.yaml"
+        ):
+            return """
+placements:
+  - name: gpu-clusters
+    matchLabels:
+      massopen.cloud/feature-gpu: "true"
+"""
+        return super().get_file(repository, path, ref)
+
+
+class FullyConfiguredFakeGitHubClient(FeatureChartsFakeGitHubClient):
     """Offline fixture where every repository check passes."""
 
     REQUIRED_LOCAL_COMPONENTS = (
@@ -398,11 +445,16 @@ class FullyConfiguredFakeGitHubClient(CrossRepoFakeGitHubClient):
                 "http://10.2.0.82/boot/discovery.iso",
                 "http://10.2.0.82/boot/bu-ist-demo-infra-agent-discovery.iso",
             )
-        if repository == "CCI-MOC/oac-apps" and path not in {
+        if (
+            repository == "CCI-MOC/oac-apps"
+            and not path.startswith("applicationsets/")
+            and not path.endswith("acm-placements.yaml")
+            and path not in {
             "hosted-clusters/bu-ist-demo-infra/values.yaml",
             "hosted-clusters/bu-ist-demo-infra/"
             "bu-ist-demo-workload0/values.yaml",
-        }:
+            }
+        ):
             return "{}\n"
         return super().get_file(repository, path, ref)
 

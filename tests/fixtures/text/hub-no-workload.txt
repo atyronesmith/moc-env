@@ -22,15 +22,15 @@ NEXT
        guide: docs/infra-cluster-deployment.md → Cluster Deployment
   2. [oac-infra] Generate and publish a hub-specific discovery ISO, then replace the generic
   boot_image_url for every host in the hub cluster group. boot_image_url is none; expected
-  cluster_specific_image dizzy-infra-agent-discovery.iso. (after 1)
+  filename contains dizzy-infra. (after 1)
        guide: docs/infra-cluster-deployment.md → Cluster Deployment
   3. [moc-keycloak] Edit CCI-MOC/moc-keycloak at main.tf and add the hub's OIDC client, redirect
   URI, and secret reference. Set cluster_name = `dizzy-infra`, openshift_redirect_uri =
   `https://oauth-openshift.apps.dizzy.int.massopen.cloud/oauth2callback/mocsso`, and
   client_secret_name = `cluster/dizzy-infra/keycloak-oidc`. client is not found; expected
-  dizzy-infra. redirect_uri is not found; expected
-  https://oauth-openshift.apps.dizzy.int.massopen.cloud/oauth2callback/mocsso. secret_name is
-  not found; expected cluster/dizzy-infra/keycloak-oidc. (after 2)
+  dizzy-infra. openshift_redirect_uri is not found; expected
+  https://oauth-openshift.apps.dizzy.int.massopen.cloud/oauth2callback/mocsso.
+  client_secret_name is not found; expected cluster/dizzy-infra/keycloak-oidc. (after 2)
        guide: docs/infra-cluster-deployment.md → Cluster Configuration
   4. [oac-apps] Create or complete the hub hosted-cluster defaults file at
   hosted-clusters/dizzy-infra/values.yaml in CCI-MOC/oac-apps.
@@ -60,7 +60,7 @@ NEXT
   cluster_name is not found; expected dizzy-infra. (after 4)
        guide: docs/infra-cluster-deployment.md → Cluster Configuration
   8. [moc-aws] Add a cert-manager policy entry for the hub. policy entry is not found; expected
-  covers dizzy-infra. (after 4)
+  policy_name or cluster_subdomain names dizzy-infra. (after 4)
        guide: docs/infra-cluster-deployment.md → Cluster Configuration
   9. [oac-apps] Create or complete values/dizzy-infra/hcp-config.yaml in CCI-MOC/oac-apps for
   hub-wide HCP and secret-selector values. values/dizzy-infra/hcp-config.yaml is missing;

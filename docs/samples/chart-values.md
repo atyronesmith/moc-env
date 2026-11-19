@@ -11,7 +11,7 @@ This guide explains how `CCI-MOC/oac-apps` organizes Helm chart values across th
 | Source repository | `CCI-MOC/oac-apps` |
 | Source ref | `main` |
 | Values files | 17 |
-| Unique keys | 23 |
+| Unique keys | 27 |
 
 ## Deployment model
 
@@ -22,7 +22,7 @@ The hub cluster is the management cluster. It runs shared services and hosts con
 | Scope | Layer | Path pattern | Files | Keys |
 |---|---|---|---:|---:|
 | `hub-wide` | Hub cluster | `values/{hub-cluster}/*.yaml` | 1 | 0 |
-| `hub-local-cluster` | Hub local cluster | `values/{hub-cluster}/local-cluster/*.yaml` | 13 | 0 |
+| `hub-local-cluster` | Hub local cluster | `values/{hub-cluster}/local-cluster/*.yaml` | 13 | 4 |
 | `hosted-cluster-defaults` | Hosted clusters under a hub | `hosted-clusters/{hub-cluster}/*.yaml` | 1 | 2 |
 | `hosted-cluster` | Hosted control plane and data plane | `hosted-clusters/{hub-cluster}/{workload-cluster}/values.yaml` | 1 | 21 |
 | `workload-components` | Hosted workload cluster | `values/{hub-cluster}/{workload-cluster}/*.yaml` | 1 | 0 |
@@ -354,6 +354,19 @@ Reserved virtual IP for a spoke cluster’s ingress router. This is used by the 
 ## Uncurated variables
 
 These variables do not yet have a manual definition. They are shown with repository-derived facts and a provisional chart-based description until a reviewed manual entry is added.
+
+### hub-local-cluster
+
+Values for components installed in the hub cluster's local cluster. Shared management services such as ACM are configured here.
+
+**Path pattern:** `values/{hub-cluster}/local-cluster/*.yaml`
+
+| Key | Charts | Type | Files | What it controls |
+|---|---|---|---:|---|
+| `placements` | `acm-placements` | `list` | 1 | ACM placement rules that select clusters by labels. This key controls `placements`. |
+| `placements[].matchLabels` | `acm-placements` | `dict` | 1 | ACM placement configuration. |
+| `placements[].matchLabels.massopen.cloud/feature-gpu` | `acm-placements` | `str` | 1 | Labels used by ACM placement rules. |
+| `placements[].name` | `acm-placements` | `str` | 1 | ACM placement configuration. |
 
 ### hosted-cluster
 

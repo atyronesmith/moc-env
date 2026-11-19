@@ -40,6 +40,8 @@ class MarkdownCell(str):
 def _value(value: Any) -> str:
     if value is None:
         return "-"
+    if isinstance(value, bool):
+        return "true" if value else "false"
     if isinstance(value, (dict, list)):
         return json.dumps(value, sort_keys=True, separators=(",", ":"))
     return str(value)
@@ -51,9 +53,9 @@ def _markdown_inline(value: Any) -> str:
     if value is None:
         return "—"
     if value is True:
-        return "Yes"
+        return "true"
     if value is False:
-        return "No"
+        return "false"
     if isinstance(value, str) and value in {"Present", "Missing"}:
         return f"**{value}**"
     if isinstance(value, dict):
@@ -279,6 +281,12 @@ def _text_value(value: Any, indent: int) -> str:
     return "\n".join([lines[0], *(continuation + line for line in lines[1:])])
 
 
+def _scalar_text(value: Any) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)
+
+
 def _state(state: str) -> str:
     return f"{STATE_SYMBOLS.get(state, '•')} {state}"
 
@@ -335,11 +343,11 @@ def _field_value_checklist(check: dict[str, Any]) -> list[str] | None:
             rendered_values.append("MISSING")
             continue
         if isinstance(value, bool):
-            rendered_value = str(value)
+            rendered_value = _scalar_text(value)
         elif isinstance(value, (dict, list)):
             rendered_value = json.dumps(value, sort_keys=True, separators=(",", ":"))
         else:
-            rendered_value = str(value)
+            rendered_value = _scalar_text(value)
         rendered_values.append(rendered_value)
         present_count += 1
 
@@ -370,8 +378,8 @@ def _oidc_field_table(check: dict[str, Any]) -> list[str] | None:
     if not rows:
         return None
     field_width = max(len(field) for field, _, _ in rows) + 2
-    expected_width = max(len(str(expected)) for _, expected, _ in rows) + 2
-    observed_width = max(len(str(observed)) for _, _, observed in rows) + 2
+    expected_width = max(len(_scalar_text(expected)) for _, expected, _ in rows) + 2
+    observed_width = max(len(_scalar_text(observed)) for _, _, observed in rows) + 2
     lines = [
         "  Keycloak OIDC fields:",
         "  Field:".ljust(field_width)
@@ -381,8 +389,8 @@ def _oidc_field_table(check: dict[str, Any]) -> list[str] | None:
     for field, expected, observed in rows:
         lines.append(
             f"  {field:<{field_width - 2}}  "
-            f"{str(expected):<{expected_width - 2}}  "
-            f"{str(observed)}"
+            f"{_scalar_text(expected):<{expected_width - 2}}  "
+            f"{_scalar_text(observed)}"
         )
     return lines
 
@@ -543,6 +551,57 @@ def _structured_summary(check: dict[str, Any]) -> list[str] | None:
         or _pull_request_count_summary(check)
         or _mapping_summary(check)
     )
+
+
+def _feature_chart_text_table(check: dict[str, Any]) -> list[str]:
+    evidence = check.get("evidence") or {}
+    rows = evidence.get("charts")
+    if check.get("id") != "workload.feature_chart_values" or not isinstance(
+        rows, list
+    ):
+        return []
+    rendered = [
+        [
+            str(row.get("chart") or "-"),
+            str(row.get("application_set") or "-"),
+            str(row.get("placement") or "-"),
+            str(row.get("feature_label") or "-"),
+            "yes" if row.get("hub_values_file") else "no",
+            "yes" if row.get("cluster_values_file") else "no",
+            ", ".join(row.get("unmet_required_values") or []) or "-",
+        ]
+        for row in rows
+        if isinstance(row, dict)
+    ]
+    if not rendered:
+        return []
+    headers = (
+        "Chart",
+        "Application set",
+        "Placement",
+        "Feature label",
+        "Hub values",
+        "Cluster values",
+        "Unmet required values",
+    )
+    widths = [
+        max(len(headers[index]), *(len(row[index]) for row in rendered))
+        for index in range(len(headers))
+    ]
+    lines = ["  Received charts:"]
+    lines.append(
+        "  "
+        + "  ".join(
+            header.ljust(widths[index])
+            for index, header in enumerate(headers)
+        )
+    )
+    lines.extend(
+        "  "
+        + "  ".join(value.ljust(widths[index]) for index, value in enumerate(row))
+        for row in rendered
+    )
+    return lines
 
 
 def _followup_gap(check: dict[str, Any]) -> str:
@@ -1108,6 +1167,7 @@ def _detail_section(check: dict[str, Any], ascii_mode: bool) -> list[str]:
             lines.append(f"    {repository}: {count}")
     for name, expected_value, observed_value in rows:
         lines.append(f"  {plain(name):<{field_width}}  {plain(expected_value):<{expected_width}}  {plain(observed_value)}")
+    lines.extend(_feature_chart_text_table(check))
     url = _detail_url(check)
     if url:
         lines.append(f"  URL: {url}")
@@ -1348,13 +1408,53 @@ def _agent_label_markdown_table(check: dict[str, Any]) -> list[str] | None:
     ]
 
 
+def _feature_chart_markdown_table(check: dict[str, Any]) -> list[str]:
+    evidence = check.get("evidence") or {}
+    rows = evidence.get("charts")
+    if check.get("id") != "workload.feature_chart_values" or not isinstance(
+        rows, list
+    ):
+        return []
+    table_rows = [
+        [
+            row.get("chart"),
+            row.get("application_set"),
+            row.get("placement"),
+            row.get("feature_label"),
+            row.get("hub_values_file"),
+            row.get("cluster_values_file"),
+            row.get("unmet_required_values") or [],
+        ]
+        for row in rows
+        if isinstance(row, dict)
+    ]
+    if not table_rows:
+        return []
+    return [
+        "**Received charts**",
+        "",
+        *_markdown_table(
+            [
+                "Chart",
+                "Application set",
+                "Placement",
+                "Feature label",
+                "Hub values",
+                "Cluster values",
+                "Unmet required values",
+            ],
+            table_rows,
+        ),
+    ]
+
+
 def _markdown_human_value(value: Any) -> str:
     if value is None:
         return "—"
     if value is True:
-        return "Yes"
+        return "true"
     if value is False:
-        return "No"
+        return "false"
     if isinstance(value, dict):
         if "value" in value:
             return _markdown_human_value(value["value"])
@@ -1500,6 +1600,7 @@ def _check_markdown_details(
             lines.extend(["None.", ""])
     lines.extend(_host_table(check, evidence))
     lines.extend(_agent_label_markdown_table(check))
+    lines.extend(_feature_chart_markdown_table(check))
     lines.extend(["</details>", ""])
     return lines
 

@@ -291,10 +291,10 @@ class StatusChecker:
             checks = annotate_and_sort_checks(
                 self._rate_limited_checks(environment, path_scope)
             )
+            self._apply_source_refs(checks)
             apply_descriptions(
                 checks, self._description_context(environment, None)
             )
-            self._apply_source_refs(checks)
             checks = self._apply_deferred(checks, environment)
             return StatusReport(
                 environment=environment,
@@ -304,10 +304,10 @@ class StatusChecker:
                 rate_limited=True,
             )
         checks = annotate_and_sort_checks(checks)
+        self._apply_source_refs(checks)
         apply_descriptions(
             checks, self._description_context(environment, observation)
         )
-        self._apply_source_refs(checks)
         checks = self._apply_blocked_states(checks, environment)
         checks = self._apply_deferred(checks, environment)
         pulls = self._pull_request_evidence(observation.apps.pull_requests)
@@ -417,7 +417,10 @@ class StatusChecker:
                 "workload.identity_provider",
             }:
                 add("CCI-MOC/moc-keycloak", "main.tf")
-        elif check.id == "workload.address_uniqueness":
+        elif check.id in {
+            "workload.address_uniqueness",
+            "workload.address_internal_duplicates",
+        }:
             # The check compares every hosted-cluster values file to detect
             # duplicate addresses, not only the current workload file.
             add(apps, "hosted-clusters/")
@@ -586,6 +589,7 @@ class StatusChecker:
             wanted.add(f"hosted-clusters/{hub}/values.yaml")
         for workload in environment.workload_clusters or ():
             if affected_ids & {
+                "workload.address_internal_duplicates",
                 "workload.hosted_cluster_values",
                 "workload.api_address_network",
                 "workload.ingress_address_network",
@@ -715,13 +719,6 @@ class StatusChecker:
         for check in checks:
             ref = self.client.ref_for(check.repository)
             check.ref = ref
-            check.reason = check.reason.replace("in main", f"in {ref}").replace("from main", f"from {ref}")
-            if check.verifies:
-                check.verifies = check.verifies.replace("in main", f"in {ref}")
-            if check.not_verified:
-                check.not_verified = check.not_verified.replace(
-                    "in main", f"in {ref}"
-                )
             if check.url and "/blob/" in check.url:
                 check.url = github_url(check.repository, check.path, ref)
             if check.source is not None:
@@ -850,9 +847,12 @@ class StatusChecker:
                 ("workload.api_address_network", "Workload API address network", "CCI-MOC/oac-apps", "hosted-clusters"),
                 ("workload.ingress_address_network", "Workload ingress address network", "CCI-MOC/ansible-switches", "group_vars/all/vlans.yaml"),
                 ("workload.address_uniqueness", "Workload address uniqueness", "CCI-MOC/oac-apps", "hosted-clusters"),
+                ("workload.address_internal_duplicates", "Workload internal address duplicates", "CCI-MOC/oac-apps", "hosted-clusters"),
                 ("workload.dns_base_domain", "Workload DNS base domain", "CCI-MOC/oac-apps", "hosted-clusters"),
                 ("workload.node_pool_hosts", "Workload node-pool host capacity", "CCI-MOC/oac-infra", "infra/inventory/00hosts.yaml"),
                 ("workload.gpu_without_hosts", "Workload GPU feature support", "CCI-MOC/oac-apps", "hosted-clusters"),
+                ("workload.feature_placements", "Workload feature placements", "CCI-MOC/oac-apps", "applicationsets"),
+                ("workload.feature_chart_values", "Workload feature chart values", "CCI-MOC/oac-apps", "applicationsets"),
             ),
         }
         scopes = ("shared", "hub") if path_scope == "hub" else (
@@ -1073,6 +1073,7 @@ class StatusChecker:
         inventory_path = observation.inventory_path
         hub_inventory_path = observation.hub_inventory_path
         vars_path = observation.variables_path
+        ref = self.client.ref_for(repository)
 
         for cluster_observation in observation.clusters.values():
             cluster = cluster_observation.cluster.value
@@ -1096,14 +1097,14 @@ class StatusChecker:
             elif observation.inventory_present.value:
                 state = "partial"
                 reason = (
-                    "The inventory file is present in main, but no group has "
+                    f"The inventory file is present in {ref}, but no group has "
                     f"vars.cluster == {cluster!r}."
                 )
                 present = {"inventory_file": inventory_path}
                 missing = {"cluster_group": cluster}
             else:
                 state = "missing"
-                reason = "The Ansible inventory file is absent from main."
+                reason = f"The Ansible inventory file is absent from {ref}."
                 present = {"inventory_file": None}
                 missing = {"inventory_file": inventory_path, "cluster_group": cluster}
 
@@ -1311,7 +1312,7 @@ class StatusChecker:
             hub_missing = {"inventory_key": environment.infra_cluster}
         else:
             hub_state = "missing"
-            hub_reason = "The hub-image inventory file is absent from main."
+            hub_reason = f"The hub-image inventory file is absent from {ref}."
             hub_present = {"inventory_file": None}
             hub_missing = {"inventory_file": hub_inventory_path}
 
@@ -1367,8 +1368,8 @@ class StatusChecker:
         if observation.hub_variables.path_present.value and not missing_fields:
             state = "declared_in_main"
             reason = (
-                "All six required hub-image variables are present in main; their "
-                "values are not validated."
+                f"All six required hub-image variables are present in {ref}; "
+                "their values are not validated."
             )
         elif observation.hub_variables.path_present.value:
             state = "partial"
@@ -1378,7 +1379,7 @@ class StatusChecker:
             )
         else:
             state = "missing"
-            reason = "The hub-image variable file is absent from main."
+            reason = f"The hub-image variable file is absent from {ref}."
 
         results.append(
             CheckResult(
@@ -1424,6 +1425,7 @@ class StatusChecker:
         """Check host inputs consumed by infra/update-agents.yaml."""
 
         repository = OAC_INFRA_REPOSITORY
+        ref = self.client.ref_for(repository)
         hosts = cluster_observation.hosts.value
         documented_resource_classes = hardware_resource_classes.value
         rows = [
@@ -1471,7 +1473,9 @@ class StatusChecker:
 
         if not update_agents_present.value:
             state = "missing"
-            reason = "The infra/update-agents.yaml playbook is absent from main."
+            reason = (
+                f"The infra/update-agents.yaml playbook is absent from {ref}."
+            )
         elif not hosts:
             state = "missing"
             reason = f"No hosts are declared for the {cluster} workload cluster."
@@ -1582,21 +1586,23 @@ class StatusChecker:
         keycloak_client_name = self.registry.keycloak_client_name(environment.name)
         expected = {
             "client": keycloak_client_name,
-            "redirect_uri": (
+            "openshift_redirect_uri": (
                 f"https://oauth-openshift.apps.{environment.domain}"
                 "/oauth2callback/mocsso"
             ),
-            "secret_name": f"cluster/{environment.infra_cluster}/keycloak-oidc",
+            "client_secret_name": (
+                f"cluster/{environment.infra_cluster}/keycloak-oidc"
+            ),
         }
         client = observation.client
         near_match = observation.near_match_client
         selected_client = client or near_match
         observed = {
             "client": selected_client.cluster_name.value if selected_client else None,
-            "redirect_uri": (
+            "openshift_redirect_uri": (
                 selected_client.redirect_uri.value if selected_client else None
             ),
-            "secret_name": (
+            "client_secret_name": (
                 selected_client.secret_name.value if selected_client else None
             ),
         }
@@ -1642,8 +1648,8 @@ class StatusChecker:
             next_action += (
                 " Set cluster_name = "
                 f"`{expected['client']}`, openshift_redirect_uri = "
-                f"`{expected['redirect_uri']}`, and client_secret_name = "
-                f"`{expected['secret_name']}`."
+                f"`{expected['openshift_redirect_uri']}`, and client_secret_name = "
+                f"`{expected['client_secret_name']}`."
             )
 
         evidence: dict[str, Any] = {"fields": fields}
@@ -1700,6 +1706,7 @@ class StatusChecker:
         observation: AppsObservation,
     ) -> list[CheckResult]:
         repository = observation.source_repository
+        ref = self.client.ref_for(repository)
         tree = set(observation.paths.value)
         infra_defaults = f"hosted-clusters/{environment.infra_cluster}/values.yaml"
         hub_values_prefix = f"values/{environment.infra_cluster}/"
@@ -1856,13 +1863,13 @@ class StatusChecker:
                         f"{len(required_found)} of {required_total} required "
                         f"{'file' if required_total == 1 else 'files'} "
                         f"{required_verb} in "
-                        f"main under {scope_label} ({required_names}). "
+                        f"{ref} under {scope_label} ({required_names}). "
                         "File contents are not read."
                     )
                 else:
                     found_verb = "file exists" if len(found) == 1 else "files exist"
                     reason = (
-                        f"{len(found)} {found_verb} in main under {scope_label}; "
+                        f"{len(found)} {found_verb} in {ref} under {scope_label}; "
                         "at least 1 is required. File contents are not read."
                     )
                 missing = None
@@ -1872,7 +1879,7 @@ class StatusChecker:
                     f"{len(required_found)} of {required_total} required "
                     f"{'file' if required_total == 1 else 'files'} "
                     f"{required_verb} in "
-                    f"main under {scope_label}; missing: "
+                    f"{ref} under {scope_label}; missing: "
                     + ", ".join(missing_paths)
                     + ". File contents are not read."
                 )
@@ -1880,7 +1887,7 @@ class StatusChecker:
             elif required_paths:
                 reason = (
                     f"None of the {required_total} required "
-                    f"{'file' if required_total == 1 else 'files'} exist in main "
+                    f"{'file' if required_total == 1 else 'files'} exist in {ref} "
                     f"under {scope_label}. Missing: "
                     + ", ".join(expected_paths or [search_path])
                     + ". File contents are not read."
@@ -1888,7 +1895,7 @@ class StatusChecker:
                 missing = {"paths": expected_paths or [search_path]}
             else:
                 reason = (
-                    f"No files exist in main under {scope_label}; at least 1 is "
+                    f"No files exist in {ref} under {scope_label}; at least 1 is "
                     "required. File contents are not read."
                 )
                 missing = {"paths": expected_paths or [search_path]}

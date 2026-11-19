@@ -292,8 +292,8 @@
     {
       "actual": {
         "client": "bu-ist-demo-infra",
-        "redirect_uri": "https://oauth-openshift.apps.bu-ist-demo.int.massopen.cloud/oauth2callback/mocsso",
-        "secret_name": "cluster/bu-ist-demo-infra/keycloak-oidc"
+        "client_secret_name": "cluster/bu-ist-demo-infra/keycloak-oidc",
+        "openshift_redirect_uri": "https://oauth-openshift.apps.bu-ist-demo.int.massopen.cloud/oauth2callback/mocsso"
       },
       "blocked_by": [
         "hub.boot_image"
@@ -345,22 +345,22 @@
             "observed": "bu-ist-demo-infra",
             "status": "match"
           },
-          "redirect_uri": {
-            "expected": "https://oauth-openshift.apps.bu-ist-demo.int.massopen.cloud/oauth2callback/mocsso",
-            "observed": "https://oauth-openshift.apps.bu-ist-demo.int.massopen.cloud/oauth2callback/mocsso",
-            "status": "match"
-          },
-          "secret_name": {
+          "client_secret_name": {
             "expected": "cluster/bu-ist-demo-infra/keycloak-oidc",
             "observed": "cluster/bu-ist-demo-infra/keycloak-oidc",
+            "status": "match"
+          },
+          "openshift_redirect_uri": {
+            "expected": "https://oauth-openshift.apps.bu-ist-demo.int.massopen.cloud/oauth2callback/mocsso",
+            "observed": "https://oauth-openshift.apps.bu-ist-demo.int.massopen.cloud/oauth2callback/mocsso",
             "status": "match"
           }
         }
       },
       "expected": {
         "client": "bu-ist-demo-infra",
-        "redirect_uri": "https://oauth-openshift.apps.bu-ist-demo.int.massopen.cloud/oauth2callback/mocsso",
-        "secret_name": "cluster/bu-ist-demo-infra/keycloak-oidc"
+        "client_secret_name": "cluster/bu-ist-demo-infra/keycloak-oidc",
+        "openshift_redirect_uri": "https://oauth-openshift.apps.bu-ist-demo.int.massopen.cloud/oauth2callback/mocsso"
       },
       "gaps": [],
       "id": "hub.oidc_client",
@@ -372,11 +372,11 @@
           "value": "bu-ist-demo-infra"
         },
         {
-          "name": "redirect_uri",
+          "name": "openshift_redirect_uri",
           "value": "https://oauth-openshift.apps.bu-ist-demo.int.massopen.cloud/oauth2callback/mocsso"
         },
         {
-          "name": "secret_name",
+          "name": "client_secret_name",
           "value": "cluster/bu-ist-demo-infra/keycloak-oidc"
         }
       ],
@@ -386,8 +386,8 @@
       "present": {
         "fields": {
           "client": "match",
-          "redirect_uri": "match",
-          "secret_name": "match"
+          "client_secret_name": "match",
+          "openshift_redirect_uri": "match"
         }
       },
       "reason": "All expected Keycloak OIDC client fields match.",
@@ -470,7 +470,7 @@
       "stage": "GitOps configuration",
       "state": "missing",
       "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/values.yaml",
-      "verifies": "Lists the CCI-MOC/oac-apps tree and requires the path hosted-clusters/bu-ist-demo-infra/values.yaml to exist. The check passes when that single path is present in the selected ref."
+      "verifies": "Lists the CCI-MOC/oac-apps tree and requires the path hosted-clusters/bu-ist-demo-infra/values.yaml to exist. The check passes when that single path is present in `main`."
     },
     {
       "actual": {
@@ -537,7 +537,7 @@
       "stage": "GitOps configuration",
       "state": "missing",
       "url": "https://github.com/CCI-MOC/oac-apps/blob/main/values/bu-ist-demo-infra",
-      "verifies": "Lists the CCI-MOC/oac-apps tree and requires values/bu-ist-demo-infra/hcp-config.yaml for hub-wide HCP and secret-selector values. The check passes when that path exists; the file is never opened."
+      "verifies": "Lists the CCI-MOC/oac-apps tree and requires values/bu-ist-demo-infra/hcp-config.yaml for hub-wide HCP and secret-selector values. The check passes when that path exists in `main`; the file is never opened."
     },
     {
       "actual": {
@@ -640,7 +640,7 @@
       "stage": "GitOps configuration",
       "state": "missing",
       "url": "https://github.com/CCI-MOC/oac-apps/blob/main/values/bu-ist-demo-infra/local-cluster",
-      "verifies": "Lists the CCI-MOC/oac-apps tree and requires 13 files under values/bu-ist-demo-infra/local-cluster/: acm.yaml, acm-placements.yaml, cert-manager.yaml, cluster-certificates.yaml, cluster-version.yaml, external-dns-operator.yaml, external-secrets.yaml, hcp-config.yaml, keycloak-oauth.yaml, metallb.yaml, openshift-gitops.yaml, portworx.yaml, user-workload-monitoring.yaml. Configured optional components (none configured) must exist too, and the check passes only when every required and optional file is present."
+      "verifies": "Lists the CCI-MOC/oac-apps tree and requires 13 files under values/bu-ist-demo-infra/local-cluster/: acm.yaml, acm-placements.yaml, cert-manager.yaml, cluster-certificates.yaml, cluster-version.yaml, external-dns-operator.yaml, external-secrets.yaml, hcp-config.yaml, keycloak-oauth.yaml, metallb.yaml, openshift-gitops.yaml, portworx.yaml, user-workload-monitoring.yaml. Configured optional components (none configured) must exist too, and the check passes only when every required and optional file is present in `main`."
     },
     {
       "actual": {
@@ -710,7 +710,7 @@
       "stage": "GitOps configuration",
       "state": "missing",
       "url": "https://github.com/CCI-MOC/oac-apps/blob/main/apps/bu-ist-demo-infra",
-      "verifies": "Lists the CCI-MOC/oac-apps tree and requires apps/bu-ist-demo-infra/keycloak-oauth.yaml. The check passes when that Argo CD application manifest path exists."
+      "verifies": "Lists the CCI-MOC/oac-apps tree and requires apps/bu-ist-demo-infra/keycloak-oauth.yaml. The check passes when that Argo CD application manifest path exists in `main`."
     },
     {
       "actual": {
@@ -1125,7 +1125,7 @@
       "stage": "GitOps configuration",
       "state": "missing",
       "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml",
-      "verifies": "Lists the CCI-MOC/oac-apps tree and requires hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml. The check passes when that path exists."
+      "verifies": "Lists the CCI-MOC/oac-apps tree and requires hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml. The check passes when that path exists in `main`."
     },
     {
       "actual": {
@@ -1187,7 +1187,7 @@
       "stage": "GitOps configuration",
       "state": "missing",
       "url": "https://github.com/CCI-MOC/oac-apps/blob/main/values/bu-ist-demo-infra/bu-ist-demo-workload0",
-      "verifies": "Lists the CCI-MOC/oac-apps tree and counts files under values/bu-ist-demo-infra/bu-ist-demo-workload0/. The check passes when at least one file exists there; there is no fixed required-file list."
+      "verifies": "Lists the CCI-MOC/oac-apps tree and counts files under values/bu-ist-demo-infra/bu-ist-demo-workload0/. The check passes when at least one file exists there in `main`; there is no fixed required-file list."
     },
     {
       "blocked_by": [
@@ -1343,7 +1343,7 @@
       "gaps": [],
       "id": "workload.address_uniqueness",
       "next_action": null,
-      "not_verified": "Duplicate addresses inside one cluster are not reported, and addresses are compared as strings, so equivalent CIDR and bare-IP spellings are not unified.",
+      "not_verified": "Addresses are compared as strings, so equivalent CIDR and bare-IP spellings are not unified; duplicates inside one cluster are covered separately by workload.address_internal_duplicates.",
       "observed": [],
       "path": "hosted-clusters/",
       "phase": 6,
@@ -1357,6 +1357,34 @@
       "state": "declared_in_main",
       "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/",
       "verifies": "Reads every hosted-clusters/<hub>/<cluster>/values.yaml in CCI-MOC/oac-apps and collects services.APIServer.ipAddress, ingress.poolAddress, services.APIServer.externalIpAddress and ingress.externalIpAddress for each cluster. The check passes when no address used by `bu-ist-demo-workload0` is also used by a different cluster."
+    },
+    {
+      "blocked_by": [
+        "workload.hosted_cluster_values"
+      ],
+      "check": "Workload internal address duplicates",
+      "cluster": "bu-ist-demo-workload0",
+      "evidence": {
+        "error": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml could not be parsed or is unavailable, so duplicate addresses inside this workload could not be checked."
+      },
+      "expected": "No address is used by more than one field of bu-ist-demo-workload0.",
+      "gaps": [],
+      "id": "workload.address_internal_duplicates",
+      "next_action": null,
+      "not_verified": "The report does not prove whether sharing an address is intentional; it only flags the duplicate inside this workload. Cross-cluster duplicates are covered by workload.address_uniqueness.",
+      "observed": [],
+      "path": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml",
+      "phase": 6,
+      "phase_title": "oac-apps values",
+      "reason": "Blocked until Workload hosted-cluster values is complete.",
+      "ref": "main",
+      "repository": "CCI-MOC/oac-apps",
+      "scope": "workload",
+      "severity": "advisory",
+      "stage": "Cross-repository prerequisites",
+      "state": "blocked",
+      "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml",
+      "verifies": "Reads services.APIServer.ipAddress, ingress.poolAddress, services.APIServer.externalIpAddress and ingress.externalIpAddress from hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml in CCI-MOC/oac-apps. Each value is parsed with the ipaddress module and compared across the four fields of that workload; the check passes when no address is used by more than one field, and reports an advisory when one is."
     },
     {
       "actual": {
@@ -1799,12 +1827,12 @@
   "rate_limited": false,
   "scope": "environment",
   "summary": {
-    "advisory_count": 5,
-    "check_count": 29,
+    "advisory_count": 6,
+    "check_count": 30,
     "deferred_count": 0,
     "deferred_resolved_count": 0,
     "severity_counts": {
-      "advisory": 5,
+      "advisory": 6,
       "blocking": 8,
       "info": 16
     },
@@ -1825,10 +1853,10 @@
         }
       },
       {
-        "check_count": 14,
+        "check_count": 15,
         "stage": "Cross-repository prerequisites",
         "state_counts": {
-          "blocked": 5,
+          "blocked": 6,
           "declared_in_main": 9
         }
       },
@@ -1855,7 +1883,7 @@
       }
     ],
     "state_counts": {
-      "blocked": 5,
+      "blocked": 6,
       "declared_in_main": 15,
       "missing": 6,
       "partial": 2,

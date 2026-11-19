@@ -19,7 +19,7 @@ PHASE                        WORKLOAD bu-ist-demo-workload0
 3 Agent ISO boot             verify by hand
 4 Agent visibility           verify by hand
 5 Agent labels and approval  ✅ 1/1 checks
-6 oac-apps values            ✅ 8/8 checks
+6 oac-apps values            ✅ 11/11 checks
 7 Shared-service…            ✅ 5/5 checks
 
 NEXT
