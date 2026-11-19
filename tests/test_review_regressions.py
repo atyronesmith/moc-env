@@ -351,6 +351,15 @@ class ReviewRegressionTest(unittest.TestCase):
             failing_field_rows(kept), [["field", "none", ["x"]]]
         )
 
+    def test_default_rule_keeps_scalar_type_mismatch(self) -> None:
+        mismatch = {
+            "id": "example.check",
+            "expected": {"port": 443},
+            "actual": {"port": "443"},
+        }
+
+        self.assertEqual(failing_field_rows(mismatch), [["port", 443, "443"]])
+
 
 if __name__ == "__main__":
     unittest.main()

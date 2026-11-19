@@ -292,7 +292,7 @@ def failing_field_rows(check: dict[str, Any]) -> list[list[Any]]:
     if isinstance(missing, dict) and isinstance(missing.get("fields"), (dict, list)):
         return [row for row in rows if row[0] in missing["fields"]]
     return [row for row in rows if row[1] != row[2]
-            and plain(row[1]) != plain(row[2])
+            and not (row[1] == "none" and row[2] in ([], {}, "", ()))
             and row[1] != "not constrained by this check"
             and not (row[1] == "present" and row[2] not in (None, False, "missing"))]
 
