@@ -146,15 +146,22 @@ def _configure_charts(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--view",
-        choices=("summary", "cluster"),
+        choices=("summary", "cluster", "reference"),
         default="summary",
-        help="Feature summary tables, or one section per cluster (default: summary)",
+        help="Feature summary tables, one section per cluster, or the chart reference (default: summary)",
+    )
+    parser.add_argument(
+        "--chart",
+        action="append",
+        default=[],
+        metavar="NAME",
+        help="Limit the reference chart section to the named chart; repeatable",
     )
     parser.add_argument(
         "--format",
         choices=("text", "markdown", "json"),
-        default="text",
-        help="Output format",
+        default=None,
+        help="Output format (default: markdown for reference, text otherwise)",
     )
     parser.add_argument(
         "--ref",
@@ -484,12 +491,16 @@ def _charts_handler(args: argparse.Namespace, **_context: Any) -> int:
             args.parser.error("--ref must have the form REPO=REF")
         repository_refs[f"CCI-MOC/{repository}"] = ref
     client = _new_github_client(args, _resolve_github_token(args), repository_refs)
+    output_format = args.format or (
+        "markdown" if args.view == "reference" else "text"
+    )
     try:
         inventory = collect_chart_inventory(
             client,
             environment=args.environment,
             workload=args.workload,
             progress=ProgressReporter(),
+            include_reference=args.view == "reference",
         )
     except ChartInventoryError as exc:
         print(f"moc-env: {exc}", file=sys.stderr)
@@ -498,10 +509,13 @@ def _charts_handler(args: argparse.Namespace, **_context: Any) -> int:
         print(f"moc-env: {exc}", file=sys.stderr)
         return 2
     rendered = render_chart_inventory(
-        inventory, view=args.view, format=args.format
+        inventory,
+        view=args.view,
+        format=output_format,
+        charts=args.chart,
     )
     exit_code = write_output(
-        args, rendered, f"{args.format} chart inventory"
+        args, rendered, f"{output_format} chart inventory"
     )
     if exit_code:
         return exit_code

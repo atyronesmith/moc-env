@@ -6,11 +6,11 @@ import json
 import re
 import textwrap
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Sequence
 
 import yaml
 
-from . import feature_charts
+from . import chart_reference, feature_charts
 from .github import GitHubClient, GitHubError
 from .repositories import OAC_APPS_REPOSITORY
 
@@ -64,6 +64,7 @@ class ChartInventory:
     unrecognized: tuple[str, ...] = ()
     undeployed_charts: tuple[dict[str, Any], ...] = ()
     library_charts: tuple[str, ...] = ()
+    reference: chart_reference.ChartReference | None = None
 
     @property
     def has_errors(self) -> bool:
@@ -321,6 +322,307 @@ def _undeployed_chart_data(
     return tuple(rows), library
 
 
+def _hub_literal_lists(
+    tree: dict[str, Any], read: feature_charts.TextReader
+) -> list[dict[str, Any]]:
+    """Return hub templates that install one literal chart."""
+
+    items: list[dict[str, Any]] = []
+    for path in _application_set_files(tree, HUB_TEMPLATES_PREFIX):
+        text, _error = read(path)
+        if text is None:
+            continue
+        stem = path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+        parsed = feature_charts.parse_application_set(text, stem)
+        if parsed.literal_chart is None:
+            continue
+        items.append(
+            {
+                "chart": parsed.literal_chart,
+                "application_set": feature_charts.application_set_name(
+                    text, stem
+                ),
+                "gate_path": _files_gate_path(text),
+            }
+        )
+    return items
+
+
+def _files_gate_path(text: str) -> str | None:
+    """Return a git files-generator path that depends on ``$hub``."""
+
+    in_files = False
+    files_indent = 0
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        indent = len(line) - len(line.lstrip())
+        if stripped.startswith("files:"):
+            in_files = True
+            files_indent = indent
+            continue
+        if in_files:
+            if indent <= files_indent:
+                in_files = False
+                continue
+            if stripped.startswith("- path:"):
+                value = stripped.split("path:", 1)[1].strip().strip("'\"")
+                if "{{ $hub }}" in value or "{{$hub}}" in value:
+                    return value
+    return None
+
+
+def _drop_in_names(tree: dict[str, Any]) -> tuple[str, ...]:
+    """Return every Application manifest name dropped under apps/*/."""
+
+    names: set[str] = set()
+    for path in tree:
+        parts = path.split("/")
+        if len(parts) == 3 and parts[0] == "apps" and parts[2]:
+            names.add(parts[2].rsplit(".", 1)[0])
+    return tuple(sorted(names))
+
+
+def _application_set_charts(
+    application_set: feature_charts.ApplicationSet,
+) -> tuple[str, ...]:
+    charts = list(application_set.components)
+    if application_set.literal_chart:
+        charts.append(application_set.literal_chart)
+    return tuple(dict.fromkeys(charts))
+
+
+def _chart_entry(
+    tree: dict[str, Any],
+    read: feature_charts.TextReader,
+    chart: str,
+    used_by: tuple[str, ...],
+) -> chart_reference.ChartEntry:
+    chart_text, _error = read(f"charts/{chart}/Chart.yaml")
+    description = ""
+    if chart_text is not None:
+        try:
+            metadata = yaml.safe_load(chart_text)
+        except yaml.YAMLError:
+            metadata = None
+        if isinstance(metadata, dict):
+            description = str(metadata.get("description") or "")
+    unconditional: set[str] = set()
+    conditional: set[str] = set()
+    for template_path in sorted(
+        path
+        for path in tree
+        if path.startswith(f"charts/{chart}/templates/")
+    ):
+        template_text, _error = read(template_path)
+        if template_text is None:
+            continue
+        template_unconditional, template_conditional = (
+            chart_reference.required_value_sets(template_text)
+        )
+        unconditional.update(template_unconditional)
+        conditional.update(template_conditional)
+
+    values_path = f"charts/{chart}/values.yaml"
+    if values_path not in tree:
+        values = chart_reference.ValuesReference(present=False)
+    else:
+        values_text, _error = read(values_path)
+        values = (
+            chart_reference.ValuesReference(present=False)
+            if values_text is None
+            else chart_reference.read_values(
+                values_text,
+                unconditional_required=unconditional,
+                conditional_required=conditional,
+            )
+        )
+    return chart_reference.ChartEntry(
+        name=chart,
+        description=description,
+        used_by=used_by,
+        values=values,
+    )
+
+
+def _collect_chart_reference(
+    tree: dict[str, Any],
+    read: feature_charts.TextReader,
+    undeployed_charts: tuple[dict[str, Any], ...],
+    library_charts: tuple[str, ...],
+    ref: str,
+    sha: str,
+) -> chart_reference.ChartReference:
+    """Read every deployed chart's values and build the reference sections."""
+
+    hubs = hub_directories(tree)
+    hub_chart_lists, _hub_errors = _hub_chart_lists(tree, read)
+    literal_lists = _hub_literal_lists(tree, read)
+    application_sets, _application_set_errors = (
+        feature_charts.load_application_sets(tree, read)
+    )
+    placement_paths = feature_charts.placement_file_paths(tree)
+
+    placements_by_name: dict[str, feature_charts.Placement] = {}
+    for hub in hubs:
+        placements, _error = feature_charts.load_placements(
+            placement_paths.get(hub, {}), read
+        )
+        for placement in placements:
+            placements_by_name.setdefault(placement.name, placement)
+
+    hub_always = tuple(
+        sorted(
+            {
+                chart
+                for item in hub_chart_lists
+                if item.gate_path is None
+                for chart in item.components
+            }
+        )
+    )
+    hub_gated = tuple(
+        chart_reference.ChartList(
+            name=item.name,
+            charts=tuple(sorted(set(item.components))),
+            detail=feature_charts.gated_path_for_hub(item.gate_path, "<hub>"),
+        )
+        for item in hub_chart_lists
+        if item.gate_path is not None
+    )
+    drop_ins = _drop_in_names(tree)
+
+    workload_creators: list[chart_reference.ChartList] = []
+    for item in sorted(literal_lists, key=lambda value: value["chart"]):
+        detail = f"ApplicationSet {item['application_set']}"
+        if item["gate_path"]:
+            marker = feature_charts.gated_path_for_hub(
+                item["gate_path"], "<hub>"
+            )
+            detail += (
+                "; applies on compliant hubs (marker "
+                f"{marker})"
+            )
+        workload_creators.append(
+            chart_reference.ChartList(
+                name=item["chart"], charts=(item["chart"],), detail=detail
+            )
+        )
+
+    baseline_charts = tuple(
+        sorted(
+            {
+                chart
+                for application_set in application_sets
+                if application_set.placement
+                == feature_charts.ALL_MANAGED_PLACEMENT
+                for chart in _application_set_charts(application_set)
+            }
+        )
+    )
+
+    features: list[chart_reference.ChartList] = []
+    for placement_name, placement in placements_by_name.items():
+        label_keys = sorted(
+            key
+            for key in placement.match_labels
+            if "/feature-" in key
+        )
+        if not label_keys:
+            continue
+        feature_name = label_keys[0].split("/feature-", 1)[1]
+        label = ", ".join(
+            f'{key}: "{placement.match_labels[key]}"'
+            for key in label_keys
+        )
+        charts = tuple(
+            sorted(
+                {
+                    chart
+                    for application_set in application_sets
+                    if application_set.placement == placement_name
+                    for chart in _application_set_charts(application_set)
+                }
+            )
+        )
+        features.append(
+            chart_reference.ChartList(
+                name=feature_name, charts=charts, detail=label
+            )
+        )
+    features.sort(key=lambda item: item.name)
+
+    used_by: dict[str, list[str]] = {}
+
+    def add_usage(charts: Any, label: str) -> None:
+        for chart in charts:
+            labels = used_by.setdefault(chart, [])
+            if label not in labels:
+                labels.append(label)
+
+    add_usage(hub_always, "Hub cluster: Charts every hub receives")
+    for item in hub_gated:
+        add_usage(
+            item.charts,
+            "Hub cluster: Charts compliant hubs also receive"
+            f" ({item.name})",
+        )
+    add_usage(drop_ins, "Hub cluster: Per-hub drop-ins")
+    add_usage(
+        (item.name for item in workload_creators),
+        "Workload cluster: Charts that create the cluster",
+    )
+    add_usage(baseline_charts, "Workload cluster: Baseline")
+    for feature in features:
+        add_usage(
+            feature.charts, f"Workload cluster: Feature: {feature.name}"
+        )
+
+    all_charts = sorted(
+        {
+            parts[-2]
+            for path in tree
+            if (parts := path.split("/"))
+            and len(parts) >= 3
+            and parts[0] == "charts"
+            and parts[-1] == "Chart.yaml"
+        }
+    )
+    excluded = {row["chart"] for row in undeployed_charts}
+    excluded.update(library_charts)
+    charts = tuple(
+        _chart_entry(
+            tree, read, chart, tuple(used_by.get(chart, ()))
+        )
+        for chart in all_charts
+        if chart not in excluded
+    )
+    return chart_reference.ChartReference(
+        ref=ref,
+        sha=sha,
+        footer=source_line(ref, sha),
+        hub_always=hub_always,
+        hub_gated=hub_gated,
+        hub_drop_ins=drop_ins,
+        workload_creators=tuple(workload_creators),
+        workload_baseline=baseline_charts,
+        workload_features=tuple(features),
+        charts=charts,
+        undeployed_count=len(undeployed_charts),
+        library_count=len(library_charts),
+    )
+
+
+def source_line(ref: str, sha: str) -> str:
+    """Render the source sentence shared with the other chart views."""
+
+    return (
+        f"Source: {OAC_APPS_REPOSITORY} @ {ref} ({sha[:7]})."
+        + FOOTER_SUFFIX
+    )
+
+
 def _row(
     tree: dict[str, Any],
     hub: str,
@@ -407,6 +709,7 @@ def collect_chart_inventory(
     environment: str | None = None,
     workload: str | None = None,
     progress: Any = None,
+    include_reference: bool = False,
 ) -> ChartInventory:
     """Read oac-apps and build the chart rows for the selected clusters."""
 
@@ -488,6 +791,16 @@ def collect_chart_inventory(
         raise ChartInventoryError(
             f"{OAC_APPS_REPOSITORY} commit could not be resolved: {exc}"
         ) from exc
+    reference = None
+    if include_reference:
+        reference = _collect_chart_reference(
+            tree,
+            read,
+            undeployed_charts,
+            library_charts,
+            client.ref_for(OAC_APPS_REPOSITORY),
+            sha,
+        )
     return ChartInventory(
         ref=client.ref_for(OAC_APPS_REPOSITORY),
         sha=sha,
@@ -503,6 +816,7 @@ def collect_chart_inventory(
         unrecognized=unrecognized,
         undeployed_charts=undeployed_charts,
         library_charts=library_charts,
+        reference=reference,
     )
 
 
@@ -985,7 +1299,11 @@ def _render_summary_json(inventory: ChartInventory) -> str:
 
 
 def render_chart_inventory(
-    inventory: ChartInventory, *, view: str = "summary", format: str = "text"
+    inventory: ChartInventory,
+    *,
+    view: str = "summary",
+    format: str = "text",
+    charts: Sequence[str] = (),
 ) -> str:
     """Render a chart inventory in the requested view and format."""
 
@@ -995,6 +1313,14 @@ def render_chart_inventory(
         if format == "markdown":
             return _render_summary_markdown(inventory)
         return _render_summary_text(inventory)
+    if view == "reference":
+        if inventory.reference is None:
+            raise ChartInventoryError(
+                "the chart reference was not collected for this inventory"
+            )
+        return chart_reference.render_chart_reference(
+            inventory.reference, format=format, selected=charts
+        )
     if format == "json":
         clusters: dict[str, Any] = {}
         for cluster in inventory.clusters:
