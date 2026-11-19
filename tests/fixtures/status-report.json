@@ -1371,7 +1371,7 @@
       "gaps": [],
       "id": "workload.address_internal_duplicates",
       "next_action": null,
-      "not_verified": "The report does not prove whether sharing an address is intentional; it only flags the duplicate inside this workload. Cross-cluster duplicates are covered by workload.address_uniqueness.",
+      "not_verified": "The report does not prove whether sharing an address is intentional; it only flags the duplicate inside this workload, apart from the allowed API-server and ingress external address pair. Cross-cluster duplicates are covered by workload.address_uniqueness.",
       "observed": [],
       "path": "hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml",
       "phase": 6,
@@ -1384,7 +1384,7 @@
       "stage": "Cross-repository prerequisites",
       "state": "blocked",
       "url": "https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml",
-      "verifies": "Reads services.APIServer.ipAddress, ingress.poolAddress, services.APIServer.externalIpAddress and ingress.externalIpAddress from hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml in CCI-MOC/oac-apps. Each value is parsed with the ipaddress module and compared across the four fields of that workload; the check passes when no address is used by more than one field, and reports an advisory when one is."
+      "verifies": "Reads services.APIServer.ipAddress, ingress.poolAddress, services.APIServer.externalIpAddress and ingress.externalIpAddress from hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml in CCI-MOC/oac-apps. Each value is parsed with the ipaddress module and compared across the four fields of that workload; the check passes when no address is used by more than one field, and reports an advisory when one is. The one exception is a shared address between exactly services.APIServer.externalIpAddress and ingress.externalIpAddress, which is allowed; any group with three or four fields that includes that pair is still reported."
     },
     {
       "actual": {

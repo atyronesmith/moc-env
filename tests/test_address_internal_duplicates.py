@@ -81,6 +81,16 @@ class CidrDuplicateFixture(AddressFixture):
     WORKLOADS = {WORKLOAD0: values(api="10.0.0.5", pool="10.0.0.5/32")}
 
 
+class TripleDuplicateFixture(AddressFixture):
+    WORKLOADS = {
+        WORKLOAD0: values(
+            api="129.10.5.104",
+            api_external="129.10.5.104",
+            ingress_external="129.10.5.104",
+        )
+    }
+
+
 class DistinctFixture(AddressFixture):
     WORKLOADS = {WORKLOAD0: values()}
 
@@ -88,9 +98,7 @@ class DistinctFixture(AddressFixture):
 class SecondWorkloadDuplicateFixture(AddressFixture):
     WORKLOADS = {
         WORKLOAD0: values(),
-        WORKLOAD1: values(
-            api_external="129.10.5.104", ingress_external="129.10.5.104"
-        ),
+        WORKLOAD1: values(api="10.0.0.5", pool="10.0.0.5/32"),
     }
 
 
@@ -146,29 +154,28 @@ def result_counts(text: str) -> tuple[int, int]:
 
 
 class InternalDuplicateCheckTest(unittest.TestCase):
-    def test_external_address_duplicate_is_one_advisory_action(self) -> None:
+    def test_external_address_shared_by_api_and_ingress_is_allowed(self) -> None:
         report = report_for(DuplicateExternalFixture())
+        check = check_for(report, NEW_ID, WORKLOAD0)
+
+        self.assertEqual(check["state"], "declared_in_main")
+        self.assertEqual(check["severity"], "info")
+        self.assertIn("129.10.5.104", check["reason"])
+        self.assertIn("allowed", check["reason"])
+
+        actions = next_actions(render_text(report))
+        matching = [action for action in actions if "129.10.5.104" in action]
+        self.assertEqual(matching, [])
+
+    def test_three_fields_sharing_external_address_is_advisory(self) -> None:
+        report = report_for(TripleDuplicateFixture())
         check = check_for(report, NEW_ID, WORKLOAD0)
 
         self.assertEqual(check["state"], "value_mismatch")
         self.assertEqual(check["severity"], "advisory")
-        self.assertIn("129.10.5.104", check["reason"])
+        self.assertIn("services.APIServer.ipAddress", check["reason"])
         self.assertIn("services.APIServer.externalIpAddress", check["reason"])
         self.assertIn("ingress.externalIpAddress", check["reason"])
-        self.assertIn("possible error", check["reason"])
-
-        rows = {row[0]: row for row in field_rows(check)}
-        api_row = rows["services.APIServer.externalIpAddress 129.10.5.104"]
-        ingress_row = rows["ingress.externalIpAddress 129.10.5.104"]
-        self.assertIn("ingress.externalIpAddress", api_row[2])
-        self.assertIn("services.APIServer.externalIpAddress", ingress_row[2])
-        self.assertEqual(api_row[1], f"not used by another field of {WORKLOAD0}")
-
-        actions = next_actions(render_text(report))
-        matching = [action for action in actions if "129.10.5.104" in action]
-        self.assertEqual(len(matching), 1, matching)
-        self.assertIn("Confirm whether", matching[0])
-        self.assertIn(WORKLOAD0, matching[0])
 
     def test_cidr_and_bare_ip_are_equal(self) -> None:
         report = report_for(CidrDuplicateFixture())
@@ -197,7 +204,7 @@ class InternalDuplicateCheckTest(unittest.TestCase):
         self.assertEqual(second["severity"], "advisory")
 
         actions = next_actions(render_text(report))
-        matching = [action for action in actions if NEW_ID in action or "129.10.5.104" in action]
+        matching = [action for action in actions if NEW_ID in action or "10.0.0.5/32" in action]
         self.assertEqual(len(matching), 1, matching)
         self.assertIn(WORKLOAD1, matching[0])
 

@@ -1400,10 +1400,19 @@ def _workload_value_checks(
         for field, address in own_fields.items():
             if address is not None:
                 groups.setdefault(_address_key(address), []).append(field)
+        allowed_external_share = {
+            "services.APIServer.externalIpAddress",
+            "ingress.externalIpAddress",
+        }
         duplicates = {
             address: fields
             for address, fields in groups.items()
-            if len(fields) > 1
+            if len(fields) > 1 and set(fields) != allowed_external_share
+        }
+        allowed_pairs = {
+            address: fields
+            for address, fields in groups.items()
+            if len(fields) == 2 and set(fields) == allowed_external_share
         }
         rows = [
             {
@@ -1421,6 +1430,16 @@ def _workload_value_checks(
         ]
         expected = f"No address is used by more than one field of {workload}."
         if not duplicates:
+            reason = expected
+            if allowed_pairs:
+                address, fields = next(iter(allowed_pairs.items()))
+                expected = (
+                    f"No other address is used by more than one field of {workload}."
+                )
+                reason = (
+                    f"{address} is shared by {fields[0]} and {fields[1]}, "
+                    f"which is allowed. {expected}"
+                )
             results.append(
                 _result(
                     "workload.address_internal_duplicates",
@@ -1432,7 +1451,7 @@ def _workload_value_checks(
                     "info",
                     expected,
                     {"duplicates": {}},
-                    expected,
+                    reason,
                     evidence={"address_rows": rows},
                 )
             )
