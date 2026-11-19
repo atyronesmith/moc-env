@@ -10,12 +10,15 @@ from __future__ import annotations
 
 import copy
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
 import yaml
 
 ALL_MANAGED_PLACEMENT = "all-managed-clusters"
+
+TextReader = Callable[[str], tuple[str | None, str | None]]
 
 _PLACEMENT = re.compile(
     r"cluster\.open-cluster-management\.io/placement:\s*([a-z0-9-]+)"
@@ -27,10 +30,30 @@ _LITERAL_CHART = re.compile(
     r"^\s*path:\s*[\"']?charts/([a-z0-9-]+)[\"']?\s*$", re.MULTILINE
 )
 _QUOTED_PATH = re.compile(r"^\s*path:\s*[\"']([^\"']+)[\"']\s*$", re.MULTILINE)
+_COMPONENT_SOURCE = re.compile(
+    r"^\s*path:\s*[\"']?charts/\{\{.*component.*\}\}[\"']?\s*$",
+    re.MULTILINE,
+)
+_FILES_GENERATOR_PATH = re.compile(
+    r"^\s*-\s*path:\s*[\"']?([^\"'\n]+?)[\"']?\s*$", re.MULTILINE
+)
+_METADATA_NAME = re.compile(
+    r"^metadata:\s*\n(?:[ \t].*\n)*?[ \t]+name:\s*[\"']?([A-Za-z0-9._-]+)",
+    re.MULTILINE,
+)
 _TEMPLATE_COMMENT = re.compile(r"\{\{-?\s*/\*.*?\*/\s*-?\}\}", re.DOTALL)
 _ACTION = re.compile(r"\{\{(.*?)\}\}", re.DOTALL)
 _REQUIRED = re.compile(
     r'required\s+"([^"]*)"\s+\$?\.Values\.([A-Za-z0-9_.]+)'
+)
+
+KNOWN_APPLICATION_SET_FILES = frozenset(
+    {
+        "cluster-apps.yaml",
+        "hosted-clusters.yaml",
+        "hosted-cluster-compliance.yaml",
+        "pure-cosi.yaml",
+    }
 )
 
 
@@ -117,6 +140,60 @@ def parse_application_set(text: str, name: str = "") -> ApplicationSet:
         literal_chart=literal_chart,
         kustomize_path=kustomize_path,
     )
+
+
+def application_set_name(text: str, fallback: str = "") -> str:
+    """Return the ApplicationSet metadata name, or the file stem fallback."""
+
+    match = _METADATA_NAME.search(text)
+    return match.group(1) if match else fallback
+
+
+def has_component_source(text: str) -> bool:
+    """Whether a template reads its chart from ``charts/{{component}}``."""
+
+    return _COMPONENT_SOURCE.search(text) is not None
+
+
+def hub_gate_path(text: str) -> str | None:
+    """Return a git files-generator path that depends on ``$hub``, if any."""
+
+    for value in _FILES_GENERATOR_PATH.findall(text):
+        if "{{ $hub }}" in value or "{{$hub}}" in value:
+            return value
+    return None
+
+
+def gated_path_for_hub(path: str, hub: str) -> str:
+    """Substitute a hub name into a git files-generator path."""
+
+    return (
+        path.replace("{{ $hub }}", hub)
+        .replace("{{$hub}}", hub)
+        .replace("{{ $hub}}", hub)
+        .replace("{{$hub }}", hub)
+        .strip()
+    )
+
+
+def classify_application_set(text: str, path: str) -> str:
+    """Classify one template file as known, component, literal, or kustomize.
+
+    Returns ``"unknown"`` when the file has none of the recognized shapes.  A
+    component list is any template with ``- component:`` entries; hub chart
+    discovery additionally requires the ``charts/{{component}}`` source path.
+    """
+
+    if path.rsplit("/", 1)[-1] in KNOWN_APPLICATION_SET_FILES:
+        return "known"
+    parsed = parse_application_set(text, path.rsplit("/", 1)[-1].rsplit(".", 1)[0])
+    if parsed.components:
+        return "component"
+    if parsed.literal_chart:
+        return "literal"
+    if parsed.kustomize_path:
+        return "kustomize"
+    return "unknown"
 
 
 def feature_labels(labels: Any) -> dict[str, str]:
@@ -252,3 +329,173 @@ def kustomize_overlay_prefix(path: str, cluster: str) -> str:
 
     prefix = path.split("{{", 1)[0]
     return f"{prefix}{cluster}/"
+
+
+def placement_file_paths(tree: dict[str, Any]) -> dict[str, dict[str, str]]:
+    """Map each hub with placements files to its local and hub-wide paths."""
+
+    hubs: dict[str, dict[str, str]] = {}
+    for path in tree:
+        parts = path.split("/")
+        if (
+            len(parts) == 4
+            and parts[0] == "values"
+            and parts[2] == "local-cluster"
+            and parts[3] == "acm-placements.yaml"
+        ):
+            hubs.setdefault(parts[1], {})["local"] = path
+        elif (
+            len(parts) == 3
+            and parts[0] == "values"
+            and parts[2] == "acm-placements.yaml"
+        ):
+            hubs.setdefault(parts[1], {})["hub"] = path
+    return hubs
+
+
+def load_placements(
+    paths: dict[str, str], read_text: TextReader
+) -> tuple[list[Placement] | None, str | None]:
+    """Load local-cluster placements over any hub-wide placements file."""
+
+    local_path = paths.get("local")
+    hub_path = paths.get("hub")
+    if local_path is None and hub_path is None:
+        return None, "no acm-placements.yaml exists for this hub"
+    underneath: list[Placement] = []
+    if hub_path is not None:
+        text, error = read_text(hub_path)
+        if text is None:
+            return None, error or f"{hub_path} is unavailable."
+        try:
+            underneath = parse_placements(text)
+        except (ValueError, yaml.YAMLError) as exc:
+            return None, f"{hub_path} is not a placements list: {exc}"
+    if local_path is None:
+        return underneath, None
+    text, error = read_text(local_path)
+    if text is None:
+        return None, error or f"{local_path} is unavailable."
+    try:
+        override = parse_placements(text)
+    except (ValueError, yaml.YAMLError) as exc:
+        return None, f"{local_path} is not a placements list: {exc}"
+    return merge_placements(underneath, override), None
+
+
+def load_application_sets(
+    tree: dict[str, Any], read_text: TextReader
+) -> tuple[list[ApplicationSet], list[str]]:
+    """Read every managed ApplicationSet Helm template in the tree."""
+
+    application_sets: list[ApplicationSet] = []
+    errors: list[str] = []
+    for path in sorted(
+        path
+        for path in tree
+        if path.startswith("applicationsets/templates/managed/")
+        and path.endswith((".yaml", ".yml"))
+    ):
+        text, error = read_text(path)
+        if text is None:
+            errors.append(error or f"{path} is unavailable.")
+            continue
+        if classify_application_set(text, path) == "unknown":
+            errors.append(f"Unrecognized ApplicationSet template: {path}.")
+            continue
+        name = path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+        application_sets.append(parse_application_set(text, name))
+    return application_sets, errors
+
+
+def read_values_file(
+    tree: dict[str, Any], path: str, read_text: TextReader
+) -> dict[str, Any]:
+    """Read a chart values file when the tree contains it."""
+
+    if path not in tree:
+        return {}
+    text, _ = read_text(path)
+    if text is None:
+        return {}
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def workload_chart_rows(
+    tree: dict[str, Any],
+    hub: str,
+    workload: str,
+    labels: Any,
+    placements: list[Placement],
+    application_sets: list[ApplicationSet],
+    read_text: TextReader,
+) -> list[dict[str, Any]]:
+    """Build the received-chart rows shared by status and ``charts``.
+
+    Each row names a chart selected by a placement matching this workload's
+    labels, the ApplicationSet and placement that selected it, the feature
+    label that drives the placement, whether hub and cluster values files
+    exist, and any required values still unmet after merging those files.
+    """
+
+    matched = matched_placement_names(placements, labels)
+    by_name = {placement.name: placement for placement in placements}
+    rows: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for application_set in application_sets:
+        if application_set.placement not in matched:
+            continue
+        placement = by_name.get(application_set.placement or "")
+        feature_label = placement_feature_label(placement)
+        for chart, is_component in (
+            *((component, True) for component in application_set.components),
+            *(
+                ((application_set.literal_chart, False),)
+                if application_set.literal_chart
+                else ()
+            ),
+        ):
+            if chart in seen:
+                continue
+            seen.add(chart)
+            hub_path = f"values/{hub}/{chart}.yaml"
+            cluster_path = f"values/{hub}/{workload}/{chart}.yaml"
+            unmet: list[str] = []
+            if is_component:
+                defaults = read_values_file(
+                    tree, f"charts/{chart}/values.yaml", read_text
+                )
+                hub_values = read_values_file(tree, hub_path, read_text)
+                cluster_values = read_values_file(
+                    tree, cluster_path, read_text
+                )
+                merged = merge_value_layers(
+                    defaults, hub_values, cluster_values
+                )
+                required: list[str] = []
+                for template_path in sorted(
+                    path
+                    for path in tree
+                    if path.startswith(f"charts/{chart}/templates/")
+                ):
+                    text, _ = read_text(template_path)
+                    if text is not None:
+                        required.extend(required_value_paths(text))
+                unmet = unmet_required(required, merged)
+            rows.append(
+                {
+                    "chart": chart,
+                    "application_set": application_set.name,
+                    "placement": application_set.placement,
+                    "feature_label": feature_label,
+                    "hub_values_file": hub_path in tree,
+                    "cluster_values_file": cluster_path in tree,
+                    "unmet_required_values": unmet,
+                    "component": is_component,
+                }
+            )
+    return rows

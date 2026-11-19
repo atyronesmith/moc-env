@@ -34,6 +34,12 @@ Inspect one environment:
 uv run moc-env status bu-ist-demo
 ```
 
+Print which charts each cluster receives from `oac-apps`:
+
+```sh
+uv run moc-env charts
+```
+
 Read the report from top to bottom: the `RESULT` line gives the number of
 blocking and advisory gaps, the phase table shows where each scope stands, and
 `NEXT` lists repository actions in dependency order. The

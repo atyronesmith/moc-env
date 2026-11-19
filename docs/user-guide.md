@@ -103,6 +103,13 @@ send `If-None-Match`; GitHub's uncounted `304 Not Modified` response serves the
 cached body. Within one process, the same URL is never requested twice. The
 cache never stores an Authorization header or token.
 
+Raw file content pinned to a full 40-character commit SHA and a Git tree
+pinned to a full commit SHA cannot change. When either has a cache entry, the
+body is served from disk with no HTTP request at all. A branch name, tag,
+short SHA, or pull-request ref in the SHA position is mutable and is
+revalidated as usual, as is `/repos/<repo>/commits/<ref>`, so a new commit on
+`main` is still seen.
+
 Pass `--offline` to serve only cached responses; a miss fails clearly with exit
 code `2`. Pass `--refresh` to ignore the disk cache and request current data;
 per-process request deduplication still applies. These options are mutually
@@ -127,10 +134,10 @@ GitHub API: <n> requests, <m> counted against quota, <k> from cache
 quota` counts only non-`304` GitHub REST API responses; the `/rate_limit`
 preflight is free, and immutable-SHA raw downloads do not consume REST quota.
 `from cache` counts response bodies served from the local cache, including
-offline reads and successful `304` revalidation. Commands that do not create a
-GitHub client, such as completion when its environment cache is already warm,
-do not print this line. With `--verbose`, the command also lists each endpoint
-that was counted against quota.
+offline reads, SHA-pinned disk hits, and successful `304` revalidation.
+Commands that do not create a GitHub client, such as completion when its
+environment cache is already warm, do not print this line. With `--verbose`,
+the command also lists each endpoint that was counted against quota.
 
 For a reproducible measurement, on 2026-11-17 an authenticated run was made
 with an isolated response cache. The counts below are observations for those

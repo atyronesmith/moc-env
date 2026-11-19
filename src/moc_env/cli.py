@@ -10,6 +10,11 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .checks import Clock, StatusChecker, list_environments
+from .charts import (
+    ChartInventoryError,
+    collect_chart_inventory,
+    render_chart_inventory,
+)
 from .chart_values import documentation_directory, load_chart_values_manual, render_chart_values_markdown
 from .chart_value_discovery import build_discovery_report, render_discovery_json, render_discovery_markdown, render_discovery_text
 from .credentials import CredentialError, CredentialResolver
@@ -125,6 +130,46 @@ def _configure_validate(parser: argparse.ArgumentParser) -> None:
     _add_report_arguments(parser, output_help="Write the validation report to this file instead of stdout")
 
 
+def _configure_charts(parser: argparse.ArgumentParser) -> None:
+    mark_environment_argument(
+        parser.add_argument(
+            "environment",
+            nargs="?",
+            help="Environment name, such as bu-ist-demo; omit it for every hub and workload cluster",
+        )
+    )
+    mark_workload_argument(
+        parser.add_argument(
+            "--workload",
+            help="Workload name, such as workload0 or bu-ist-demo-workload0",
+        )
+    )
+    parser.add_argument(
+        "--view",
+        choices=("summary", "cluster"),
+        default="summary",
+        help="Feature summary tables, or one section per cluster (default: summary)",
+    )
+    parser.add_argument(
+        "--format",
+        choices=("text", "markdown", "json"),
+        default="text",
+        help="Output format",
+    )
+    parser.add_argument(
+        "--ref",
+        action="append",
+        default=[],
+        metavar="REPO=REF",
+        help="Read oac-apps at a branch or pull-request head, for example --ref oac-apps=pull/246/head",
+    )
+    add_credential_arguments(parser)
+    add_output(
+        parser,
+        "Write the rendered chart inventory to this file instead of stdout",
+    )
+
+
 def _configure_check(parser: argparse.ArgumentParser, file_help: str, output_help: str = "Write the comparison report to this file instead of stdout") -> None:
     mark_file_argument(parser.add_argument("file", help=file_help))
     _add_report_arguments(
@@ -149,6 +194,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "diff": ("Compare repository configuration state for two environments", configure_diff, _diff_handler),
         "status-hub": ("Report hub-cluster repository configuration state", _configure_status, _status_handler),
         "status-workload": ("Report workload-cluster repository configuration state", _configure_status, _status_handler),
+        "charts": ("Print which charts each hub and workload cluster receives from oac-apps", _configure_charts, _charts_handler),
         "list": ("List environment names that can be passed to moc-env", _configure_list, _list_handler),
         "completion": ("Print a bash or zsh completion script", _configure_completion, _completion_handler),
         "document-values": ("Generate an environment-independent Markdown guide to hub and workload chart values", _configure_document_values, _document_values_handler),
@@ -428,6 +474,38 @@ def _print_validation_error(input_path: Path, errors: list[str], prefix: str = "
     print(f"moc-env: {prefix}: {input_path}", file=sys.stderr)
     for error in errors:
         print(f"  - {error}", file=sys.stderr)
+
+
+def _charts_handler(args: argparse.Namespace, **_context: Any) -> int:
+    repository_refs: dict[str, str] = {}
+    for repository_ref in args.ref:
+        repository, separator, ref = repository_ref.partition("=")
+        if not separator or not repository or not ref:
+            args.parser.error("--ref must have the form REPO=REF")
+        repository_refs[f"CCI-MOC/{repository}"] = ref
+    client = _new_github_client(args, _resolve_github_token(args), repository_refs)
+    try:
+        inventory = collect_chart_inventory(
+            client,
+            environment=args.environment,
+            workload=args.workload,
+            progress=ProgressReporter(),
+        )
+    except ChartInventoryError as exc:
+        print(f"moc-env: {exc}", file=sys.stderr)
+        return 2
+    except (GitHubError, RateLimitError) as exc:
+        print(f"moc-env: {exc}", file=sys.stderr)
+        return 2
+    rendered = render_chart_inventory(
+        inventory, view=args.view, format=args.format
+    )
+    exit_code = write_output(
+        args, rendered, f"{args.format} chart inventory"
+    )
+    if exit_code:
+        return exit_code
+    return 1 if inventory.has_errors or inventory.unrecognized else 0
 
 
 def _status_handler(

@@ -714,23 +714,7 @@ def _placement_paths(
 ) -> dict[str, dict[str, str]]:
     """Map each hub with placements files to its local and hub-wide paths."""
 
-    hubs: dict[str, dict[str, str]] = {}
-    for path in tree:
-        parts = path.split("/")
-        if (
-            len(parts) == 4
-            and parts[0] == "values"
-            and parts[2] == "local-cluster"
-            and parts[3] == "acm-placements.yaml"
-        ):
-            hubs.setdefault(parts[1], {})["local"] = path
-        elif (
-            len(parts) == 3
-            and parts[0] == "values"
-            and parts[2] == "acm-placements.yaml"
-        ):
-            hubs.setdefault(parts[1], {})["hub"] = path
-    return hubs
+    return feature_charts.placement_file_paths(tree)
 
 
 def _read_cached(
@@ -760,29 +744,9 @@ def _load_placements(
 ) -> tuple[list[feature_charts.Placement] | None, str | None]:
     """Load local-cluster placements over any hub-wide placements file."""
 
-    local_path = paths.get("local")
-    hub_path = paths.get("hub")
-    if local_path is None and hub_path is None:
-        return None, "no acm-placements.yaml exists for this hub"
-    underneath: list[feature_charts.Placement] = []
-    if hub_path is not None:
-        text, error = _read_cached(client, hub_path, cache, progress)
-        if text is None:
-            return None, error or f"{hub_path} is unavailable."
-        try:
-            underneath = feature_charts.parse_placements(text)
-        except (ValueError, yaml.YAMLError) as exc:
-            return None, f"{hub_path} is not a placements list: {exc}"
-    if local_path is None:
-        return underneath, None
-    text, error = _read_cached(client, local_path, cache, progress)
-    if text is None:
-        return None, error or f"{local_path} is unavailable."
-    try:
-        override = feature_charts.parse_placements(text)
-    except (ValueError, yaml.YAMLError) as exc:
-        return None, f"{local_path} is not a placements list: {exc}"
-    return feature_charts.merge_placements(underneath, override), None
+    return feature_charts.load_placements(
+        paths, lambda path: _read_cached(client, path, cache, progress)
+    )
 
 
 def _load_application_sets(
@@ -791,40 +755,9 @@ def _load_application_sets(
     cache: dict[str, str | None],
     progress: ProgressCallback | None,
 ) -> tuple[list[feature_charts.ApplicationSet], list[str]]:
-    application_sets: list[feature_charts.ApplicationSet] = []
-    errors: list[str] = []
-    for path in sorted(
-        path
-        for path in tree
-        if path.startswith("applicationsets/templates/managed/")
-        and path.endswith((".yaml", ".yml"))
-    ):
-        text, error = _read_cached(client, path, cache, progress)
-        if text is None:
-            errors.append(error or f"{path} is unavailable.")
-            continue
-        name = path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
-        application_sets.append(feature_charts.parse_application_set(text, name))
-    return application_sets, errors
-
-
-def _read_values_file(
-    client: GitHubClient,
-    tree: dict[str, dict[str, Any]],
-    path: str,
-    cache: dict[str, str | None],
-    progress: ProgressCallback | None,
-) -> dict[str, Any]:
-    if path not in tree:
-        return {}
-    text, _ = _read_cached(client, path, cache, progress)
-    if text is None:
-        return {}
-    try:
-        data = yaml.safe_load(text)
-    except yaml.YAMLError:
-        return {}
-    return data if isinstance(data, dict) else {}
+    return feature_charts.load_application_sets(
+        tree, lambda path: _read_cached(client, path, cache, progress)
+    )
 
 
 def _feature_placement_check(
@@ -919,67 +852,15 @@ def _feature_chart_values_check(
     progress: ProgressCallback | None,
 ) -> CheckResult:
     matched = feature_charts.matched_placement_names(placements, labels)
-    by_name = {placement.name: placement for placement in placements}
-    rows: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for application_set in application_sets:
-        if application_set.placement not in matched:
-            continue
-        placement = by_name.get(application_set.placement or "")
-        feature_label = feature_charts.placement_feature_label(placement)
-        for chart, is_component in (
-            *((component, True) for component in application_set.components),
-            *(
-                ((application_set.literal_chart, False),)
-                if application_set.literal_chart
-                else ()
-            ),
-        ):
-            if chart in seen:
-                continue
-            seen.add(chart)
-            hub_path = f"values/{hub}/{chart}.yaml"
-            cluster_path = f"values/{hub}/{workload}/{chart}.yaml"
-            unmet: list[str] = []
-            if is_component:
-                defaults = _read_values_file(
-                    client, tree, f"charts/{chart}/values.yaml", cache, progress
-                )
-                hub_values = _read_values_file(
-                    client, tree, hub_path, cache, progress
-                )
-                cluster_values = _read_values_file(
-                    client, tree, cluster_path, cache, progress
-                )
-                merged = feature_charts.merge_value_layers(
-                    defaults, hub_values, cluster_values
-                )
-                required: list[str] = []
-                for template_path in sorted(
-                    path
-                    for path in tree
-                    if path.startswith(f"charts/{chart}/templates/")
-                ):
-                    text, _ = _read_cached(
-                        client, template_path, cache, progress
-                    )
-                    if text is not None:
-                        required.extend(
-                            feature_charts.required_value_paths(text)
-                        )
-                unmet = feature_charts.unmet_required(required, merged)
-            rows.append(
-                {
-                    "chart": chart,
-                    "application_set": application_set.name,
-                    "placement": application_set.placement,
-                    "feature_label": feature_label,
-                    "hub_values_file": hub_path in tree,
-                    "cluster_values_file": cluster_path in tree,
-                    "unmet_required_values": unmet,
-                    "component": is_component,
-                }
-            )
+    rows = feature_charts.workload_chart_rows(
+        tree,
+        hub,
+        workload,
+        labels,
+        placements,
+        application_sets,
+        lambda item: _read_cached(client, item, cache, progress),
+    )
 
     missing_overlays: list[str] = []
     for application_set in application_sets:
@@ -1343,7 +1224,7 @@ def _workload_value_checks(
                     placements_path,
                 )
             )
-            if not application_sets:
+            if application_set_errors or not application_sets:
                 detail = (
                     "Application-set templates could not be read: "
                     + " ".join(application_set_errors)

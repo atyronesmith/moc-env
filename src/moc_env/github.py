@@ -97,6 +97,35 @@ class GitHubClient:
     def _is_commit_sha(value: Any) -> bool:
         return isinstance(value, str) and re.fullmatch(r"[0-9a-fA-F]{40}", value) is not None
 
+    @staticmethod
+    def _is_immutable_url(url: str) -> bool:
+        """Return true for SHA-pinned raw files and Git trees.
+
+        A branch, tag, short SHA, or pull-request ref in the SHA position can
+        move, so only an exact 40-hex commit SHA makes the response immutable.
+        """
+
+        parsed = urlsplit(url)
+        if parsed.scheme != "https":
+            return False
+        parts = parsed.path.strip("/").split("/")
+        if parsed.netloc == "raw.githubusercontent.com":
+            return (
+                len(parts) >= 4
+                and GitHubClient._is_commit_sha(parts[2])
+                and bool(parts[3])
+            )
+        if parsed.netloc == "api.github.com":
+            return (
+                len(parts) == 6
+                and parts[0] == "repos"
+                and parts[3] == "git"
+                and parts[4] == "trees"
+                and GitHubClient._is_commit_sha(parts[5])
+                and parsed.query == "recursive=1"
+            )
+        return False
+
     def snapshot_request_urls(
         self,
         repository: str,
@@ -331,6 +360,13 @@ class GitHubClient:
             )
             self._responses[url] = response
             return response
+        if cached is not None and self._is_immutable_url(url):
+            # A commit-pinned file or tree can never change, so serve it from
+            # disk without a conditional request or a stale-cache notice.
+            self.cache_hits += 1
+            response = (json.loads(cached["body"]), self._cached_headers(cached))
+            self._responses[url] = response
+            return response
         response = self._request(url, cached["etag"] if cached else None)
         self._responses[url] = response
         return response
@@ -437,6 +473,11 @@ class GitHubClient:
             self._mark_unrevalidated(url, cached)
             return cached["body"]
         cached = None if self.refresh else self.response_cache.read(url)
+        if cached is not None and self._is_immutable_url(url):
+            # A commit-pinned raw file can never change; skip revalidation.
+            self._raw_responses[url] = cached["body"]
+            self.cache_hits += 1
+            return cached["body"]
         body = self._raw_request(url, cached["etag"] if cached else None)
         self._raw_responses[url] = body
         return body
