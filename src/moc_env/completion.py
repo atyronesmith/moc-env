@@ -13,6 +13,7 @@ COMMANDS = (
     "check-environment",
     "check-infra",
     "check-workload",
+    "charts",
     "completion",
     "discover-values",
     "document-values",
@@ -32,6 +33,7 @@ COMMANDS = (
 COMMAND_DESCRIPTIONS = {
     "list": "list hub and workload clusters",
     "status": "report combined hub and workload repository status",
+    "charts": "print the charts each cluster receives from oac-apps",
     "diff": "compare repository status for two environments",
     "status-hub": "report hub-cluster repository status",
     "status-workload": "report workload-cluster repository status",

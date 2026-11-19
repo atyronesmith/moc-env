@@ -508,6 +508,175 @@ class GitHubClientTest(unittest.TestCase):
         self.assertTrue(client.sources()[0]["from_cache"])
         self.assertIn("fetched_at", client.sources()[0])
 
+    @staticmethod
+    def _cached_raw_url(repository: str, sha: str, path: str = "values.yaml") -> str:
+        return f"https://raw.githubusercontent.com/{repository}/{sha}/{path}"
+
+    @staticmethod
+    def _cached_tree_url(repository: str, sha: str) -> str:
+        return f"https://api.github.com/repos/{repository}/git/trees/{sha}?recursive=1"
+
+    def test_cached_raw_file_at_commit_sha_needs_no_request(self) -> None:
+        repository = "CCI-MOC/oac-apps"
+        sha = "a" * 40
+        client = GitHubClient()
+        client.record_source(repository, "main", sha)
+        url = self._cached_raw_url(repository, sha)
+        client.response_cache.write(url, '"values"', "value: cached")
+        with patch("moc_env.github.urlopen") as request:
+            self.assertEqual(
+                client.get_file(repository, "values.yaml"),
+                "value: cached",
+            )
+        request.assert_not_called()
+
+    def test_cached_tree_at_commit_sha_needs_no_request(self) -> None:
+        repository = "CCI-MOC/oac-apps"
+        sha = "a" * 40
+        client = GitHubClient(refs={repository: sha})
+        url = self._cached_tree_url(repository, sha)
+        client.response_cache.write(
+            url,
+            '"tree"',
+            json.dumps({"sha": "tree", "tree": [{"path": "values.yaml", "type": "blob"}]}),
+        )
+        with patch("moc_env.github.urlopen") as request:
+            tree = client.get_tree(repository)
+        request.assert_not_called()
+        self.assertIn("values.yaml", tree)
+
+    def test_cached_commit_ref_is_still_revalidated(self) -> None:
+        repository = "CCI-MOC/oac-apps"
+        sha = "a" * 40
+        url = f"https://api.github.com/repos/{repository}/commits/main"
+        client = GitHubClient()
+        client.response_cache.write(url, '"commit"', json.dumps({"sha": sha}))
+        not_modified = HTTPError(url, 304, "not modified", Message(), io.BytesIO(b""))
+        with patch("moc_env.github.urlopen", side_effect=not_modified) as request:
+            self.assertEqual(client.get_json(url), {"sha": sha})
+        self.assertEqual(request.call_count, 1)
+        self.assertEqual(
+            request.call_args.args[0].headers["If-none-match"],
+            '"commit"',
+        )
+
+    def test_cached_raw_file_at_branch_ref_is_requested(self) -> None:
+        repository = "CCI-MOC/oac-apps"
+        url = self._cached_raw_url(repository, "main")
+        client = GitHubClient()
+        client.record_source(repository, "main", "main")
+        client.response_cache.write(url, '"values"', "value: cached")
+
+        class RawResponse:
+            headers = Message()
+
+            def read(self) -> bytes:
+                return b"value: fresh"
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+        with patch("moc_env.github.urlopen", return_value=RawResponse()) as request:
+            self.assertEqual(client.get_file(repository, "values.yaml"), "value: fresh")
+        self.assertEqual(request.call_count, 1)
+
+    def test_immutable_url_cache_miss_fetches_and_stores(self) -> None:
+        repository = "CCI-MOC/oac-apps"
+        sha = "a" * 40
+        url = self._cached_raw_url(repository, sha)
+        client = GitHubClient()
+        client.record_source(repository, "main", sha)
+
+        class RawResponse:
+            headers = Message()
+            headers["ETag"] = '"values"'
+
+            def read(self) -> bytes:
+                return b"value: fresh"
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+        with patch("moc_env.github.urlopen", return_value=RawResponse()) as request:
+            self.assertEqual(client.get_file(repository, "values.yaml"), "value: fresh")
+        self.assertEqual(request.call_count, 1)
+        self.assertEqual(client.response_cache.read(url)["body"], "value: fresh")
+
+    def test_refresh_fetches_cached_immutable_url(self) -> None:
+        repository = "CCI-MOC/oac-apps"
+        sha = "a" * 40
+        url = self._cached_raw_url(repository, sha)
+        client = GitHubClient(refresh=True)
+        client.record_source(repository, "main", sha)
+        client.response_cache.write(url, '"values"', "value: cached")
+
+        class RawResponse:
+            headers = Message()
+
+            def read(self) -> bytes:
+                return b"value: fresh"
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+        with patch("moc_env.github.urlopen", return_value=RawResponse()) as request:
+            self.assertEqual(client.get_file(repository, "values.yaml"), "value: fresh")
+        self.assertEqual(request.call_count, 1)
+
+    def test_offline_cached_immutable_url_stays_unrevalidated(self) -> None:
+        repository = "CCI-MOC/oac-apps"
+        sha = "a" * 40
+        client = GitHubClient(offline=True)
+        client.record_source(repository, "main", sha)
+        client.response_cache.write(
+            self._cached_raw_url(repository, sha), '"values"', "value: cached"
+        )
+        with patch("moc_env.github.urlopen") as request:
+            self.assertEqual(client.get_file(repository, "values.yaml"), "value: cached")
+        request.assert_not_called()
+        self.assertTrue(client.sources()[0]["from_cache"])
+        self.assertIn("fetched_at", client.sources()[0])
+
+    def test_immutable_cache_hit_keeps_sources_revalidated(self) -> None:
+        repository = "CCI-MOC/oac-apps"
+        sha = "a" * 40
+        client = GitHubClient()
+        client.record_source(repository, "main", sha)
+        client.response_cache.write(
+            self._cached_raw_url(repository, sha), '"values"', "value: cached"
+        )
+        with patch("moc_env.github.urlopen") as request:
+            client.get_file(repository, "values.yaml")
+        request.assert_not_called()
+        self.assertEqual(
+            client.sources(),
+            [{"repository": repository, "ref": "main", "sha": sha}],
+        )
+
+    def test_immutable_cache_hit_is_counted_as_cache_only(self) -> None:
+        repository = "CCI-MOC/oac-apps"
+        sha = "a" * 40
+        client = GitHubClient()
+        client.record_source(repository, "main", sha)
+        client.response_cache.write(
+            self._cached_raw_url(repository, sha), '"values"', "value: cached"
+        )
+        with patch("moc_env.github.urlopen") as request:
+            client.get_file(repository, "values.yaml")
+        request.assert_not_called()
+        self.assertEqual(client.cache_hits, 1)
+        self.assertEqual(client.requests_made, 0)
+        self.assertEqual(client.api_calls_used, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

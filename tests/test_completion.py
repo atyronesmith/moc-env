@@ -198,6 +198,30 @@ class CompletionTest(unittest.TestCase):
                         ],
                         "bu-ist-demo-workload0\n",
                     ),
+                    (
+                        [
+                            "__complete-positional",
+                            "charts",
+                            "2",
+                            "moc-env",
+                            "charts",
+                            "bu-ist-",
+                        ],
+                        "bu-ist-demo\n",
+                    ),
+                    (
+                        ["__complete-options", "charts", "--v"],
+                        "--view\n",
+                    ),
+                    (
+                        [
+                            "__complete-option",
+                            "charts",
+                            "--workload",
+                            "bu-ist-",
+                        ],
+                        "bu-ist-demo-workload0\n",
+                    ),
                 ):
                     with self.subTest(arguments=arguments):
                         exit_code, stdout, _ = self.run_cli(arguments)
@@ -232,6 +256,7 @@ class CompletionTest(unittest.TestCase):
                 exit_code, stdout, _ = self.run_cli(["completion", shell])
                 self.assertEqual(exit_code, 0)
                 self.assertIn("__complete-positional", stdout)
+                self.assertIn("charts", stdout)
                 self.assertIn("export-workload", stdout)
                 self.assertIn("status", stdout)
                 self.assertIn("status-hub", stdout)
