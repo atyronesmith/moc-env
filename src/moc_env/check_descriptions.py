@@ -40,6 +40,11 @@ class DescriptionContext:
     keycloak_client: str = ""
     vlan_name: str | None = None
     vlan_subnet: str | None = None
+    ref: str = "main"
+    hub_redirect_uri: str = ""
+    hub_client_secret_name: str = ""
+    workload_redirect_uri: str = ""
+    workload_client_secret_name: str = ""
 
 
 CHECK_DESCRIPTIONS: dict[str, CheckDescription] = {
@@ -155,7 +160,7 @@ CHECK_DESCRIPTIONS: dict[str, CheckDescription] = {
             "Parses HCL blocks in CCI-MOC/moc-keycloak main.tf and selects the "
             "block whose cluster_name equals `{keycloak_client}`. The check "
             "passes when openshift_redirect_uri equals `{hub_redirect_uri}` and "
-            "client_secret_name equals `cluster/{hub}/keycloak-oidc`."
+            "client_secret_name equals `{hub_client_secret_name}`."
         ),
         not_verified=(
             "Only those three string attributes are compared; the HCL is never "
@@ -167,7 +172,7 @@ CHECK_DESCRIPTIONS: dict[str, CheckDescription] = {
         verifies=(
             "Lists the CCI-MOC/oac-apps tree and requires the path "
             "hosted-clusters/{hub}/values.yaml to exist. The check passes when "
-            "that single path is present in the selected ref."
+            "that single path is present in `{ref}`."
         ),
         not_verified=(
             "Only path existence is tested; the file contents are not read, so "
@@ -178,8 +183,8 @@ CHECK_DESCRIPTIONS: dict[str, CheckDescription] = {
         verifies=(
             "Lists the CCI-MOC/oac-apps tree and requires "
             "values/{hub}/hcp-config.yaml for hub-wide HCP and secret-selector "
-            "values. The check passes when that path exists; the file is never "
-            "opened."
+            "values. The check passes when that path exists in `{ref}`; the "
+            "file is never opened."
         ),
         not_verified=(
             "Only path existence is tested; the file contents are not read, so "
@@ -191,7 +196,8 @@ CHECK_DESCRIPTIONS: dict[str, CheckDescription] = {
             "Lists the CCI-MOC/oac-apps tree and requires {required_count} files "
             "under values/{hub}/local-cluster/: {required_components}. Configured "
             "optional components ({optional_components}) must exist too, and the "
-            "check passes only when every required and optional file is present."
+            "check passes only when every required and optional file is present "
+            "in `{ref}`."
         ),
         not_verified=(
             "Only path existence is tested; the file contents are not read, so "
@@ -203,7 +209,7 @@ CHECK_DESCRIPTIONS: dict[str, CheckDescription] = {
         verifies=(
             "Lists the CCI-MOC/oac-apps tree and requires "
             "apps/{hub}/keycloak-oauth.yaml. The check passes when that Argo CD "
-            "application manifest path exists."
+            "application manifest path exists in `{ref}`."
         ),
         not_verified=(
             "Only path existence is tested; the file contents are not read, so "
@@ -214,7 +220,7 @@ CHECK_DESCRIPTIONS: dict[str, CheckDescription] = {
         verifies=(
             "Lists the CCI-MOC/oac-apps tree and requires "
             "hosted-clusters/{hub}/{workload}/values.yaml. The check passes when "
-            "that path exists."
+            "that path exists in `{ref}`."
         ),
         not_verified=(
             "Only path existence is tested; the file contents are not read, so "
@@ -226,7 +232,7 @@ CHECK_DESCRIPTIONS: dict[str, CheckDescription] = {
         verifies=(
             "Lists the CCI-MOC/oac-apps tree and counts files under "
             "values/{hub}/{workload}/. The check passes when at least one file "
-            "exists there; there is no fixed required-file list."
+            "exists there in `{ref}`; there is no fixed required-file list."
         ),
         not_verified=(
             "Only path existence is tested; the file contents are not read, so "
@@ -335,8 +341,7 @@ CHECK_DESCRIPTIONS: dict[str, CheckDescription] = {
             "Parses HCL blocks in CCI-MOC/moc-keycloak main.tf and selects the "
             "block whose cluster_name equals `{workload}`. The check passes when "
             "openshift_redirect_uri equals `{workload_redirect_uri}` and "
-            "client_secret_name equals "
-            "`cluster/{hub}/hostedcluster/{workload}/keycloak-oidc`."
+            "client_secret_name equals `{workload_client_secret_name}`."
         ),
         not_verified=(
             "Only those three attributes are compared; the secret is not read "
@@ -348,8 +353,9 @@ CHECK_DESCRIPTIONS: dict[str, CheckDescription] = {
             "Reads hosted-clusters/{hub}/{workload}/values.yaml in "
             "CCI-MOC/oac-apps. When oauth.mocsso.enabled is not true the check "
             "passes if oauth.identityProviders is a non-empty list; when it is "
-            "true the same three moc-keycloak client fields as "
-            "workload.keycloak_oidc_client must match."
+            "true the moc-keycloak client must have cluster_name "
+            "`{workload}`, openshift_redirect_uri `{workload_redirect_uri}` and "
+            "client_secret_name `{workload_client_secret_name}`."
         ),
         not_verified=(
             "The configured identity-provider entries are not validated against "
@@ -394,9 +400,25 @@ CHECK_DESCRIPTIONS: dict[str, CheckDescription] = {
             "cluster."
         ),
         not_verified=(
-            "Duplicate addresses inside one cluster are not reported, and "
-            "addresses are compared as strings, so equivalent CIDR and bare-IP "
-            "spellings are not unified."
+            "Addresses are compared as strings, so equivalent CIDR and bare-IP "
+            "spellings are not unified; duplicates inside one cluster are "
+            "covered separately by workload.address_internal_duplicates."
+        ),
+    ),
+    "workload.address_internal_duplicates": CheckDescription(
+        verifies=(
+            "Reads services.APIServer.ipAddress, ingress.poolAddress, "
+            "services.APIServer.externalIpAddress and "
+            "ingress.externalIpAddress from "
+            "hosted-clusters/{hub}/{workload}/values.yaml in CCI-MOC/oac-apps. "
+            "Each value is parsed with the ipaddress module and compared across "
+            "the four fields of that workload; the check passes when no address "
+            "is used by more than one field, and reports an advisory when one is."
+        ),
+        not_verified=(
+            "The report does not prove whether sharing an address is intentional; "
+            "it only flags the duplicate inside this workload. Cross-cluster "
+            "duplicates are covered by workload.address_uniqueness."
         ),
     ),
     "workload.dns_base_domain": CheckDescription(
@@ -438,6 +460,37 @@ CHECK_DESCRIPTIONS: dict[str, CheckDescription] = {
             "absent."
         ),
     ),
+    "workload.feature_placements": CheckDescription(
+        verifies=(
+            "Reads clusterLabels from the workload hosted-cluster values file "
+            "and compares every feature label whose value is true with the "
+            "matchLabels of this hub's acm-placements.yaml. The check passes "
+            "when this hub defines a matching placement, or no hub in the tree "
+            "defines one at all; a placement that exists only on another hub is "
+            "a blocking gap."
+        ),
+        not_verified=(
+            "Only string equality of matchLabels is compared, so label "
+            "selectors other than matchLabels and placements applied outside "
+            "this repository are not evaluated."
+        ),
+    ),
+    "workload.feature_chart_values": CheckDescription(
+        verifies=(
+            "Resolves the workload's feature labels through this hub's "
+            "placements and the managed ApplicationSet templates, then lists "
+            "the charts each matched placement deploys. Required .Values calls "
+            "outside if, with, and range blocks must resolve to a non-empty "
+            "value in the layered chart, hub, and per-cluster values files; "
+            "kustomize overlays must exist and per-cluster values files must "
+            "name received charts."
+        ),
+        not_verified=(
+            "Required calls inside if/with/range blocks and inside "
+            "range-scoped variables are not evaluated; charts are not "
+            "rendered; the live Argo CD Applications are not read."
+        ),
+    ),
 }
 
 
@@ -466,17 +519,73 @@ def apply_descriptions(checks, context: DescriptionContext) -> None:
 def _context_for(check, context: DescriptionContext) -> DescriptionContext:
     """Substitute the per-check values that are not shared by the report."""
 
-    if check.id == "workload.ingress_address_network":
-        expected = check.expected if isinstance(check.expected, dict) else {}
-        return replace(
-            context,
-            workload=check.cluster or context.workload,
+    expected = check.expected if isinstance(check.expected, dict) else {}
+    evidence = getattr(check, "evidence", None) or {}
+    updates: dict[str, object] = {
+        "workload": check.cluster or context.workload,
+        "ref": getattr(check, "ref", None) or context.ref,
+    }
+
+    def client_expected(name: str):
+        fields = evidence.get("client_fields")
+        if not isinstance(fields, dict):
+            return None
+        item = fields.get(name)
+        return item.get("expected") if isinstance(item, dict) else None
+
+    if check.id == "hub.oidc_client":
+        updates.update(
+            keycloak_client=expected.get("client") or context.keycloak_client,
+            hub_redirect_uri=expected.get("openshift_redirect_uri")
+            or context.hub_redirect_uri,
+            hub_client_secret_name=expected.get("client_secret_name")
+            or context.hub_client_secret_name,
+        )
+    elif check.id == "workload.keycloak_oidc_client":
+        updates.update(
+            workload_redirect_uri=expected.get("openshift_redirect_uri")
+            or context.workload_redirect_uri,
+            workload_client_secret_name=expected.get("client_secret_name")
+            or context.workload_client_secret_name,
+        )
+    elif check.id == "workload.identity_provider":
+        updates.update(
+            workload_redirect_uri=client_expected("openshift_redirect_uri")
+            or context.workload_redirect_uri,
+            workload_client_secret_name=client_expected("client_secret_name")
+            or context.workload_client_secret_name,
+        )
+    elif check.id == "workload.ingress_address_network":
+        updates.update(
             machine_network=expected.get("machine_network")
             or context.machine_network,
             vlan_name=expected.get("vlan_name") or context.vlan_name,
             vlan_subnet=expected.get("vlan_subnet") or context.vlan_subnet,
         )
-    return replace(context, workload=check.cluster or context.workload)
+    elif check.id == "workload.api_address_network":
+        updates["machine_network"] = (
+            expected.get("machine_network") or context.machine_network
+        )
+    elif check.id == "workload.dns_base_domain":
+        updates.update(
+            base_domain=expected.get("baseDomain") or context.base_domain,
+            hcp_external_domain=expected.get("hcpExternalDomain")
+            or context.hcp_external_domain,
+        )
+    elif check.id == "hub.moc_dns_records":
+        domain = expected.get("domain")
+        if not isinstance(domain, str):
+            domain = next(
+                (
+                    name.removeprefix("api.")
+                    for name in expected
+                    if isinstance(name, str) and name.startswith("api.")
+                ),
+                None,
+            )
+        if domain:
+            updates["domain"] = domain
+    return replace(context, **updates)
 
 
 def _values(check_id: str, context: DescriptionContext) -> dict[str, str]:
@@ -504,14 +613,15 @@ def _values(check_id: str, context: DescriptionContext) -> dict[str, str]:
         "required_components": required,
         "optional_components": optional,
         "keycloak_client": context.keycloak_client or f"{context.hub}-infra",
-        "hub_redirect_uri": (
-            f"https://oauth-openshift.apps.{context.domain}"
-            "/oauth2callback/mocsso"
-        ),
-        "workload_redirect_uri": (
-            f"https://oauth-{workload}.{context.hcp_external_domain}"
-            ":443/oauth2callback/mocsso"
-        ),
+        "ref": context.ref or "main",
+        "hub_redirect_uri": context.hub_redirect_uri
+        or "an unknown hub redirect URI",
+        "hub_client_secret_name": context.hub_client_secret_name
+        or "an unknown hub client secret name",
+        "workload_redirect_uri": context.workload_redirect_uri
+        or "an unknown workload redirect URI",
+        "workload_client_secret_name": context.workload_client_secret_name
+        or "an unknown workload client secret name",
         "vlan_clause": _vlan_clause(context, workload),
     }
 

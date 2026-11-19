@@ -2,7 +2,7 @@ SAMPLE — generated from a synthetic fixture, not a live environment.
 
 # example-env — environment configuration status
 
-**0 blocking gaps, 0 advisories, and 29 of 30 checks pass; UNKNOWN: Workload ingress address network**
+**0 blocking gaps, 0 advisories, and 32 of 33 checks pass; UNKNOWN: Workload ingress address network**
 
 Generated 2026-11-16 12:34 UTC · MOC issue: not set — pass `--issue N`
 
@@ -27,7 +27,7 @@ Generated 2026-11-16 12:34 UTC · MOC issue: not set — pass `--issue N`
 | 3 Agent ISO boot | verify by hand |
 | 4 Agent visibility | verify by hand |
 | 5 Agent labels and approval | ✅ 1/1 checks |
-| 6 oac-apps values | ✅ 7/8 checks, 1 unknown |
+| 6 oac-apps values | ✅ 10/11 checks, 1 unknown |
 | 7 Shared-service prerequisites | ✅ 5/5 checks |
 
 ## Next actions
@@ -56,7 +56,7 @@ Not verified: Host names, node_name values, MAC addresses, boot images and group
 
 | Field | Expected | Observed |
 |---|---|---|
-| `cluster_group` | `Inventory group for example-env-infra` | `example-env-infra` |
+| `cluster_group` | `a group with vars.cluster == example-env-infra` | `example-env-infra` |
 | `host_count` | `reported (not required)` | `1` |
 
 **Observed hosts**
@@ -77,7 +77,7 @@ Not verified: The hosts, images and variables under the key are not inspected, s
 
 | Field | Expected | Observed |
 |---|---|---|
-| `inventory_key` | `Hub-image inventory entry for example-env-infra` | `example-env-infra` |
+| `inventory_key` | `key all.children.example-env-infra` | `example-env-infra` |
 
 </details>
 
@@ -128,7 +128,7 @@ Status rule: The boot-image filename must contain the full cluster name `example
 
 | Field | Expected | Observed |
 |---|---|---|
-| `boot_image_url` | `Cluster-specific discovery image for example-env-infra` | `http://10.2.0.82/boot/example-env-infra-agent-discovery.iso` |
+| `boot_image_url` | `filename contains example-env-infra` | `http://10.2.0.82/boot/example-env-infra-agent-discovery.iso` |
 
 </details>
 
@@ -143,8 +143,8 @@ Not verified: Only those three string attributes are compared; the HCL is never 
 | Field | Expected | Observed |
 |---|---|---|
 | `client` | `example-env-infra` | `example-env-infra` |
-| `redirect_uri` | `https://oauth-openshift.apps.example-env.int.massopen.cloud/oauth2callback/mocsso` | `https://oauth-openshift.apps.example-env.int.massopen.cloud/oauth2callback/mocsso` |
-| `secret_name` | `cluster/example-env-infra/keycloak-oidc` | `cluster/example-env-infra/keycloak-oidc` |
+| `openshift_redirect_uri` | `https://oauth-openshift.apps.example-env.int.massopen.cloud/oauth2callback/mocsso` | `https://oauth-openshift.apps.example-env.int.massopen.cloud/oauth2callback/mocsso` |
+| `client_secret_name` | `cluster/example-env-infra/keycloak-oidc` | `cluster/example-env-infra/keycloak-oidc` |
 
 </details>
 
@@ -153,7 +153,7 @@ Not verified: Only those three string attributes are compared; the HCL is never 
 
 Source: CCI-MOC/oac-apps · [`hosted-clusters/example-env-infra/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/example-env-infra/values.yaml) @ main (3333333)
 
-Verifies: Lists the CCI-MOC/oac-apps tree and requires the path hosted-clusters/example-env-infra/values.yaml to exist. The check passes when that single path is present in the selected ref.
+Verifies: Lists the CCI-MOC/oac-apps tree and requires the path hosted-clusters/example-env-infra/values.yaml to exist. The check passes when that single path is present in `main`.
 Not verified: Only path existence is tested; the file contents are not read, so missing or malformed hosted-cluster defaults still pass.
 
 | Field | Expected | Observed |
@@ -167,7 +167,7 @@ Not verified: Only path existence is tested; the file contents are not read, so 
 
 Source: CCI-MOC/oac-apps · [`values/example-env-infra`](https://github.com/CCI-MOC/oac-apps/blob/main/values/example-env-infra) @ main (3333333)
 
-Verifies: Lists the CCI-MOC/oac-apps tree and requires values/example-env-infra/hcp-config.yaml for hub-wide HCP and secret-selector values. The check passes when that path exists; the file is never opened.
+Verifies: Lists the CCI-MOC/oac-apps tree and requires values/example-env-infra/hcp-config.yaml for hub-wide HCP and secret-selector values. The check passes when that path exists in `main`; the file is never opened.
 Not verified: Only path existence is tested; the file contents are not read, so the HCP and secret-selector keys are never checked.
 
 | Field | Expected | Observed |
@@ -181,7 +181,7 @@ Not verified: Only path existence is tested; the file contents are not read, so 
 
 Source: CCI-MOC/oac-apps · [`values/example-env-infra/local-cluster`](https://github.com/CCI-MOC/oac-apps/blob/main/values/example-env-infra/local-cluster) @ main (3333333)
 
-Verifies: Lists the CCI-MOC/oac-apps tree and requires 13 files under values/example-env-infra/local-cluster/: acm.yaml, acm-placements.yaml, cert-manager.yaml, cluster-certificates.yaml, cluster-version.yaml, external-dns-operator.yaml, external-secrets.yaml, hcp-config.yaml, keycloak-oauth.yaml, metallb.yaml, openshift-gitops.yaml, portworx.yaml, user-workload-monitoring.yaml. Configured optional components (none configured) must exist too, and the check passes only when every required and optional file is present.
+Verifies: Lists the CCI-MOC/oac-apps tree and requires 13 files under values/example-env-infra/local-cluster/: acm.yaml, acm-placements.yaml, cert-manager.yaml, cluster-certificates.yaml, cluster-version.yaml, external-dns-operator.yaml, external-secrets.yaml, hcp-config.yaml, keycloak-oauth.yaml, metallb.yaml, openshift-gitops.yaml, portworx.yaml, user-workload-monitoring.yaml. Configured optional components (none configured) must exist too, and the check passes only when every required and optional file is present in `main`.
 Not verified: Only path existence is tested; the file contents are not read, so operator versions, values and cluster-specific names are never validated.
 
 | Field | Expected | Observed |
@@ -229,7 +229,7 @@ None.
 
 Source: CCI-MOC/oac-apps · [`apps/example-env-infra`](https://github.com/CCI-MOC/oac-apps/blob/main/apps/example-env-infra) @ main (3333333)
 
-Verifies: Lists the CCI-MOC/oac-apps tree and requires apps/example-env-infra/keycloak-oauth.yaml. The check passes when that Argo CD application manifest path exists.
+Verifies: Lists the CCI-MOC/oac-apps tree and requires apps/example-env-infra/keycloak-oauth.yaml. The check passes when that Argo CD application manifest path exists in `main`.
 Not verified: Only path existence is tested; the file contents are not read, so the manifest's destination cluster and sync policy are not checked.
 
 | Field | Expected | Observed |
@@ -280,7 +280,7 @@ Not verified: The match is textual, so the certificate zone, DNS records and AWS
 
 | Field | Expected | Observed |
 |---|---|---|
-| `policy entry` | `covers example-env-infra` | `cert_manager_policies` |
+| `policy entry` | `policy_name or cluster_subdomain names example-env-infra` | `cert_manager_policies` |
 
 </details>
 
@@ -308,7 +308,7 @@ Not verified: Host names, node_name values, MAC addresses, boot images and group
 
 | Field | Expected | Observed |
 |---|---|---|
-| `cluster_group` | `Inventory group for example-env-workload0` | `example-env-workload0` |
+| `cluster_group` | `a group with vars.cluster == example-env-workload0` | `example-env-workload0` |
 | `host_count` | `reported (not required)` | `1` |
 
 **Observed hosts**
@@ -331,7 +331,7 @@ Status rule: The workload boot-image filename may contain the workload name `exa
 
 | Field | Expected | Observed |
 |---|---|---|
-| `boot_image_url` | `Cluster-specific discovery image for example-env-workload0` | `http://10.2.0.82/boot/example-env-infra-agent-discovery.iso` |
+| `boot_image_url` | `filename contains example-env-workload0 or example-env-infra` | `http://10.2.0.82/boot/example-env-infra-agent-discovery.iso` |
 
 </details>
 
@@ -361,7 +361,7 @@ Not verified: MAC address and resource-class formats are not validated, the upda
 
 Source: CCI-MOC/oac-apps · [`hosted-clusters/example-env-infra/example-env-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/example-env-infra/example-env-workload0/values.yaml) @ main (3333333)
 
-Verifies: Lists the CCI-MOC/oac-apps tree and requires hosted-clusters/example-env-infra/example-env-workload0/values.yaml. The check passes when that path exists.
+Verifies: Lists the CCI-MOC/oac-apps tree and requires hosted-clusters/example-env-infra/example-env-workload0/values.yaml. The check passes when that path exists in `main`.
 Not verified: Only path existence is tested; the file contents are not read, so the cluster name, parent hub, networking and node pools are not verified here.
 
 | Field | Expected | Observed |
@@ -375,12 +375,12 @@ Not verified: Only path existence is tested; the file contents are not read, so 
 
 Source: CCI-MOC/oac-apps · [`values/example-env-infra/example-env-workload0`](https://github.com/CCI-MOC/oac-apps/blob/main/values/example-env-infra/example-env-workload0) @ main (3333333)
 
-Verifies: Lists the CCI-MOC/oac-apps tree and counts files under values/example-env-infra/example-env-workload0/. The check passes when at least one file exists there; there is no fixed required-file list.
+Verifies: Lists the CCI-MOC/oac-apps tree and counts files under values/example-env-infra/example-env-workload0/. The check passes when at least one file exists there in `main`; there is no fixed required-file list.
 Not verified: Only path existence is tested; the file contents are not read, so individual components such as hcp-config.yaml are not confirmed.
 
 | Field | Expected | Observed |
 |---|---|---|
-| `values/example-env-infra/example-env-workload0/example.yaml` | `exists in main` | `present` |
+| `values/example-env-infra/example-env-workload0/example.yaml` | `present` | `present` |
 | `values/example-env-infra/example-env-workload0` | `at least 1 file` | `1 file(s)` |
 
 </details>
@@ -457,19 +457,74 @@ Not verified: GPU model, count and allocatable resources are not inspected, and 
 </details>
 
 <details>
+<summary>✅ Workload feature placements — Matched placements: all-managed-clusters. unused_labels: [].</summary>
+
+Source: CCI-MOC/oac-apps · [`values/example-env-infra/local-cluster/acm-placements.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/values/example-env-infra/local-cluster/acm-placements.yaml) @ main (3333333)
+
+Verifies: Reads clusterLabels from the workload hosted-cluster values file and compares every feature label whose value is true with the matchLabels of this hub's acm-placements.yaml. The check passes when this hub defines a matching placement, or no hub in the tree defines one at all; a placement that exists only on another hub is a blocking gap.
+Not verified: Only string equality of matchLabels is compared, so label selectors other than matchLabels and placements applied outside this repository are not evaluated.
+
+| Field | Expected | Observed |
+|---|---|---|
+| `matched placements` | `a matching placement on this hub` | `all-managed-clusters` |
+| `unused labels` | `no placement on any hub` | `—` |
+
+</details>
+
+<details>
+<summary>✅ Workload feature chart values — 1 chart received; all required values are set and every kustomize overlay exists.</summary>
+
+Source: CCI-MOC/oac-apps · [`values/example-env-infra/example-env-workload0`](https://github.com/CCI-MOC/oac-apps/blob/main/values/example-env-infra/example-env-workload0) @ main (3333333)
+
+Verifies: Resolves the workload's feature labels through this hub's placements and the managed ApplicationSet templates, then lists the charts each matched placement deploys. Required .Values calls outside if, with, and range blocks must resolve to a non-empty value in the layered chart, hub, and per-cluster values files; kustomize overlays must exist and per-cluster values files must name received charts.
+Not verified: Required calls inside if/with/range blocks and inside range-scoped variables are not evaluated; charts are not rendered; the live Argo CD Applications are not read.
+
+| Field | Expected | Observed |
+|---|---|---|
+| `charts received` | `every chart selected by a matched placement` | `1` |
+| `unmet required values` | `none` | `—` |
+| `missing kustomize overlays` | `none` | `—` |
+| `orphan values files` | `none` | `—` |
+
+**Received charts**
+
+| Chart | Application set | Placement | Feature label | Hub values | Cluster values | Unmet required values |
+|---|---|---|---|---|---|---|
+| `example` | `example-clusters` | `all-managed-clusters` | `baseline` | false | true | — |
+
+</details>
+
+<details>
 <summary>✅ Workload address uniqueness — No workload address is used by another cluster.</summary>
 
 Source: CCI-MOC/oac-apps · [`hosted-clusters/`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/) @ main (3333333)
 
 Verifies: Reads every hosted-clusters/<hub>/<cluster>/values.yaml in CCI-MOC/oac-apps and collects services.APIServer.ipAddress, ingress.poolAddress, services.APIServer.externalIpAddress and ingress.externalIpAddress for each cluster. The check passes when no address used by `example-env-workload0` is also used by a different cluster.
-Not verified: Duplicate addresses inside one cluster are not reported, and addresses are compared as strings, so equivalent CIDR and bare-IP spellings are not unified.
+Not verified: Addresses are compared as strings, so equivalent CIDR and bare-IP spellings are not unified; duplicates inside one cluster are covered separately by workload.address_internal_duplicates.
 
 | Field | Expected | Observed |
 |---|---|---|
-| `services.APIServer.ipAddress 10.20.26.10` | `used by no other cluster` | `none` |
-| `ingress.poolAddress 10.20.28.10` | `used by no other cluster` | `none` |
-| `services.APIServer.externalIpAddress 10.20.29.10` | `used by no other cluster` | `none` |
-| `ingress.externalIpAddress 10.20.29.10` | `used by no other cluster` | `none` |
+| `example-env-workload0 services.APIServer.ipAddress 10.20.26.10` | `used by no other cluster` | `none` |
+| `example-env-workload0 ingress.poolAddress 10.20.28.10` | `used by no other cluster` | `none` |
+| `example-env-workload0 services.APIServer.externalIpAddress 10.20.29.10` | `used by no other cluster` | `none` |
+| `example-env-workload0 ingress.externalIpAddress 10.20.29.11` | `used by no other cluster` | `none` |
+
+</details>
+
+<details>
+<summary>✅ Workload internal address duplicates — No address is used by more than one field of example-env-workload0.</summary>
+
+Source: CCI-MOC/oac-apps · [`hosted-clusters/example-env-infra/example-env-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/example-env-infra/example-env-workload0/values.yaml) @ main (3333333)
+
+Verifies: Reads services.APIServer.ipAddress, ingress.poolAddress, services.APIServer.externalIpAddress and ingress.externalIpAddress from hosted-clusters/example-env-infra/example-env-workload0/values.yaml in CCI-MOC/oac-apps. Each value is parsed with the ipaddress module and compared across the four fields of that workload; the check passes when no address is used by more than one field, and reports an advisory when one is.
+Not verified: The report does not prove whether sharing an address is intentional; it only flags the duplicate inside this workload. Cross-cluster duplicates are covered by workload.address_uniqueness.
+
+| Field | Expected | Observed |
+|---|---|---|
+| `services.APIServer.ipAddress 10.20.26.10` | `not used by another field of example-env-workload0` | `none` |
+| `ingress.poolAddress 10.20.28.10` | `not used by another field of example-env-workload0` | `none` |
+| `services.APIServer.externalIpAddress 10.20.29.10` | `not used by another field of example-env-workload0` | `none` |
+| `ingress.externalIpAddress 10.20.29.11` | `not used by another field of example-env-workload0` | `none` |
 
 </details>
 
@@ -515,7 +570,7 @@ Not verified: The match is textual, so the certificate zone, DNS records and AWS
 
 | Field | Expected | Observed |
 |---|---|---|
-| `policy entry` | `covers example-env-workload0` | `cert_manager_policy_example_env_workload0` |
+| `policy entry` | `policy_name or cluster_subdomain names example-env-workload0` | `cert_manager_policy_example_env_workload0` |
 
 </details>
 
@@ -540,12 +595,12 @@ Not verified: Only those three attributes are compared; the secret is not read a
 
 Source: CCI-MOC/moc-keycloak · [`main.tf`](https://github.com/CCI-MOC/moc-keycloak/blob/main/main.tf) @ main (4444444)
 
-Verifies: Reads hosted-clusters/example-env-infra/example-env-workload0/values.yaml in CCI-MOC/oac-apps. When oauth.mocsso.enabled is not true the check passes if oauth.identityProviders is a non-empty list; when it is true the same three moc-keycloak client fields as workload.keycloak_oidc_client must match.
+Verifies: Reads hosted-clusters/example-env-infra/example-env-workload0/values.yaml in CCI-MOC/oac-apps. When oauth.mocsso.enabled is not true the check passes if oauth.identityProviders is a non-empty list; when it is true the moc-keycloak client must have cluster_name `example-env-workload0`, openshift_redirect_uri `https://oauth-example-env-workload0.hcp.example-env.int.massopen.cloud:443/oauth2callback/mocsso` and client_secret_name `cluster/example-env-infra/hostedcluster/example-env-workload0/keycloak-oidc`.
 Not verified: The configured identity-provider entries are not validated against Keycloak, and a disabled mocsso with an explicit provider is accepted without checking that the provider works.
 
 | Field | Expected | Observed |
 |---|---|---|
-| `oauth.mocsso.enabled` | `Yes` | `Yes` |
+| `oauth.mocsso.enabled` | `true` | `true` |
 | `moc-keycloak cluster_name` | `example-env-workload0` | `example-env-workload0` |
 | `moc-keycloak openshift_redirect_uri` | `https://oauth-example-env-workload0.hcp.example-env.int.massopen.cloud:443/oauth2callback/mocsso` | `https://oauth-example-env-workload0.hcp.example-env.int.massopen.cloud:443/oauth2callback/mocsso` |
 | `moc-keycloak client_secret_name` | `cluster/example-env-infra/hostedcluster/example-env-workload0/keycloak-oidc` | `cluster/example-env-infra/hostedcluster/example-env-workload0/keycloak-oidc` |

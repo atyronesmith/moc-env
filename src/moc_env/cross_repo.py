@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ipaddress
+import json
 import re
 from collections.abc import Callable
 from dataclasses import replace
@@ -13,11 +14,13 @@ import yaml
 from .github import GitHubClient, GitHubError, github_url
 from .model import CheckResult, Environment
 from .observed import AppsObservation, InfraObservation
+from . import feature_charts
 from .repositories import (
     ANSIBLE_SWITCHES_REPOSITORY,
     EVERPURE_REPOSITORY,
     MOC_AWS_REPOSITORY,
     MOC_DNS_REPOSITORY,
+    OAC_APPS_REPOSITORY,
 )
 
 EVERPURE_PATH = "ansible/group_vars/all/realms.yaml"
@@ -154,9 +157,12 @@ _CHECK_LABELS = {
     "workload.api_address_network": "Workload API address network",
     "workload.ingress_address_network": "Workload ingress address network",
     "workload.address_uniqueness": "Workload address uniqueness",
+    "workload.address_internal_duplicates": "Workload internal address duplicates",
     "workload.dns_base_domain": "Workload DNS base domain",
     "workload.node_pool_hosts": "Workload node-pool host capacity",
     "workload.gpu_without_hosts": "Workload GPU feature support",
+    "workload.feature_placements": "Workload feature placements",
+    "workload.feature_chart_values": "Workload feature chart values",
 }
 
 
@@ -216,9 +222,12 @@ _NEXT_ACTION = {
     "workload.api_address_network": "Move services.APIServer.ipAddress into the hub machine network.",
     "workload.ingress_address_network": "Move ingress.poolAddress outside the hub machine network and into the workload VLAN.",
     "workload.address_uniqueness": "Assign addresses that are not used by another cluster.",
+    "workload.address_internal_duplicates": "Assign distinct addresses to the workload's own address fields.",
     "workload.dns_base_domain": "Use dns.records hostnames under the hub baseDomain.",
     "workload.node_pool_hosts": "Add matching inventory hosts or reduce node-pool replicas.",
     "workload.gpu_without_hosts": "Disable feature-gpu or add GPU hosts to the workload inventory.",
+    "workload.feature_placements": "Add the missing placement to values/<hub>/local-cluster/acm-placements.yaml or remove the stale feature label.",
+    "workload.feature_chart_values": "Set the missing required chart values, add the kustomize overlay, or remove values files for charts the cluster does not receive.",
 }
 
 
@@ -655,6 +664,18 @@ def _is_address_or_interface(value: Any) -> bool:
     return True
 
 
+def _address_key(value: Any) -> str:
+    """Normalize an address for comparison; compare literals when unparseable."""
+
+    text = str(value)
+    try:
+        if "/" in text:
+            return str(ipaddress.ip_interface(text).ip)
+        return str(ipaddress.ip_address(text))
+    except ValueError:
+        return text
+
+
 def _workload_vlan(vlans: list[Any], workload: str) -> dict[str, Any] | None:
     """Match a full workload name, allowing documented network-name aliases."""
 
@@ -677,6 +698,393 @@ def _workload_vlan(vlans: list[Any], workload: str) -> dict[str, Any] | None:
         if len(matches) == 1:
             return matches[0]
     return None
+
+
+def _oac_apps_tree(
+    client: GitHubClient, progress: ProgressCallback | None
+) -> tuple[dict[str, dict[str, Any]] | None, str | None]:
+    try:
+        return client.get_tree(OAC_APPS_REPOSITORY), None
+    except GitHubError as exc:
+        return None, f"{OAC_APPS_REPOSITORY} tree could not be read: {exc}"
+
+
+def _placement_paths(
+    tree: dict[str, dict[str, Any]],
+) -> dict[str, dict[str, str]]:
+    """Map each hub with placements files to its local and hub-wide paths."""
+
+    hubs: dict[str, dict[str, str]] = {}
+    for path in tree:
+        parts = path.split("/")
+        if (
+            len(parts) == 4
+            and parts[0] == "values"
+            and parts[2] == "local-cluster"
+            and parts[3] == "acm-placements.yaml"
+        ):
+            hubs.setdefault(parts[1], {})["local"] = path
+        elif (
+            len(parts) == 3
+            and parts[0] == "values"
+            and parts[2] == "acm-placements.yaml"
+        ):
+            hubs.setdefault(parts[1], {})["hub"] = path
+    return hubs
+
+
+def _read_cached(
+    client: GitHubClient,
+    path: str,
+    cache: dict[str, str | None],
+    progress: ProgressCallback | None,
+) -> tuple[str | None, str | None]:
+    if path in cache:
+        text = cache[path]
+        return text, None if text is not None else f"{path} is unavailable."
+    try:
+        text, error = _read_file(client, OAC_APPS_REPOSITORY, path, progress)
+    except (GitHubError, AssertionError) as exc:
+        # A missing or unreadable fixture must make the feature check unknown,
+        # not abort the whole status run.
+        text, error = None, f"{path} could not be read: {exc}"
+    cache[path] = text
+    return text, error
+
+
+def _load_placements(
+    client: GitHubClient,
+    paths: dict[str, str],
+    cache: dict[str, str | None],
+    progress: ProgressCallback | None,
+) -> tuple[list[feature_charts.Placement] | None, str | None]:
+    """Load local-cluster placements over any hub-wide placements file."""
+
+    local_path = paths.get("local")
+    hub_path = paths.get("hub")
+    if local_path is None and hub_path is None:
+        return None, "no acm-placements.yaml exists for this hub"
+    underneath: list[feature_charts.Placement] = []
+    if hub_path is not None:
+        text, error = _read_cached(client, hub_path, cache, progress)
+        if text is None:
+            return None, error or f"{hub_path} is unavailable."
+        try:
+            underneath = feature_charts.parse_placements(text)
+        except (ValueError, yaml.YAMLError) as exc:
+            return None, f"{hub_path} is not a placements list: {exc}"
+    if local_path is None:
+        return underneath, None
+    text, error = _read_cached(client, local_path, cache, progress)
+    if text is None:
+        return None, error or f"{local_path} is unavailable."
+    try:
+        override = feature_charts.parse_placements(text)
+    except (ValueError, yaml.YAMLError) as exc:
+        return None, f"{local_path} is not a placements list: {exc}"
+    return feature_charts.merge_placements(underneath, override), None
+
+
+def _load_application_sets(
+    client: GitHubClient,
+    tree: dict[str, dict[str, Any]],
+    cache: dict[str, str | None],
+    progress: ProgressCallback | None,
+) -> tuple[list[feature_charts.ApplicationSet], list[str]]:
+    application_sets: list[feature_charts.ApplicationSet] = []
+    errors: list[str] = []
+    for path in sorted(
+        path
+        for path in tree
+        if path.startswith("applicationsets/templates/managed/")
+        and path.endswith((".yaml", ".yml"))
+    ):
+        text, error = _read_cached(client, path, cache, progress)
+        if text is None:
+            errors.append(error or f"{path} is unavailable.")
+            continue
+        name = path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+        application_sets.append(feature_charts.parse_application_set(text, name))
+    return application_sets, errors
+
+
+def _read_values_file(
+    client: GitHubClient,
+    tree: dict[str, dict[str, Any]],
+    path: str,
+    cache: dict[str, str | None],
+    progress: ProgressCallback | None,
+) -> dict[str, Any]:
+    if path not in tree:
+        return {}
+    text, _ = _read_cached(client, path, cache, progress)
+    if text is None:
+        return {}
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _feature_placement_check(
+    hub: str,
+    workload: str,
+    labels: Any,
+    placements: list[feature_charts.Placement],
+    placements_by_hub: dict[str, list[feature_charts.Placement]],
+    path: str,
+) -> CheckResult:
+    feature = feature_charts.feature_labels(labels)
+    matched = feature_charts.matched_placement_names(placements, labels)
+    unused: list[str] = []
+    missing_on_hub: dict[str, list[str]] = {}
+    for label in feature:
+        if any(
+            label in placement.match_labels
+            and feature_charts.labels_match(placement.match_labels, labels)
+            for placement in placements
+        ):
+            continue
+        other_hubs = [
+            f"{other_hub}:{placement.name}"
+            for other_hub, other_placements in placements_by_hub.items()
+            if other_hub != hub
+            for placement in other_placements
+            if label in placement.match_labels
+            and feature_charts.labels_match(placement.match_labels, labels)
+        ]
+        if other_hubs:
+            missing_on_hub[label] = sorted(dict.fromkeys(other_hubs))
+        else:
+            unused.append(label)
+    evidence = {
+        "matched_placements": matched,
+        "unused_labels": unused,
+        "missing_on_hub": missing_on_hub,
+        "feature_labels": feature,
+    }
+    expected = {
+        "feature_labels": sorted(feature),
+        "placement": "a matching placement on this hub",
+    }
+    if missing_on_hub:
+        details = "; ".join(
+            f"{label} is defined by {', '.join(origins)} in another hub"
+            for label, origins in missing_on_hub.items()
+        )
+        return _result(
+            "workload.feature_placements",
+            "workload",
+            workload,
+            OAC_APPS_REPOSITORY,
+            path,
+            "value_mismatch",
+            "blocking",
+            expected,
+            {"unused_labels": unused, "missing_on_hub": missing_on_hub},
+            f"This hub's placements file is missing an entry: {details}.",
+            evidence=evidence,
+        )
+    matched_text = ", ".join(matched)
+    reason = (
+        f"Matched placements: {matched_text}. "
+        f"unused_labels: {json.dumps(unused)}."
+    )
+    return _result(
+        "workload.feature_placements",
+        "workload",
+        workload,
+        OAC_APPS_REPOSITORY,
+        path,
+        "declared_in_main",
+        "info",
+        expected,
+        {"matched_placements": matched, "unused_labels": unused},
+        reason,
+        evidence=evidence,
+    )
+
+
+def _feature_chart_values_check(
+    client: GitHubClient,
+    tree: dict[str, dict[str, Any]],
+    hub: str,
+    workload: str,
+    labels: Any,
+    placements: list[feature_charts.Placement],
+    application_sets: list[feature_charts.ApplicationSet],
+    path: str,
+    cache: dict[str, str | None],
+    progress: ProgressCallback | None,
+) -> CheckResult:
+    matched = feature_charts.matched_placement_names(placements, labels)
+    by_name = {placement.name: placement for placement in placements}
+    rows: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for application_set in application_sets:
+        if application_set.placement not in matched:
+            continue
+        placement = by_name.get(application_set.placement or "")
+        feature_label = feature_charts.placement_feature_label(placement)
+        for chart, is_component in (
+            *((component, True) for component in application_set.components),
+            *(
+                ((application_set.literal_chart, False),)
+                if application_set.literal_chart
+                else ()
+            ),
+        ):
+            if chart in seen:
+                continue
+            seen.add(chart)
+            hub_path = f"values/{hub}/{chart}.yaml"
+            cluster_path = f"values/{hub}/{workload}/{chart}.yaml"
+            unmet: list[str] = []
+            if is_component:
+                defaults = _read_values_file(
+                    client, tree, f"charts/{chart}/values.yaml", cache, progress
+                )
+                hub_values = _read_values_file(
+                    client, tree, hub_path, cache, progress
+                )
+                cluster_values = _read_values_file(
+                    client, tree, cluster_path, cache, progress
+                )
+                merged = feature_charts.merge_value_layers(
+                    defaults, hub_values, cluster_values
+                )
+                required: list[str] = []
+                for template_path in sorted(
+                    path
+                    for path in tree
+                    if path.startswith(f"charts/{chart}/templates/")
+                ):
+                    text, _ = _read_cached(
+                        client, template_path, cache, progress
+                    )
+                    if text is not None:
+                        required.extend(
+                            feature_charts.required_value_paths(text)
+                        )
+                unmet = feature_charts.unmet_required(required, merged)
+            rows.append(
+                {
+                    "chart": chart,
+                    "application_set": application_set.name,
+                    "placement": application_set.placement,
+                    "feature_label": feature_label,
+                    "hub_values_file": hub_path in tree,
+                    "cluster_values_file": cluster_path in tree,
+                    "unmet_required_values": unmet,
+                    "component": is_component,
+                }
+            )
+
+    missing_overlays: list[str] = []
+    for application_set in application_sets:
+        if application_set.placement not in matched:
+            continue
+        if not application_set.kustomize_path:
+            continue
+        prefix = feature_charts.kustomize_overlay_prefix(
+            application_set.kustomize_path, workload
+        )
+        if not any(path.startswith(prefix) for path in tree):
+            missing_overlays.append(prefix.rstrip("/"))
+
+    received = {row["chart"] for row in rows}
+    cluster_prefix = f"values/{hub}/{workload}/"
+    orphans = sorted(
+        path[len(cluster_prefix) : -len(".yaml")]
+        for path in tree
+        if path.startswith(cluster_prefix)
+        and path.endswith(".yaml")
+        and "/" not in path[len(cluster_prefix) :]
+        and path[len(cluster_prefix) : -len(".yaml")] not in received
+    )
+
+    total = len(rows)
+    components = sum(bool(row["component"]) for row in rows)
+    literal_names = [
+        str(row["chart"]) for row in rows if not row["component"]
+    ]
+    if literal_names:
+        count_text = (
+            f"{total} charts received ({components} component charts plus "
+            f"{', '.join(literal_names)})"
+        )
+    else:
+        count_text = f"{total} chart{'s' if total != 1 else ''} received"
+    findings = [
+        f"{row['chart']} unmet required values: "
+        + ", ".join(row["unmet_required_values"])
+        for row in rows
+        if row["unmet_required_values"]
+    ]
+    findings.extend(f"missing overlay: {overlay}" for overlay in missing_overlays)
+    evidence = {
+        "charts": rows,
+        "chart_count": total,
+        "component_chart_count": components,
+        "unmet_required_values": {
+            str(row["chart"]): row["unmet_required_values"]
+            for row in rows
+            if row["unmet_required_values"]
+        },
+        "missing_overlays": missing_overlays,
+        "orphan_values_files": orphans,
+        "matched_placements": matched,
+    }
+    expected = {
+        "received_charts": "every chart selected by a placement on this hub",
+        "required_values": "every required .Values call outside template blocks",
+    }
+    if findings:
+        return _result(
+            "workload.feature_chart_values",
+            "workload",
+            workload,
+            OAC_APPS_REPOSITORY,
+            path,
+            "missing",
+            "blocking",
+            expected,
+            {"findings": findings},
+            f"{count_text}. " + "; ".join(findings) + ".",
+            missing={"findings": findings},
+            evidence=evidence,
+        )
+    if orphans:
+        return _result(
+            "workload.feature_chart_values",
+            "workload",
+            workload,
+            OAC_APPS_REPOSITORY,
+            path,
+            "value_mismatch",
+            "advisory",
+            expected,
+            {"orphan_values_files": orphans},
+            f"{count_text}. Values files are present for charts the cluster "
+            "does not receive: " + ", ".join(orphans) + ".",
+            missing={"orphan_values_files": orphans},
+            evidence=evidence,
+        )
+    return _result(
+        "workload.feature_chart_values",
+        "workload",
+        workload,
+        OAC_APPS_REPOSITORY,
+        path,
+        "declared_in_main",
+        "info",
+        expected,
+        {"charts": total},
+        f"{count_text}; all required values are set and every kustomize "
+        "overlay exists.",
+        evidence=evidence,
+    )
 
 
 def _workload_value_checks(
@@ -715,6 +1123,27 @@ def _workload_value_checks(
                 all_values[path] = data
             else:
                 values_parse_errors.append(path)
+
+    apps_tree, apps_tree_error = _oac_apps_tree(client, progress)
+    placements_by_hub: dict[str, list[feature_charts.Placement]] = {}
+    placement_errors: dict[str, str] = {}
+    application_sets: list[feature_charts.ApplicationSet] = []
+    application_set_errors: list[str] = []
+    oac_file_cache: dict[str, str | None] = {}
+    if apps_tree is not None:
+        for hub_name, hub_paths in _placement_paths(apps_tree).items():
+            placements, placement_error = _load_placements(
+                client, hub_paths, oac_file_cache, progress
+            )
+            if placements is None:
+                placement_errors[hub_name] = (
+                    placement_error or "acm-placements.yaml is unavailable."
+                )
+            else:
+                placements_by_hub[hub_name] = placements
+        application_sets, application_set_errors = _load_application_sets(
+            client, apps_tree, oac_file_cache, progress
+        )
 
     for workload in environment.workload_clusters or ():
         path = f"hosted-clusters/{environment.infra_cluster}/{workload}/values.yaml"
@@ -862,6 +1291,100 @@ def _workload_value_checks(
         else:
             results.append(_result("workload.gpu_without_hosts", "workload", workload, "CCI-MOC/oac-apps", path, "value_mismatch", "advisory", {"gpu_host_count": "At least 1 when clusterLabels.massopen.cloud/feature-gpu is true"}, gpu_observed, "clusterLabels.massopen.cloud/feature-gpu is true, but no GPU hosts were found in the inventory.", evidence=gpu_evidence))
 
+        placements_path = (
+            f"values/{environment.infra_cluster}/local-cluster/acm-placements.yaml"
+        )
+        placements = placements_by_hub.get(environment.infra_cluster)
+        if apps_tree is None:
+            feature_unknown = apps_tree_error
+        elif environment.infra_cluster in placement_errors:
+            feature_unknown = placement_errors[environment.infra_cluster]
+        elif environment.infra_cluster not in placements_by_hub:
+            feature_unknown = (
+                f"values/{environment.infra_cluster}/local-cluster/"
+                "acm-placements.yaml is absent or unavailable, so feature "
+                "labels cannot be resolved."
+            )
+        else:
+            feature_unknown = None
+        chart_values_path = f"values/{environment.infra_cluster}/{workload}"
+        if feature_unknown:
+            for check_id, check_path in (
+                ("workload.feature_placements", placements_path),
+                ("workload.feature_chart_values", chart_values_path),
+            ):
+                results.append(
+                    replace(
+                        _unknown(
+                            check_id,
+                            "workload",
+                            workload,
+                            OAC_APPS_REPOSITORY,
+                            check_path,
+                            feature_unknown,
+                            {
+                                "clusterLabels": (
+                                    "readable from the workload values file"
+                                )
+                            },
+                        ),
+                        severity="info",
+                    )
+                )
+        else:
+            labels = values.get("clusterLabels")
+            results.append(
+                _feature_placement_check(
+                    environment.infra_cluster,
+                    workload,
+                    labels,
+                    placements or [],
+                    placements_by_hub,
+                    placements_path,
+                )
+            )
+            if not application_sets:
+                detail = (
+                    "Application-set templates could not be read: "
+                    + " ".join(application_set_errors)
+                    if application_set_errors
+                    else "No managed ApplicationSet templates exist in the oac-apps tree."
+                )
+                results.append(
+                    replace(
+                        _unknown(
+                            "workload.feature_chart_values",
+                            "workload",
+                            workload,
+                            OAC_APPS_REPOSITORY,
+                            chart_values_path,
+                            detail,
+                            {
+                                "charts": (
+                                    "every chart selected by a placement on "
+                                    "this hub"
+                                )
+                            },
+                        ),
+                        severity="info",
+                    )
+                )
+            else:
+                results.append(
+                    _feature_chart_values_check(
+                        client,
+                        apps_tree or {},
+                        environment.infra_cluster,
+                        workload,
+                        labels,
+                        placements or [],
+                        application_sets,
+                        chart_values_path,
+                        oac_file_cache,
+                        progress,
+                    )
+                )
+
         keycloak = _keycloak_workload_check(client, environment, workload, values, hub_values_file, progress)
         if keycloak:
             results.append(keycloak)
@@ -918,7 +1441,7 @@ def _workload_value_checks(
                     "used_by_others": sorted(
                         f"{other}: {name}"
                         for other, name in usage.get(str(address), [])
-                        if other not in current
+                        if other != cluster
                     ),
                 }
             )
@@ -928,8 +1451,113 @@ def _workload_value_checks(
     elif not duplicates:
         results.append(_result("workload.address_uniqueness", "workload", uniqueness_cluster, "CCI-MOC/oac-apps", "hosted-clusters/", "declared_in_main", "info", "No address used by another cluster", usage, "No workload address is used by another cluster.", evidence={"address_rows": address_rows}))
     else:
-        other_clusters = sorted({cluster for uses in duplicates.values() for cluster, _ in uses if cluster not in current})
+        other_clusters = sorted({cluster for uses in duplicates.values() for cluster, _ in uses})
         results.append(_result("workload.address_uniqueness", "workload", uniqueness_cluster, "CCI-MOC/oac-apps", "hosted-clusters/", "value_mismatch", "blocking", "No address used by another cluster", duplicates, "Workload addresses are also used by: " + ", ".join(other_clusters) + ".", {"duplicates": duplicates}, {"address_rows": address_rows}))
+
+    # Duplicate addresses inside one workload cluster.
+    internal_fields = (
+        "services.APIServer.ipAddress",
+        "ingress.poolAddress",
+        "services.APIServer.externalIpAddress",
+        "ingress.externalIpAddress",
+    )
+    for workload in current:
+        path = f"hosted-clusters/{environment.infra_cluster}/{workload}/values.yaml"
+        if path not in all_values:
+            reason = (
+                f"{path} could not be parsed or is unavailable, so duplicate "
+                "addresses inside this workload could not be checked."
+            )
+            results.append(
+                _unknown(
+                    "workload.address_internal_duplicates",
+                    "workload",
+                    workload,
+                    "CCI-MOC/oac-apps",
+                    path,
+                    reason,
+                    f"No address is used by more than one field of {workload}.",
+                )
+            )
+            continue
+        values = all_values[path]
+        own_fields = {
+            field: _nested(values, tuple(field.split(".")))
+            for field in internal_fields
+        }
+        groups: dict[str, list[str]] = {}
+        for field, address in own_fields.items():
+            if address is not None:
+                groups.setdefault(_address_key(address), []).append(field)
+        duplicates = {
+            address: fields
+            for address, fields in groups.items()
+            if len(fields) > 1
+        }
+        rows = [
+            {
+                "cluster": workload,
+                "field": field,
+                "address": str(address),
+                "duplicate_fields": (
+                    [other for other in groups[_address_key(address)] if other != field]
+                    if _address_key(address) in duplicates
+                    else []
+                ),
+            }
+            for field, address in own_fields.items()
+            if address is not None
+        ]
+        expected = f"No address is used by more than one field of {workload}."
+        if not duplicates:
+            results.append(
+                _result(
+                    "workload.address_internal_duplicates",
+                    "workload",
+                    workload,
+                    "CCI-MOC/oac-apps",
+                    path,
+                    "declared_in_main",
+                    "info",
+                    expected,
+                    {"duplicates": {}},
+                    expected,
+                    evidence={"address_rows": rows},
+                )
+            )
+            continue
+        reasons = []
+        actions = []
+        for address, fields in duplicates.items():
+            used = (
+                f"{fields[0]} and {fields[1]}"
+                if len(fields) == 2
+                else ", ".join(fields[:-1]) + f" and {fields[-1]}"
+            )
+            reasons.append(
+                f"{address} is used by {'both ' if len(fields) == 2 else ''}{used}; "
+                "possible error unless the address is shared on purpose."
+            )
+            actions.append(
+                f"Confirm whether {used} are meant to share {address}; assign "
+                "distinct addresses if not."
+            )
+        results.append(
+            _result(
+                "workload.address_internal_duplicates",
+                "workload",
+                workload,
+                "CCI-MOC/oac-apps",
+                path,
+                "value_mismatch",
+                "advisory",
+                expected,
+                {"duplicates": duplicates},
+                " ".join(reasons),
+                evidence={"address_rows": rows},
+                next_action=" ".join(actions),
+            )
+        )
     return results
 
 

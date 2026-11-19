@@ -20,9 +20,9 @@ Generated 2026-11-16 12:34 UTC · MOC issue: not set — pass `--issue N`
 
 1. **oac-infra** — [`hub-images/group_vars/dizzy-infra/vars.yml`](https://github.com/CCI-MOC/oac-infra/tree/main): Edit CCI-MOC/oac-infra at hub-images/group_vars/dizzy-infra/vars.yml and provide cluster_domain_name, base_domain, machine_network, api_ip, ingress_ip, and dns_ip. cluster_domain_name is not found; expected present. base_domain is not found; expected present. machine_network is not found; expected present. api_ip is not found; expected present. ingress_ip is not found; expected present. dns_ip is not found; expected present.
    Guide: [docs/infra-cluster-deployment.md → Cluster Deployment](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-deployment)
-2. **oac-infra** — [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/tree/main): Generate and publish a hub-specific discovery ISO, then replace the generic boot_image_url for every host in the hub cluster group. boot_image_url is none; expected cluster_specific_image dizzy-infra-agent-discovery.iso. (after 1)
+2. **oac-infra** — [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/tree/main): Generate and publish a hub-specific discovery ISO, then replace the generic boot_image_url for every host in the hub cluster group. boot_image_url is none; expected filename contains dizzy-infra. (after 1)
    Guide: [docs/infra-cluster-deployment.md → Cluster Deployment](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-deployment)
-3. **moc-keycloak** — [`main.tf`](https://github.com/CCI-MOC/moc-keycloak/blob/main/main.tf): Edit CCI-MOC/moc-keycloak at main.tf and add the hub's OIDC client, redirect URI, and secret reference. Set cluster_name = `dizzy-infra`, openshift_redirect_uri = `https://oauth-openshift.apps.dizzy.int.massopen.cloud/oauth2callback/mocsso`, and client_secret_name = `cluster/dizzy-infra/keycloak-oidc`. client is not found; expected dizzy-infra. redirect_uri is not found; expected https://oauth-openshift.apps.dizzy.int.massopen.cloud/oauth2callback/mocsso. secret_name is not found; expected cluster/dizzy-infra/keycloak-oidc. (after 2)
+3. **moc-keycloak** — [`main.tf`](https://github.com/CCI-MOC/moc-keycloak/blob/main/main.tf): Edit CCI-MOC/moc-keycloak at main.tf and add the hub's OIDC client, redirect URI, and secret reference. Set cluster_name = `dizzy-infra`, openshift_redirect_uri = `https://oauth-openshift.apps.dizzy.int.massopen.cloud/oauth2callback/mocsso`, and client_secret_name = `cluster/dizzy-infra/keycloak-oidc`. client is not found; expected dizzy-infra. openshift_redirect_uri is not found; expected https://oauth-openshift.apps.dizzy.int.massopen.cloud/oauth2callback/mocsso. client_secret_name is not found; expected cluster/dizzy-infra/keycloak-oidc. (after 2)
    Guide: [docs/infra-cluster-deployment.md → Cluster Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-configuration)
 4. **oac-apps** — [`hosted-clusters/dizzy-infra/values.yaml`](https://github.com/CCI-MOC/oac-apps/tree/main): Create or complete the hub hosted-cluster defaults file at hosted-clusters/dizzy-infra/values.yaml in CCI-MOC/oac-apps. hosted-clusters/dizzy-infra/values.yaml is missing; expected present. (after 2)
    Guide: [docs/infra-cluster-deployment.md → Cluster Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-configuration)
@@ -32,7 +32,7 @@ Generated 2026-11-16 12:34 UTC · MOC issue: not set — pass `--issue N`
    Guide: [docs/infra-cluster-deployment.md → Cluster Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-configuration)
 7. **moc-aws** — [`main.tf`](https://github.com/CCI-MOC/moc-aws/blob/main/main.tf): Add or correct the hub entry in moc-aws local.openshift_oidc_clusters. cluster_name is not found; expected dizzy-infra. (after 4)
    Guide: [docs/infra-cluster-deployment.md → Cluster Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-configuration)
-8. **moc-aws** — [`cert-manager-policies.tf`](https://github.com/CCI-MOC/moc-aws/blob/main/cert-manager-policies.tf): Add a cert-manager policy entry for the hub. policy entry is not found; expected covers dizzy-infra. (after 4)
+8. **moc-aws** — [`cert-manager-policies.tf`](https://github.com/CCI-MOC/moc-aws/blob/main/cert-manager-policies.tf): Add a cert-manager policy entry for the hub. policy entry is not found; expected policy_name or cluster_subdomain names dizzy-infra. (after 4)
    Guide: [docs/infra-cluster-deployment.md → Cluster Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-configuration)
 9. **oac-apps** — [`values/dizzy-infra`](https://github.com/CCI-MOC/oac-apps/tree/main): Create or complete values/dizzy-infra/hcp-config.yaml in CCI-MOC/oac-apps for hub-wide HCP and secret-selector values. values/dizzy-infra/hcp-config.yaml is missing; expected present. (after 4)
    Guide: [docs/infra-cluster-deployment.md → Cluster Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-configuration)
@@ -61,7 +61,7 @@ Not verified: Host names, node_name values, MAC addresses, boot images and group
 
 | Field | Expected | Observed |
 |---|---|---|
-| `cluster_group` | `Inventory group for dizzy-infra` | `dizzy-infra` |
+| `cluster_group` | `a group with vars.cluster == dizzy-infra` | `dizzy-infra` |
 | `host_count` | `reported (not required)` | `1` |
 
 **Observed hosts**
@@ -82,7 +82,7 @@ Not verified: The hosts, images and variables under the key are not inspected, s
 
 | Field | Expected | Observed |
 |---|---|---|
-| `inventory_key` | `Hub-image inventory entry for dizzy-infra` | `dizzy-infra` |
+| `inventory_key` | `key all.children.dizzy-infra` | `dizzy-infra` |
 
 </details>
 
@@ -133,7 +133,7 @@ Status rule: The boot-image filename must contain the full cluster name `dizzy-i
 
 | Field | Expected | Observed |
 |---|---|---|
-| `boot_image_url` | `cluster_specific_image dizzy-infra-agent-discovery.iso` | `none` |
+| `boot_image_url` | `filename contains dizzy-infra` | `none` |
 
 </details>
 
@@ -148,8 +148,8 @@ Not verified: Only those three string attributes are compared; the HCL is never 
 | Field | Expected | Observed |
 |---|---|---|
 | `client` | `dizzy-infra` | `—` |
-| `redirect_uri` | `https://oauth-openshift.apps.dizzy.int.massopen.cloud/oauth2callback/mocsso` | `—` |
-| `secret_name` | `cluster/dizzy-infra/keycloak-oidc` | `—` |
+| `openshift_redirect_uri` | `https://oauth-openshift.apps.dizzy.int.massopen.cloud/oauth2callback/mocsso` | `—` |
+| `client_secret_name` | `cluster/dizzy-infra/keycloak-oidc` | `—` |
 
 </details>
 
@@ -158,7 +158,7 @@ Not verified: Only those three string attributes are compared; the HCL is never 
 
 Source: CCI-MOC/oac-apps · [`hosted-clusters/dizzy-infra/values.yaml`](https://github.com/CCI-MOC/oac-apps/tree/main) @ main (3333333)
 
-Verifies: Lists the CCI-MOC/oac-apps tree and requires the path hosted-clusters/dizzy-infra/values.yaml to exist. The check passes when that single path is present in the selected ref.
+Verifies: Lists the CCI-MOC/oac-apps tree and requires the path hosted-clusters/dizzy-infra/values.yaml to exist. The check passes when that single path is present in `main`.
 Not verified: Only path existence is tested; the file contents are not read, so missing or malformed hosted-cluster defaults still pass.
 
 | Field | Expected | Observed |
@@ -172,7 +172,7 @@ Not verified: Only path existence is tested; the file contents are not read, so 
 
 Source: CCI-MOC/oac-apps · [`values/dizzy-infra`](https://github.com/CCI-MOC/oac-apps/tree/main) @ main (3333333)
 
-Verifies: Lists the CCI-MOC/oac-apps tree and requires values/dizzy-infra/hcp-config.yaml for hub-wide HCP and secret-selector values. The check passes when that path exists; the file is never opened.
+Verifies: Lists the CCI-MOC/oac-apps tree and requires values/dizzy-infra/hcp-config.yaml for hub-wide HCP and secret-selector values. The check passes when that path exists in `main`; the file is never opened.
 Not verified: Only path existence is tested; the file contents are not read, so the HCP and secret-selector keys are never checked.
 
 | Field | Expected | Observed |
@@ -186,7 +186,7 @@ Not verified: Only path existence is tested; the file contents are not read, so 
 
 Source: CCI-MOC/oac-apps · [`values/dizzy-infra/local-cluster`](https://github.com/CCI-MOC/oac-apps/tree/main) @ main (3333333)
 
-Verifies: Lists the CCI-MOC/oac-apps tree and requires 13 files under values/dizzy-infra/local-cluster/: acm.yaml, acm-placements.yaml, cert-manager.yaml, cluster-certificates.yaml, cluster-version.yaml, external-dns-operator.yaml, external-secrets.yaml, hcp-config.yaml, keycloak-oauth.yaml, metallb.yaml, openshift-gitops.yaml, portworx.yaml, user-workload-monitoring.yaml. Configured optional components (none configured) must exist too, and the check passes only when every required and optional file is present.
+Verifies: Lists the CCI-MOC/oac-apps tree and requires 13 files under values/dizzy-infra/local-cluster/: acm.yaml, acm-placements.yaml, cert-manager.yaml, cluster-certificates.yaml, cluster-version.yaml, external-dns-operator.yaml, external-secrets.yaml, hcp-config.yaml, keycloak-oauth.yaml, metallb.yaml, openshift-gitops.yaml, portworx.yaml, user-workload-monitoring.yaml. Configured optional components (none configured) must exist too, and the check passes only when every required and optional file is present in `main`.
 Not verified: Only path existence is tested; the file contents are not read, so operator versions, values and cluster-specific names are never validated.
 
 | Field | Expected | Observed |
@@ -234,7 +234,7 @@ None.
 
 Source: CCI-MOC/oac-apps · [`apps/dizzy-infra`](https://github.com/CCI-MOC/oac-apps/tree/main) @ main (3333333)
 
-Verifies: Lists the CCI-MOC/oac-apps tree and requires apps/dizzy-infra/keycloak-oauth.yaml. The check passes when that Argo CD application manifest path exists.
+Verifies: Lists the CCI-MOC/oac-apps tree and requires apps/dizzy-infra/keycloak-oauth.yaml. The check passes when that Argo CD application manifest path exists in `main`.
 Not verified: Only path existence is tested; the file contents are not read, so the manifest's destination cluster and sync policy are not checked.
 
 | Field | Expected | Observed |
@@ -285,7 +285,7 @@ Not verified: The match is textual, so the certificate zone, DNS records and AWS
 
 | Field | Expected | Observed |
 |---|---|---|
-| `policy entry` | `covers dizzy-infra` | `—` |
+| `policy entry` | `policy_name or cluster_subdomain names dizzy-infra` | `—` |
 
 </details>
 
@@ -295,7 +295,7 @@ Not verified: The match is textual, so the certificate zone, DNS records and AWS
 Source: CCI-MOC/oac-apps · [`hosted-clusters/`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/) @ main (3333333)
 
 Verifies: Reads every hosted-clusters/<hub>/<cluster>/values.yaml in CCI-MOC/oac-apps and collects services.APIServer.ipAddress, ingress.poolAddress, services.APIServer.externalIpAddress and ingress.externalIpAddress for each cluster. The check passes when no address used by `dizzy-infra` is also used by a different cluster.
-Not verified: Duplicate addresses inside one cluster are not reported, and addresses are compared as strings, so equivalent CIDR and bare-IP spellings are not unified.
+Not verified: Addresses are compared as strings, so equivalent CIDR and bare-IP spellings are not unified; duplicates inside one cluster are covered separately by workload.address_internal_duplicates.
 
 </details>
 

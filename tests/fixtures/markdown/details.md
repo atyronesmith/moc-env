@@ -1,6 +1,6 @@
 # bu-ist-demo — environment configuration status
 
-**8 blocking gaps, 0 advisories, and 16 of 29 checks pass; 5 checks blocked by action 7**
+**8 blocking gaps, 0 advisories, and 16 of 30 checks pass; 6 checks blocked by action 7**
 
 Generated 2026-11-16 12:34 UTC · MOC issue: [#666](https://github.com/CCI-MOC/MOC-issues/issues/666) (open)
 
@@ -25,12 +25,12 @@ Generated 2026-11-16 12:34 UTC · MOC issue: [#666](https://github.com/CCI-MOC/M
 | 3 Agent ISO boot | verify by hand |
 | 4 Agent visibility | verify by hand |
 | 5 Agent labels and approval | ✅ 1/1 checks |
-| 6 oac-apps values | ❌ 1/8 checks, 5 blocked |
+| 6 oac-apps values | ❌ 1/9 checks, 6 blocked |
 | 7 Shared-service prerequisites | ✅ 3/3 checks |
 
 ## Next actions
 
-1. **oac-infra** — [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml): Generate and publish a hub-specific discovery ISO, then replace the generic boot_image_url for every host in the hub cluster group. boot_image_url is http://10.2.0.82/boot/discovery.iso; expected cluster_specific_image bu-ist-demo-infra-agent-discovery.iso.
+1. **oac-infra** — [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml): Generate and publish a hub-specific discovery ISO, then replace the generic boot_image_url for every host in the hub cluster group. boot_image_url is http://10.2.0.82/boot/discovery.iso; expected filename contains bu-ist-demo-infra.
    Guide: [docs/infra-cluster-deployment.md → Cluster Deployment](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-deployment)
 2. **oac-apps** — [`hosted-clusters/bu-ist-demo-infra/values.yaml`](https://github.com/CCI-MOC/oac-apps/tree/main): Create or complete the hub hosted-cluster defaults file at hosted-clusters/bu-ist-demo-infra/values.yaml in CCI-MOC/oac-apps. hosted-clusters/bu-ist-demo-infra/values.yaml is missing; expected present. (after 1)
    Guide: [docs/infra-cluster-deployment.md → Cluster Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-configuration)
@@ -40,7 +40,7 @@ Generated 2026-11-16 12:34 UTC · MOC issue: [#666](https://github.com/CCI-MOC/M
    Guide: [docs/infra-cluster-deployment.md → Cluster Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-configuration)
 5. **oac-apps** — [`apps/bu-ist-demo-infra`](https://github.com/CCI-MOC/oac-apps/tree/main): Add Argo CD application manifests for the hub after its hosted-cluster, hub-wide component, and local-cluster values are present, and reference the correct clusters. apps/bu-ist-demo-infra/keycloak-oauth.yaml is missing; expected present. (after 2, 4, 3)
    Guide: [docs/infra-cluster-deployment.md → Cluster Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-configuration)
-6. **oac-infra** — [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml): bu-ist-demo-workload0: Generate and publish the parent hub's agent discovery ISO, then replace the generic boot_image_url for every host in the workload cluster group. boot_image_url is http://10.2.0.82/boot/discovery.iso; expected cluster_specific_image bu-ist-demo-infra-agent-discovery.iso. (after 1)
+6. **oac-infra** — [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml): bu-ist-demo-workload0: Generate and publish the parent hub's agent discovery ISO, then replace the generic boot_image_url for every host in the workload cluster group. boot_image_url is http://10.2.0.82/boot/discovery.iso; expected filename contains bu-ist-demo-workload0 or bu-ist-demo-infra. (after 1)
    Guide: [docs/workload-cluster-deployment.md → Infrastructure Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/workload-cluster-deployment.md#infrastructure-configuration)
 7. **oac-apps** — [`hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/tree/main): bu-ist-demo-workload0: Create the missing hosted-cluster values file from the closest existing environment; set the cluster name, parent hub, networking, and node pools before adding components. hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml is missing; expected present. (after 2)
    Guide: [docs/workload-cluster-deployment.md → Cluster Deployment and Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/workload-cluster-deployment.md#cluster-deployment-and-configuration)
@@ -69,7 +69,7 @@ Not verified: Host names, node_name values, MAC addresses, boot images and group
 
 | Field | Expected | Observed |
 |---|---|---|
-| `cluster_group` | `Inventory group for bu-ist-demo-infra` | `bu-ist-demo-infra` |
+| `cluster_group` | `a group with vars.cluster == bu-ist-demo-infra` | `bu-ist-demo-infra` |
 | `host_count` | `reported (not required)` | `1` |
 
 **Observed hosts**
@@ -90,7 +90,7 @@ Not verified: The hosts, images and variables under the key are not inspected, s
 
 | Field | Expected | Observed |
 |---|---|---|
-| `inventory_key` | `Hub-image inventory entry for bu-ist-demo-infra` | `bu-ist-demo-infra` |
+| `inventory_key` | `key all.children.bu-ist-demo-infra` | `bu-ist-demo-infra` |
 
 </details>
 
@@ -141,7 +141,7 @@ Status rule: The boot-image filename must contain the full cluster name `bu-ist-
 
 | Field | Expected | Observed |
 |---|---|---|
-| `boot_image_url` | `cluster_specific_image bu-ist-demo-infra-agent-discovery.iso` | `http://10.2.0.82/boot/discovery.iso` |
+| `boot_image_url` | `filename contains bu-ist-demo-infra` | `http://10.2.0.82/boot/discovery.iso` |
 
 </details>
 
@@ -156,8 +156,8 @@ Not verified: Only those three string attributes are compared; the HCL is never 
 | Field | Expected | Observed |
 |---|---|---|
 | `client` | `bu-ist-demo-infra` | `bu-ist-demo-infra` |
-| `redirect_uri` | `https://oauth-openshift.apps.bu-ist-demo.int.massopen.cloud/oauth2callback/mocsso` | `https://oauth-openshift.apps.bu-ist-demo.int.massopen.cloud/oauth2callback/mocsso` |
-| `secret_name` | `cluster/bu-ist-demo-infra/keycloak-oidc` | `cluster/bu-ist-demo-infra/keycloak-oidc` |
+| `openshift_redirect_uri` | `https://oauth-openshift.apps.bu-ist-demo.int.massopen.cloud/oauth2callback/mocsso` | `https://oauth-openshift.apps.bu-ist-demo.int.massopen.cloud/oauth2callback/mocsso` |
+| `client_secret_name` | `cluster/bu-ist-demo-infra/keycloak-oidc` | `cluster/bu-ist-demo-infra/keycloak-oidc` |
 
 </details>
 
@@ -166,7 +166,7 @@ Not verified: Only those three string attributes are compared; the HCL is never 
 
 Source: CCI-MOC/oac-apps · [`hosted-clusters/bu-ist-demo-infra/values.yaml`](https://github.com/CCI-MOC/oac-apps/tree/main) @ main (3333333)
 
-Verifies: Lists the CCI-MOC/oac-apps tree and requires the path hosted-clusters/bu-ist-demo-infra/values.yaml to exist. The check passes when that single path is present in the selected ref.
+Verifies: Lists the CCI-MOC/oac-apps tree and requires the path hosted-clusters/bu-ist-demo-infra/values.yaml to exist. The check passes when that single path is present in `main`.
 Not verified: Only path existence is tested; the file contents are not read, so missing or malformed hosted-cluster defaults still pass.
 
 | Field | Expected | Observed |
@@ -180,7 +180,7 @@ Not verified: Only path existence is tested; the file contents are not read, so 
 
 Source: CCI-MOC/oac-apps · [`values/bu-ist-demo-infra`](https://github.com/CCI-MOC/oac-apps/tree/main) @ main (3333333)
 
-Verifies: Lists the CCI-MOC/oac-apps tree and requires values/bu-ist-demo-infra/hcp-config.yaml for hub-wide HCP and secret-selector values. The check passes when that path exists; the file is never opened.
+Verifies: Lists the CCI-MOC/oac-apps tree and requires values/bu-ist-demo-infra/hcp-config.yaml for hub-wide HCP and secret-selector values. The check passes when that path exists in `main`; the file is never opened.
 Not verified: Only path existence is tested; the file contents are not read, so the HCP and secret-selector keys are never checked.
 
 | Field | Expected | Observed |
@@ -194,7 +194,7 @@ Not verified: Only path existence is tested; the file contents are not read, so 
 
 Source: CCI-MOC/oac-apps · [`values/bu-ist-demo-infra/local-cluster`](https://github.com/CCI-MOC/oac-apps/tree/main) @ main (3333333)
 
-Verifies: Lists the CCI-MOC/oac-apps tree and requires 13 files under values/bu-ist-demo-infra/local-cluster/: acm.yaml, acm-placements.yaml, cert-manager.yaml, cluster-certificates.yaml, cluster-version.yaml, external-dns-operator.yaml, external-secrets.yaml, hcp-config.yaml, keycloak-oauth.yaml, metallb.yaml, openshift-gitops.yaml, portworx.yaml, user-workload-monitoring.yaml. Configured optional components (none configured) must exist too, and the check passes only when every required and optional file is present.
+Verifies: Lists the CCI-MOC/oac-apps tree and requires 13 files under values/bu-ist-demo-infra/local-cluster/: acm.yaml, acm-placements.yaml, cert-manager.yaml, cluster-certificates.yaml, cluster-version.yaml, external-dns-operator.yaml, external-secrets.yaml, hcp-config.yaml, keycloak-oauth.yaml, metallb.yaml, openshift-gitops.yaml, portworx.yaml, user-workload-monitoring.yaml. Configured optional components (none configured) must exist too, and the check passes only when every required and optional file is present in `main`.
 Not verified: Only path existence is tested; the file contents are not read, so operator versions, values and cluster-specific names are never validated.
 
 | Field | Expected | Observed |
@@ -242,7 +242,7 @@ None.
 
 Source: CCI-MOC/oac-apps · [`apps/bu-ist-demo-infra`](https://github.com/CCI-MOC/oac-apps/tree/main) @ main (3333333)
 
-Verifies: Lists the CCI-MOC/oac-apps tree and requires apps/bu-ist-demo-infra/keycloak-oauth.yaml. The check passes when that Argo CD application manifest path exists.
+Verifies: Lists the CCI-MOC/oac-apps tree and requires apps/bu-ist-demo-infra/keycloak-oauth.yaml. The check passes when that Argo CD application manifest path exists in `main`.
 Not verified: Only path existence is tested; the file contents are not read, so the manifest's destination cluster and sync policy are not checked.
 
 | Field | Expected | Observed |
@@ -293,7 +293,7 @@ Not verified: The match is textual, so the certificate zone, DNS records and AWS
 
 | Field | Expected | Observed |
 |---|---|---|
-| `policy entry` | `covers bu-ist-demo-infra` | `cert_manager_policies` |
+| `policy entry` | `policy_name or cluster_subdomain names bu-ist-demo-infra` | `cert_manager_policies` |
 
 </details>
 
@@ -321,7 +321,7 @@ Not verified: Host names, node_name values, MAC addresses, boot images and group
 
 | Field | Expected | Observed |
 |---|---|---|
-| `cluster_group` | `Inventory group for bu-ist-demo-workload0` | `bu-ist-demo-workload0` |
+| `cluster_group` | `a group with vars.cluster == bu-ist-demo-workload0` | `bu-ist-demo-workload0` |
 | `host_count` | `reported (not required)` | `1` |
 
 **Observed hosts**
@@ -344,7 +344,7 @@ Status rule: The workload boot-image filename may contain the workload name `bu-
 
 | Field | Expected | Observed |
 |---|---|---|
-| `boot_image_url` | `cluster_specific_image bu-ist-demo-infra-agent-discovery.iso` | `http://10.2.0.82/boot/discovery.iso` |
+| `boot_image_url` | `filename contains bu-ist-demo-workload0 or bu-ist-demo-infra` | `http://10.2.0.82/boot/discovery.iso` |
 
 </details>
 
@@ -374,7 +374,7 @@ Not verified: MAC address and resource-class formats are not validated, the upda
 
 Source: CCI-MOC/oac-apps · [`hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/tree/main) @ main (3333333)
 
-Verifies: Lists the CCI-MOC/oac-apps tree and requires hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml. The check passes when that path exists.
+Verifies: Lists the CCI-MOC/oac-apps tree and requires hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml. The check passes when that path exists in `main`.
 Not verified: Only path existence is tested; the file contents are not read, so the cluster name, parent hub, networking and node pools are not verified here.
 
 | Field | Expected | Observed |
@@ -388,7 +388,7 @@ Not verified: Only path existence is tested; the file contents are not read, so 
 
 Source: CCI-MOC/oac-apps · [`values/bu-ist-demo-infra/bu-ist-demo-workload0`](https://github.com/CCI-MOC/oac-apps/tree/main) @ main (3333333)
 
-Verifies: Lists the CCI-MOC/oac-apps tree and counts files under values/bu-ist-demo-infra/bu-ist-demo-workload0/. The check passes when at least one file exists there; there is no fixed required-file list.
+Verifies: Lists the CCI-MOC/oac-apps tree and counts files under values/bu-ist-demo-infra/bu-ist-demo-workload0/. The check passes when at least one file exists there in `main`; there is no fixed required-file list.
 Not verified: Only path existence is tested; the file contents are not read, so individual components such as hcp-config.yaml are not confirmed.
 
 | Field | Expected | Observed |
@@ -470,7 +470,17 @@ Not verified: GPU model, count and allocatable resources are not inspected, and 
 Source: CCI-MOC/oac-apps · [`hosted-clusters/`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/) @ main (3333333)
 
 Verifies: Reads every hosted-clusters/<hub>/<cluster>/values.yaml in CCI-MOC/oac-apps and collects services.APIServer.ipAddress, ingress.poolAddress, services.APIServer.externalIpAddress and ingress.externalIpAddress for each cluster. The check passes when no address used by `bu-ist-demo-workload0` is also used by a different cluster.
-Not verified: Duplicate addresses inside one cluster are not reported, and addresses are compared as strings, so equivalent CIDR and bare-IP spellings are not unified.
+Not verified: Addresses are compared as strings, so equivalent CIDR and bare-IP spellings are not unified; duplicates inside one cluster are covered separately by workload.address_internal_duplicates.
+
+</details>
+
+<details open>
+<summary>• Workload internal address duplicates — Blocked until Workload hosted-cluster values is complete.</summary>
+
+Source: CCI-MOC/oac-apps · [`hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml) @ main (3333333)
+
+Verifies: Reads services.APIServer.ipAddress, ingress.poolAddress, services.APIServer.externalIpAddress and ingress.externalIpAddress from hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml in CCI-MOC/oac-apps. Each value is parsed with the ipaddress module and compared across the four fields of that workload; the check passes when no address is used by more than one field, and reports an advisory when one is.
+Not verified: The report does not prove whether sharing an address is intentional; it only flags the duplicate inside this workload. Cross-cluster duplicates are covered by workload.address_uniqueness.
 
 </details>
 
@@ -516,7 +526,7 @@ Not verified: The match is textual, so the certificate zone, DNS records and AWS
 
 | Field | Expected | Observed |
 |---|---|---|
-| `policy entry` | `covers bu-ist-demo-workload0` | `cert_manager_policy_bu_ist_demo_workload0` |
+| `policy entry` | `policy_name or cluster_subdomain names bu-ist-demo-workload0` | `cert_manager_policy_bu_ist_demo_workload0` |
 
 </details>
 

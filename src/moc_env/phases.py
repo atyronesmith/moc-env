@@ -292,9 +292,12 @@ CHECK_PHASES: dict[str, CheckPhase] = {
     "workload.api_address_network": CheckPhase(6, "oac-apps values", ("workload.hosted_cluster_values",)),
     "workload.ingress_address_network": CheckPhase(6, "oac-apps values", ("workload.hosted_cluster_values",)),
     "workload.address_uniqueness": CheckPhase(6, "oac-apps values", ("workload.hosted_cluster_values",)),
+    "workload.address_internal_duplicates": CheckPhase(6, "oac-apps values", ("workload.hosted_cluster_values",)),
     "workload.dns_base_domain": CheckPhase(6, "oac-apps values", ("workload.hosted_cluster_values",)),
     "workload.node_pool_hosts": CheckPhase(6, "oac-apps values", ("workload.hosted_cluster_values",)),
     "workload.gpu_without_hosts": CheckPhase(6, "oac-apps values", ("workload.hosted_cluster_values",)),
+    "workload.feature_placements": CheckPhase(6, "oac-apps values", ("workload.hosted_cluster_values",)),
+    "workload.feature_chart_values": CheckPhase(6, "oac-apps values", ("workload.hosted_cluster_values",)),
 }
 
 _SCOPE_ORDER = {"hub": 0, "workload": 1, "shared": 2}

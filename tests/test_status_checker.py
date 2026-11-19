@@ -515,10 +515,10 @@ bu_ist_demo_infra = {
         self.assertEqual(check["state"], "partial")
         self.assertEqual(
             check["missing"]["fields"],
-            ["redirect_uri", "secret_name"],
+            ["openshift_redirect_uri", "client_secret_name"],
         )
         self.assertEqual(
-            check["evidence"]["fields"]["redirect_uri"],
+            check["evidence"]["fields"]["openshift_redirect_uri"],
             {
                 "expected": (
                     "https://oauth-openshift.apps.bu-ist-demo.int.massopen.cloud"

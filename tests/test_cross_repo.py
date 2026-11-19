@@ -17,7 +17,7 @@ from moc_env.github import GitHubError
 from moc_env.model import Environment
 from moc_env.observed import parse_hardware_resource_classes
 
-from fakes import CrossRepoFakeGitHubClient
+from fakes import CrossRepoFakeGitHubClient, FeatureChartsFakeGitHubClient
 
 
 class Pr246Client(CrossRepoFakeGitHubClient):
@@ -170,14 +170,50 @@ class CrossRepositoryChecksTest(unittest.TestCase):
             "workload.api_address_network",
             "workload.ingress_address_network",
             "workload.address_uniqueness",
+            "workload.address_internal_duplicates",
             "workload.dns_base_domain",
             "workload.node_pool_hosts",
             "workload.gpu_without_hosts",
         }
-        self.assertEqual(ids, expected)
+        feature_ids = {
+            "workload.feature_placements",
+            "workload.feature_chart_values",
+        }
+        self.assertEqual(ids, expected | feature_ids)
         for check_id in expected:
             with self.subTest(check_id=check_id):
                 self.assertEqual(self.check(report, check_id)["state"], "declared_in_main")
+
+    def test_empty_oac_apps_tree_leaves_feature_checks_unknown(self) -> None:
+        report = self.report(CrossRepoFakeGitHubClient())
+
+        for check_id in (
+            "workload.feature_placements",
+            "workload.feature_chart_values",
+        ):
+            with self.subTest(check_id=check_id):
+                check = self.check(report, check_id)
+                self.assertEqual(check["state"], "unknown")
+                self.assertIn(
+                    "values/bu-ist-demo-infra/local-cluster/acm-placements.yaml",
+                    check["reason"],
+                )
+
+    def test_feature_charts_fixture_resolves_received_charts(self) -> None:
+        report = self.report(FeatureChartsFakeGitHubClient())
+
+        placements = self.check(report, "workload.feature_placements")
+        self.assertEqual(placements["state"], "declared_in_main")
+        self.assertEqual(
+            placements["evidence"]["matched_placements"],
+            ["all-managed-clusters"],
+        )
+        values = self.check(report, "workload.feature_chart_values")
+        self.assertEqual(values["state"], "declared_in_main")
+        self.assertEqual(values["path"], "values/bu-ist-demo-infra/bu-ist-demo-workload0")
+        self.assertEqual(
+            [row["chart"] for row in values["evidence"]["charts"]], ["example"]
+        )
 
     def test_dns_zonefile_uses_longest_domain_suffix(self) -> None:
         check = _dns_records_check(
