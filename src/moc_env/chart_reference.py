@@ -9,13 +9,103 @@ from __future__ import annotations
 
 import json
 import re
+import shlex
 from dataclasses import dataclass
-from typing import Any, Iterable, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 
 import yaml
 
 MISSING_DEFAULT = "(not in values.yaml)"
 _DEFAULT_WIDTH = 60
+
+_MARKDOWN_RULE = "---"
+_TEXT_RULE = "─" * 80
+
+_OPENING_PARAGRAPH = (
+    "This document is generated from the oac-apps repository. It describes "
+    "the two kinds of cluster the repository can deploy, the charts each "
+    "kind receives, and the values each chart accepts. It describes what "
+    "the repository declares, not what is running on any cluster."
+)
+_HUB_PARAGRAPH = (
+    "A hub is the management cluster. Every hub receives the same fixed set "
+    "of charts. The only differences between hubs are the compliance charts "
+    "and the drop-ins listed below."
+)
+_FEATURE_PARAGRAPH = (
+    "A feature is an optional group of charts. A workload cluster receives a "
+    "feature's charts only when its "
+    "hosted-clusters/<hub>/<cluster>/values.yaml sets that feature's label "
+    "under clusterLabels. Every feature the repository defines is listed, "
+    "including features no cluster uses today."
+)
+_FEATURE_ENTRY_INTRO = "Each entry reads as follows:"
+_FEATURE_ENTRY_ITEMS = (
+    "Heading: the feature's name and, in parentheses, how many charts it "
+    "installs.",
+    "Label: the exact line to add under clusterLabels to turn the feature on.",
+    "List: the charts installed on the cluster when the label is set. A "
+    "chart's name can differ from the feature's name.",
+)
+_BASELINE_NOTE = "Every workload cluster receives these charts. No label is needed."
+_HUB_COMPLIANCE_NOTE = (
+    'Each line reads "ApplicationSet -> chart names" and applies only when '
+    "the hub has the marker path shown."
+)
+_DROP_IN_NOTE = (
+    "A drop-in is an Application manifest checked in under apps/<hub>/. A hub "
+    "receives one when that hub has a manifest in that directory."
+)
+_CHART_REFERENCE_PARAGRAPH = (
+    "One entry per deployed chart, in name order. Each table lists the keys "
+    "in the chart's own values.yaml."
+)
+_CHART_REFERENCE_ITEMS = (
+    "Key: the setting's path, written with dots.",
+    "Default: the value used when no values file overrides it.",
+    'Required: "yes" means the chart fails to render without it. '
+    '"conditional" means it is required only when a related option is on.',
+    "Description: the comment written beside the key in values.yaml. Blank "
+    "means the chart has no comment for that key.",
+    'The defaults "(section)" and "(commented out)" mark a mapping with child '
+    "keys and a commented-out key block.",
+)
+_CHART_REFERENCE_NOTE = (
+    'An "Example" block is a commented-out sample found under a key. '
+    '"Other comments" are comments in values.yaml that sit beside no key.'
+)
+
+_MARKDOWN_HUB_VALUES = (
+    "Set values in `values/<hub>/<chart>.yaml`, then\n"
+    "`values/<hub>/local-cluster/<chart>.yaml`. The second file wins."
+)
+_MARKDOWN_WORKLOAD_PARAGRAPH = (
+    "A workload cluster is created by the `hosted-cluster` chart from\n"
+    "`hosted-clusters/<hub>/values.yaml` and\n"
+    "`hosted-clusters/<hub>/<cluster>/values.yaml`. Feature labels are set\n"
+    "there under `clusterLabels`. Chart values go in\n"
+    "`values/<hub>/<chart>.yaml`, then `values/<hub>/<cluster>/<chart>.yaml`.\n"
+    "The second file wins."
+)
+_MARKDOWN_FEATURE_PARAGRAPH = (
+    "A feature is an optional group of charts. A workload cluster receives a\n"
+    "feature's charts only when its\n"
+    "`hosted-clusters/<hub>/<cluster>/values.yaml` sets that feature's label\n"
+    "under `clusterLabels`. Every feature the repository defines is listed,\n"
+    "including features no cluster uses today."
+)
+_FEATURE_ENTRY_ITEMS_MARKDOWN = (
+    "Heading: the feature's name and, in parentheses, how many charts it "
+    "installs.",
+    "Label: the exact line to add under `clusterLabels` to turn the feature on.",
+    "List: the charts installed on the cluster when the label is set. A "
+    "chart's name can differ from the feature's name.",
+)
+_MARKDOWN_HUB_COMPLIANCE_NOTE = _HUB_COMPLIANCE_NOTE
+_MARKDOWN_DROP_IN_NOTE = (
+    "A drop-in is an Application manifest checked in under `apps/<hub>/`. A "
+    "hub receives one when that hub has a manifest in that directory."
+)
 
 _ACTION = re.compile(r"\{\{(.*?)\}\}", re.DOTALL)
 _TEMPLATE_COMMENT = re.compile(r"\{\{-?\s*/\*.*?\*/\s*-?\}\}", re.DOTALL)
@@ -34,6 +124,9 @@ class ValueRow:
     description: str = ""
     example: str | None = None
     has_default: bool = True
+    is_section: bool = False
+    commented_out: bool = False
+    condition: str = ""
 
 
 @dataclass(frozen=True)
@@ -103,10 +196,20 @@ def required_value_sets(template: str) -> tuple[set[str], set[str]]:
     removed first.  ``define`` blocks do not make a value conditional.
     """
 
+    unconditional, conditional, _conditions = required_value_details(template)
+    return unconditional, conditional
+
+
+def required_value_details(
+    template: str,
+) -> tuple[set[str], set[str], dict[str, str]]:
+    """Return required paths plus the enclosing condition for each path."""
+
     stripped = _TEMPLATE_COMMENT.sub("", template)
-    stack: list[str] = []
+    stack: list[tuple[str, str]] = []
     unconditional: set[str] = set()
     conditional: set[str] = set()
+    conditions: dict[str, str] = {}
     for match in _ACTION.finditer(stripped):
         action = match.group(1)
         keyword = _action_keyword(action)
@@ -116,19 +219,43 @@ def required_value_sets(template: str) -> tuple[set[str], set[str]]:
             continue
         paths = [path for _, path in _REQUIRED.findall(action)]
         if paths:
-            if any(kind in {"if", "with", "range"} for kind in stack):
+            enclosing = next(
+                (
+                    condition
+                    for kind, condition in reversed(stack)
+                    if kind in {"if", "with", "range"} and condition
+                ),
+                "",
+            )
+            if any(kind in {"if", "with", "range"} for kind, _ in stack):
                 conditional.update(paths)
+                if enclosing:
+                    for path in paths:
+                        conditions.setdefault(path, enclosing)
             else:
                 unconditional.update(paths)
         if keyword in {"if", "with", "range", "define"}:
-            stack.append(keyword)
+            stack.append((keyword, _condition_expression(action, keyword)))
     conditional -= unconditional
-    return unconditional, conditional
+    for path in unconditional:
+        conditions.pop(path, None)
+    return unconditional, conditional, conditions
 
 
 def _action_keyword(action: str) -> str:
     text = action.strip().strip("-").strip()
     return text.split(None, 1)[0] if text else ""
+
+
+def _condition_expression(action: str, keyword: str) -> str:
+    text = action.strip().strip("-").strip()
+    if not text.startswith(keyword):
+        return ""
+    expression = text[len(keyword) :].strip()
+    if not expression:
+        return ""
+    expression = re.sub(r"\s+", " ", expression)
+    return expression.replace(".Values.", "").replace("$", "")
 
 
 def _is_comment_line(line: str) -> bool:
@@ -325,6 +452,7 @@ def read_values(
     *,
     unconditional_required: Iterable[str] = (),
     conditional_required: Iterable[str] = (),
+    conditions: Mapping[str, str] | None = None,
 ) -> ValuesReference:
     """Parse one chart's values.yaml into table rows."""
 
@@ -337,7 +465,13 @@ def read_values(
     descriptions, examples, other = _comments(text)
     unconditional = set(unconditional_required)
     conditional = set(conditional_required)
+    condition_by_path = dict(conditions or {})
     rows: list[ValueRow] = []
+
+    def required_fields(dotted: str) -> tuple[str, str]:
+        required = _required_label(dotted, unconditional, conditional)
+        condition = condition_by_path.get(dotted, "") if required == "conditional" else ""
+        return required, condition
 
     def walk(mapping: dict[Any, Any], prefix: tuple[str, ...]) -> None:
         for raw_key, value in mapping.items():
@@ -345,46 +479,85 @@ def read_values(
             dotted = ".".join(path)
             leaf = not isinstance(value, dict) or not value
             if leaf:
+                required, condition = required_fields(dotted)
                 rows.append(
                     ValueRow(
                         key=dotted,
                         default=value,
-                        required=_required_label(
-                            dotted, unconditional, conditional
-                        ),
+                        required=required,
                         description=descriptions.get(path, ""),
                         example=examples.get(path),
+                        condition=condition,
                     )
                 )
                 continue
             if path in descriptions or path in examples:
+                required, condition = required_fields(dotted)
                 rows.append(
                     ValueRow(
                         key=dotted,
                         default="",
-                        required=_required_label(
-                            dotted, unconditional, conditional
-                        ),
+                        required=required,
                         description=descriptions.get(path, ""),
                         example=examples.get(path),
                         has_default=False,
+                        is_section=True,
+                        condition=condition,
                     )
                 )
             walk(value, path)
 
     walk(data, ())
+    defined = {str(key) for key in data}
+    remaining_comments: list[str] = []
+    for block in other:
+        key = _commented_out_key(block, defined)
+        if key is None:
+            remaining_comments.append(block)
+            continue
+        required, condition = required_fields(key)
+        rows.append(
+            ValueRow(
+                key=key,
+                default="",
+                required=required,
+                example=block,
+                has_default=False,
+                commented_out=True,
+                condition=condition,
+            )
+        )
     present = {row.key for row in rows}
     for path in sorted((unconditional | conditional) - present):
+        required, condition = required_fields(path)
         rows.append(
             ValueRow(
                 key=path,
                 default=MISSING_DEFAULT,
-                required=_required_label(path, unconditional, conditional),
+                required=required,
+                condition=condition,
             )
         )
     return ValuesReference(
-        present=True, rows=tuple(rows), other_comments=tuple(other)
+        present=True,
+        rows=tuple(rows),
+        other_comments=tuple(remaining_comments),
     )
+
+
+def _commented_out_key(block: str, defined: set[str]) -> str | None:
+    """Return a block's sole top-level key when it is absent from values.yaml."""
+
+    try:
+        data = yaml.safe_load(block)
+    except yaml.YAMLError:
+        return None
+    if not isinstance(data, dict) or len(data) != 1:
+        return None
+    key = next(iter(data))
+    if not isinstance(key, str) or key in defined:
+        return None
+    return key
 
 
 def _required_label(
@@ -400,6 +573,10 @@ def _required_label(
 def default_cell(row: ValueRow, *, truncate: bool = True) -> str:
     """Render the Default column for a row."""
 
+    if row.commented_out:
+        return "(commented out)"
+    if row.is_section:
+        return "(section)"
     if not row.has_default:
         return ""
     if truncate:
@@ -407,8 +584,47 @@ def default_cell(row: ValueRow, *, truncate: bool = True) -> str:
     return compact_json(row.default)
 
 
+def required_cell(row: ValueRow) -> str:
+    """Render the Required column, including the known condition if any."""
+
+    if row.required == "conditional" and row.condition:
+        return f"conditional (when {row.condition})"
+    return row.required
+
+
 def _markdown_cell(value: str) -> str:
     return value.replace("|", "\\|").replace("\n", " ")
+
+
+def _escape_markdown_text(value: str) -> str:
+    """Escape repository text that markdown would otherwise treat as HTML."""
+
+    return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _code_span(value: str) -> str:
+    """Wrap a value in a markdown code span, widening it for backticks."""
+
+    if "`" not in value:
+        return f"`{value}`"
+    fence = "``"
+    while fence in value:
+        fence += "`"
+    return f"{fence} {value} {fence}"
+
+
+def _markdown_detail(detail: str) -> str:
+    """Escape a generated detail and code-span any marker path inside it."""
+
+    if "(marker " in detail and detail.endswith(")"):
+        prefix, marker_path = detail.rsplit("(marker ", 1)
+        return (
+            _escape_markdown_text(prefix)
+            + "(marker "
+            + _code_span(marker_path[:-1])
+            + ")"
+        )
+    return _escape_markdown_text(detail)
 
 
 def _link(name: str, rendered: set[str]) -> str:
@@ -421,15 +637,15 @@ def _markdown_table(entry: ChartEntry) -> list[str]:
         "|---|---|---|---|",
     ]
     for row in entry.values.rows:
+        default = default_cell(row)
         lines.append(
             "| "
             + " | ".join(
-                _markdown_cell(cell)
-                for cell in (
-                    row.key,
-                    default_cell(row),
-                    row.required,
-                    row.description,
+                (
+                    _markdown_cell(_code_span(row.key)),
+                    _markdown_cell(_code_span(default)) if default else "",
+                    _markdown_cell(_escape_markdown_text(required_cell(row))),
+                    _markdown_cell(_escape_markdown_text(row.description)),
                 )
             )
             + " |"
@@ -441,6 +657,14 @@ def _rendered_names(charts: Sequence[ChartEntry]) -> set[str]:
     return {entry.name for entry in charts}
 
 
+def _append_rule(lines: list[str], *, text: bool) -> None:
+    """Append a section rule with exactly one blank line on each side."""
+
+    while lines and lines[-1] == "":
+        lines.pop()
+    lines.extend(["", _TEXT_RULE if text else _MARKDOWN_RULE, ""])
+
+
 def _selected_charts(
     reference: ChartReference, selected: Sequence[str]
 ) -> tuple[ChartEntry, ...]:
@@ -450,29 +674,131 @@ def _selected_charts(
     return tuple(entry for entry in reference.charts if entry.name in wanted)
 
 
-def render_markdown(
+def _chart_reference_intro(
+    reference: ChartReference,
+    charts: Sequence[ChartEntry],
+    *,
+    filtered: bool,
+) -> str:
+    if not filtered:
+        return _CHART_REFERENCE_PARAGRAPH
+    return (
+        f"Showing {len(charts)} of {len(reference.charts)} deployed charts "
+        "(filtered with --chart). Each table lists the keys in the chart's "
+        "own values.yaml."
+    )
+
+
+def _closing_line(
+    reference: ChartReference,
+    charts: Sequence[ChartEntry],
+    *,
+    filtered: bool,
+) -> str:
+    inventory = (
+        f"{reference.undeployed_count} undeployed and "
+        f"{reference.library_count} library charts are not shown. "
+        "Run `moc-env charts --view summary` for the full inventory."
+    )
+    if not filtered:
+        return inventory
+    omitted = len(reference.charts) - len(charts)
+    shown_verb = "is" if len(charts) == 1 else "are"
+    omitted_noun = "chart" if omitted == 1 else "charts"
+    omitted_verb = "is" if omitted == 1 else "are"
+    return (
+        f"{len(charts)} of {len(reference.charts)} deployed charts "
+        f"{shown_verb} shown; {omitted} deployed {omitted_noun} "
+        f"{omitted_verb} omitted by --chart. {inventory}"
+    )
+
+
+def command_line(
+    selected: Sequence[str] = (), command: Sequence[str] = ()
+) -> str:
+    """Return a deterministic, shell-quoted reproduction of the invocation."""
+
+    if command:
+        arguments = ["moc-env", *command]
+    else:
+        arguments = ["moc-env", "charts", "--view", "reference"]
+        for name in selected:
+            arguments.extend(["--chart", name])
+    return shlex.join(arguments)
+
+
+def missing_description_warnings(
     reference: ChartReference, selected: Sequence[str] = ()
+) -> tuple[str, ...]:
+    """Return stderr lines for required keys that have no description."""
+
+    groups: list[tuple[str, list[ValueRow]]] = []
+    for entry in _selected_charts(reference, selected):
+        rows = [
+            row
+            for row in entry.values.rows
+            if row.required and not row.description.strip()
+        ]
+        if rows:
+            groups.append((entry.name, rows))
+    if not groups:
+        return ()
+    lines = [
+        "moc-env: warning: required or conditional keys without a "
+        "description in values.yaml:"
+    ]
+    for name, rows in groups:
+        lines.append(f"  {name}:")
+        for row in rows:
+            lines.append(f"    - {row.key} ({required_cell(row)})")
+    return tuple(lines)
+
+
+def render_markdown(
+    reference: ChartReference,
+    selected: Sequence[str] = (),
+    command: Sequence[str] = (),
 ) -> str:
     charts = _selected_charts(reference, selected)
     rendered = _rendered_names(charts)
+    filtered = bool(selected)
     lines = [
         "# oac-apps chart reference",
         "",
-        "## Hub cluster",
+        "Generated by:",
         "",
-        "Set values in values/<hub>/<chart>.yaml, then",
-        "values/<hub>/local-cluster/<chart>.yaml. The second file wins.",
+        "```sh",
+        command_line(selected, command),
+        "```",
         "",
-        f"### Charts every hub receives ({len(reference.hub_always)})",
-        "",
+        _OPENING_PARAGRAPH,
     ]
+    _append_rule(lines, text=False)
+    lines.extend(
+        [
+            "## Hub cluster",
+            "",
+            _HUB_PARAGRAPH,
+            "",
+        ]
+    )
+    lines.extend(
+        [
+            *_MARKDOWN_HUB_VALUES.splitlines(),
+            "",
+            f"### Charts every hub receives ({len(reference.hub_always)})",
+            "",
+        ]
+    )
     lines.extend(f"- {_link(name, rendered)}" for name in reference.hub_always)
     lines.append("")
     lines.append("### Charts compliant hubs also receive")
     lines.append("")
+    lines.append(_MARKDOWN_HUB_COMPLIANCE_NOTE)
+    lines.append("")
     if reference.hub_gated:
         for item in reference.hub_gated:
-            marker = f" (marker {item.detail})" if item.detail else ""
+            marker = f" (marker {_code_span(item.detail)})" if item.detail else ""
             charts_text = ", ".join(
                 _link(name, rendered) for name in item.charts
             )
@@ -484,58 +810,85 @@ def render_markdown(
     lines.append("")
     lines.append("### Per-hub drop-ins")
     lines.append("")
+    lines.append(_MARKDOWN_DROP_IN_NOTE)
+    lines.append("")
     lines.extend(
         f"- {_link(name, rendered)}" for name in reference.hub_drop_ins
     )
+    _append_rule(lines, text=False)
     lines.extend(
         [
-            "",
             "## Workload cluster",
             "",
-            "A workload cluster is created by the hosted-cluster chart from",
-            "hosted-clusters/<hub>/values.yaml and",
-            "hosted-clusters/<hub>/<cluster>/values.yaml. Feature labels are set there",
-            "under clusterLabels. Chart values go in values/<hub>/<chart>.yaml, then",
-            "values/<hub>/<cluster>/<chart>.yaml. The second file wins.",
+            *_MARKDOWN_WORKLOAD_PARAGRAPH.splitlines(),
             "",
             "### Charts that create the cluster",
             "",
         ]
     )
     for item in reference.workload_creators:
-        detail = f" ({item.detail})" if item.detail else ""
+        detail = f" ({_markdown_detail(item.detail)})" if item.detail else ""
         lines.append(f"- {_link(item.name, rendered)}{detail}")
     lines.extend(
         [
             "",
             f"### Baseline ({len(reference.workload_baseline)})",
             "",
+            _BASELINE_NOTE,
+            "",
         ]
     )
     lines.extend(
         f"- {_link(name, rendered)}" for name in reference.workload_baseline
     )
+    lines.extend(
+        [
+            "",
+            "### Optional features",
+            "",
+            _MARKDOWN_FEATURE_PARAGRAPH,
+            "",
+            _FEATURE_ENTRY_INTRO,
+            "",
+        ]
+    )
+    lines.extend(f"- {item}" for item in _FEATURE_ENTRY_ITEMS_MARKDOWN)
     for feature in reference.workload_features:
         lines.extend(
             [
                 "",
-                f"### Feature: {feature.name} ({len(feature.charts)})",
+                f"#### Feature: {feature.name} ({len(feature.charts)})",
                 "",
             ]
         )
         if feature.detail:
-            lines.append(f"Label: {feature.detail}")
+            lines.append(f"Label: {_code_span(feature.detail)}")
             lines.append("")
         lines.extend(f"- {_link(name, rendered)}" for name in feature.charts)
-    lines.extend(["", "## Chart reference", ""])
-    for entry in charts:
+    _append_rule(lines, text=False)
+    lines.extend(
+        [
+            "## Chart reference",
+            "",
+            _chart_reference_intro(reference, charts, filtered=filtered),
+            "",
+        ]
+    )
+    lines.extend(f"- {item}" for item in _CHART_REFERENCE_ITEMS)
+    lines.extend(["", _CHART_REFERENCE_NOTE, ""])
+    for index, entry in enumerate(charts):
+        if index:
+            _append_rule(lines, text=False)
         lines.append(f"### {entry.name}")
         lines.append("")
         if entry.description:
-            lines.append(entry.description)
+            lines.append(_escape_markdown_text(entry.description))
             lines.append("")
         if entry.used_by:
-            lines.append("Used by: " + "; ".join(entry.used_by))
+            lines.append(
+                "Used by: "
+                + _escape_markdown_text("; ".join(entry.used_by))
+            )
             lines.append("")
         if not entry.values.present:
             lines.append("No values.yaml.")
@@ -560,41 +913,45 @@ def render_markdown(
                 lines.extend(comment.splitlines())
             lines.append("```")
             lines.append("")
-    lines.append(
-        f"{reference.undeployed_count} undeployed and "
-        f"{reference.library_count} library charts are not shown. "
-        "Run `moc-env charts --view summary` for the full inventory."
-    )
+    _append_rule(lines, text=False)
+    lines.append(_closing_line(reference, charts, filtered=filtered))
     lines.extend(["", reference.footer])
     return "\n".join(lines) + "\n"
 
 
 def render_text(reference: ChartReference, selected: Sequence[str] = ()) -> str:
     charts = _selected_charts(reference, selected)
-    lines = [
-        "oac-apps chart reference",
-        "",
-        "Hub cluster",
-        "",
-        "Set values in values/<hub>/<chart>.yaml, then",
-        "values/<hub>/local-cluster/<chart>.yaml. The second file wins.",
-        "",
-        f"Charts every hub receives ({len(reference.hub_always)})",
-        "",
-    ]
+    filtered = bool(selected)
+    lines = ["oac-apps chart reference", "", _OPENING_PARAGRAPH]
+    _append_rule(lines, text=True)
+    lines.extend(
+        [
+            "Hub cluster",
+            "",
+            _HUB_PARAGRAPH,
+            "",
+            "Set values in values/<hub>/<chart>.yaml, then",
+            "values/<hub>/local-cluster/<chart>.yaml. The second file wins.",
+            "",
+            f"Charts every hub receives ({len(reference.hub_always)})",
+            "",
+        ]
+    )
     lines.extend(f"  {name}" for name in reference.hub_always)
-    lines.extend(["", "Charts compliant hubs also receive", ""])
+    lines.extend(
+        ["", "Charts compliant hubs also receive", "", _HUB_COMPLIANCE_NOTE, ""]
+    )
     if reference.hub_gated:
         for item in reference.hub_gated:
             marker = f" (marker {item.detail})" if item.detail else ""
             lines.append(f"  {item.name} -> {', '.join(item.charts)}{marker}")
     else:
         lines.append("  None.")
-    lines.extend(["", "Per-hub drop-ins", ""])
+    lines.extend(["", "Per-hub drop-ins", "", _DROP_IN_NOTE, ""])
     lines.extend(f"  {name}" for name in reference.hub_drop_ins)
+    _append_rule(lines, text=True)
     lines.extend(
         [
-            "",
             "Workload cluster",
             "",
             "A workload cluster is created by the hosted-cluster chart from",
@@ -611,9 +968,27 @@ def render_text(reference: ChartReference, selected: Sequence[str] = ()) -> str:
         detail = f" ({item.detail})" if item.detail else ""
         lines.append(f"  {item.name}{detail}")
     lines.extend(
-        ["", f"Baseline ({len(reference.workload_baseline)})", ""]
+        [
+            "",
+            f"Baseline ({len(reference.workload_baseline)})",
+            "",
+            _BASELINE_NOTE,
+            "",
+        ]
     )
     lines.extend(f"  {name}" for name in reference.workload_baseline)
+    lines.extend(
+        [
+            "",
+            "Optional features",
+            "",
+            _FEATURE_PARAGRAPH,
+            "",
+            _FEATURE_ENTRY_INTRO,
+            "",
+        ]
+    )
+    lines.extend(f"- {item}" for item in _FEATURE_ENTRY_ITEMS)
     for feature in reference.workload_features:
         lines.extend(
             ["", f"Feature: {feature.name} ({len(feature.charts)})", ""]
@@ -621,8 +996,20 @@ def render_text(reference: ChartReference, selected: Sequence[str] = ()) -> str:
         if feature.detail:
             lines.append(f"  Label: {feature.detail}")
         lines.extend(f"  {name}" for name in feature.charts)
-    lines.extend(["", "Chart reference", ""])
-    for entry in charts:
+    _append_rule(lines, text=True)
+    lines.extend(
+        [
+            "Chart reference",
+            "",
+            _chart_reference_intro(reference, charts, filtered=filtered),
+            "",
+        ]
+    )
+    lines.extend(f"- {item}" for item in _CHART_REFERENCE_ITEMS)
+    lines.extend(["", _CHART_REFERENCE_NOTE, ""])
+    for index, entry in enumerate(charts):
+        if index:
+            _append_rule(lines, text=True)
         lines.append(entry.name)
         if entry.description:
             lines.append(f"  {entry.description}")
@@ -637,7 +1024,7 @@ def render_text(reference: ChartReference, selected: Sequence[str] = ()) -> str:
             cells = (
                 row.key,
                 default_cell(row),
-                row.required,
+                required_cell(row),
                 row.description,
             )
             lines.append("  " + " | ".join(cells))
@@ -653,11 +1040,8 @@ def render_text(reference: ChartReference, selected: Sequence[str] = ()) -> str:
             for comment in entry.values.other_comments:
                 lines.extend(f"    {line}" for line in comment.splitlines())
             lines.append("")
-    lines.append(
-        f"{reference.undeployed_count} undeployed and "
-        f"{reference.library_count} library charts are not shown. "
-        "Run `moc-env charts --view summary` for the full inventory."
-    )
+    _append_rule(lines, text=True)
+    lines.append(_closing_line(reference, charts, filtered=filtered))
     lines.extend(["", reference.footer])
     return "\n".join(lines) + "\n"
 
@@ -733,6 +1117,7 @@ def render_chart_reference(
     *,
     format: str = "markdown",
     selected: Sequence[str] = (),
+    command: Sequence[str] = (),
 ) -> str:
     """Render a reference view in markdown, text, or JSON."""
 
@@ -740,4 +1125,4 @@ def render_chart_reference(
         return render_json(reference, selected)
     if format == "text":
         return render_text(reference, selected)
-    return render_markdown(reference, selected)
+    return render_markdown(reference, selected, command)

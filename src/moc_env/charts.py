@@ -410,6 +410,7 @@ def _chart_entry(
             description = str(metadata.get("description") or "")
     unconditional: set[str] = set()
     conditional: set[str] = set()
+    conditions: dict[str, str] = {}
     for template_path in sorted(
         path
         for path in tree
@@ -418,9 +419,13 @@ def _chart_entry(
         template_text, _error = read(template_path)
         if template_text is None:
             continue
-        template_unconditional, template_conditional = (
-            chart_reference.required_value_sets(template_text)
-        )
+        (
+            template_unconditional,
+            template_conditional,
+            template_conditions,
+        ) = chart_reference.required_value_details(template_text)
+        for path, condition in template_conditions.items():
+            conditions.setdefault(path, condition)
         unconditional.update(template_unconditional)
         conditional.update(template_conditional)
 
@@ -436,6 +441,7 @@ def _chart_entry(
                 values_text,
                 unconditional_required=unconditional,
                 conditional_required=conditional,
+                conditions=conditions,
             )
         )
     return chart_reference.ChartEntry(
@@ -1304,6 +1310,7 @@ def render_chart_inventory(
     view: str = "summary",
     format: str = "text",
     charts: Sequence[str] = (),
+    command: Sequence[str] = (),
 ) -> str:
     """Render a chart inventory in the requested view and format."""
 
@@ -1319,7 +1326,10 @@ def render_chart_inventory(
                 "the chart reference was not collected for this inventory"
             )
         return chart_reference.render_chart_reference(
-            inventory.reference, format=format, selected=charts
+            inventory.reference,
+            format=format,
+            selected=charts,
+            command=command,
         )
     if format == "json":
         clusters: dict[str, Any] = {}
