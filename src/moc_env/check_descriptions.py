@@ -413,12 +413,17 @@ CHECK_DESCRIPTIONS: dict[str, CheckDescription] = {
             "hosted-clusters/{hub}/{workload}/values.yaml in CCI-MOC/oac-apps. "
             "Each value is parsed with the ipaddress module and compared across "
             "the four fields of that workload; the check passes when no address "
-            "is used by more than one field, and reports an advisory when one is."
+            "is used by more than one field, and reports an advisory when one is. "
+            "The one exception is a shared address between exactly "
+            "services.APIServer.externalIpAddress and "
+            "ingress.externalIpAddress, which is allowed; any group with three "
+            "or four fields that includes that pair is still reported."
         ),
         not_verified=(
             "The report does not prove whether sharing an address is intentional; "
-            "it only flags the duplicate inside this workload. Cross-cluster "
-            "duplicates are covered by workload.address_uniqueness."
+            "it only flags the duplicate inside this workload, apart from the "
+            "allowed API-server and ingress external address pair. "
+            "Cross-cluster duplicates are covered by workload.address_uniqueness."
         ),
     ),
     "workload.dns_base_domain": CheckDescription(

@@ -515,8 +515,8 @@ Not verified: Addresses are compared as strings, so equivalent CIDR and bare-IP 
 
 Source: CCI-MOC/oac-apps · [`hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml) @ main (3333333)
 
-Verifies: Reads services.APIServer.ipAddress, ingress.poolAddress, services.APIServer.externalIpAddress and ingress.externalIpAddress from hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml in CCI-MOC/oac-apps. Each value is parsed with the ipaddress module and compared across the four fields of that workload; the check passes when no address is used by more than one field, and reports an advisory when one is.
-Not verified: The report does not prove whether sharing an address is intentional; it only flags the duplicate inside this workload. Cross-cluster duplicates are covered by workload.address_uniqueness.
+Verifies: Reads services.APIServer.ipAddress, ingress.poolAddress, services.APIServer.externalIpAddress and ingress.externalIpAddress from hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml in CCI-MOC/oac-apps. Each value is parsed with the ipaddress module and compared across the four fields of that workload; the check passes when no address is used by more than one field, and reports an advisory when one is. The one exception is a shared address between exactly services.APIServer.externalIpAddress and ingress.externalIpAddress, which is allowed; any group with three or four fields that includes that pair is still reported.
+Not verified: The report does not prove whether sharing an address is intentional; it only flags the duplicate inside this workload, apart from the allowed API-server and ingress external address pair. Cross-cluster duplicates are covered by workload.address_uniqueness.
 
 | Field | Expected | Observed |
 |---|---|---|
