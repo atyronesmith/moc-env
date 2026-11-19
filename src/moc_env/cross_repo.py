@@ -839,6 +839,34 @@ def _feature_placement_check(
     )
 
 
+def _feature_chart_values_next_action(
+    evidence: dict[str, Any], hub: str, workload: str
+) -> str:
+    """Describe only the problems present in one chart-values check."""
+
+    clauses: list[str] = []
+    unmet = evidence.get("unmet_required_values") or {}
+    if unmet:
+        paths = ", ".join(
+            f"values/{hub}/{workload}/{chart}.yaml" for chart in unmet
+        )
+        clauses.append(f"set the missing required chart values in {paths}")
+    if evidence.get("missing_overlays"):
+        clauses.append("add the kustomize overlay")
+    if evidence.get("orphan_values_files"):
+        clauses.append(
+            "remove the values files for charts the cluster does not receive"
+        )
+    if not clauses:
+        return _NEXT_ACTION["workload.feature_chart_values"]
+    text = (
+        clauses[0]
+        if len(clauses) == 1
+        else ", ".join(clauses[:-1]) + " and " + clauses[-1]
+    )
+    return text[:1].upper() + text[1:] + "."
+
+
 def _feature_chart_values_check(
     client: GitHubClient,
     tree: dict[str, dict[str, Any]],
@@ -935,6 +963,7 @@ def _feature_chart_values_check(
             f"{count_text}. " + "; ".join(findings) + ".",
             missing={"findings": findings},
             evidence=evidence,
+            next_action=_feature_chart_values_next_action(evidence, hub, workload),
         )
     if orphans:
         return _result(
@@ -951,6 +980,7 @@ def _feature_chart_values_check(
             "does not receive: " + ", ".join(orphans) + ".",
             missing={"orphan_values_files": orphans},
             evidence=evidence,
+            next_action=_feature_chart_values_next_action(evidence, hub, workload),
         )
     return _result(
         "workload.feature_chart_values",

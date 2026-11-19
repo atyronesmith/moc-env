@@ -907,7 +907,10 @@ def _action_evidence(check: dict[str, Any], report: dict[str, Any]) -> str:
 def _action_description(check: dict[str, Any], report: dict[str, Any]) -> str:
     action = _substitute_action(check.get("next_action") or f"Resolve {check['check']}.", check, report)
     cluster = check.get("cluster")
-    if check.get("scope") == "workload" and cluster and cluster not in action:
+    if check.get("scope") == "workload" and cluster and (
+        cluster not in action
+        or check.get("id") == "workload.feature_chart_values"
+    ):
         action = f"{cluster}: {action}"
     advisory = " (advisory)" if check.get("severity") == "advisory" else ""
     return f"{action}{advisory} {_action_evidence(check, report)}"

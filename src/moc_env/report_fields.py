@@ -146,6 +146,17 @@ def field_rows(check: dict[str, Any]) -> list[list[Any]]:
                 "no placement on any hub",
                 evidence.get("unused_labels") or [],
             ],
+            [
+                "labels with no placement on this hub",
+                "none",
+                "; ".join(
+                    f"{label} (defined on: {', '.join(origins)})"
+                    for label, origins in (
+                        evidence.get("missing_on_hub") or {}
+                    ).items()
+                )
+                or [],
+            ],
         ]
     if check_id == "workload.feature_chart_values":
         return [
@@ -249,6 +260,19 @@ def failing_field_rows(check: dict[str, Any]) -> list[list[Any]]:
     rows = field_rows(check)
     missing = check.get("missing") or {}
     evidence = check.get("evidence") or {}
+    if check.get("id") == "workload.feature_chart_values":
+        failing = {
+            "unmet required values",
+            "missing kustomize overlays",
+            "orphan values files",
+        }
+        return [row for row in rows if row[0] in failing and row[2]]
+    if check.get("id") == "workload.feature_placements":
+        return [
+            row
+            for row in rows
+            if row[0] == "labels with no placement on this hub" and row[2]
+        ]
     if check.get("id", "").endswith(".inventory"):
         actual = check.get("actual") or {}
         return [row for row in rows if
@@ -268,6 +292,7 @@ def failing_field_rows(check: dict[str, Any]) -> list[list[Any]]:
     if isinstance(missing, dict) and isinstance(missing.get("fields"), (dict, list)):
         return [row for row in rows if row[0] in missing["fields"]]
     return [row for row in rows if row[1] != row[2]
+            and plain(row[1]) != plain(row[2])
             and row[1] != "not constrained by this check"
             and not (row[1] == "present" and row[2] not in (None, False, "missing"))]
 

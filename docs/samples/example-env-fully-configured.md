@@ -468,6 +468,7 @@ Not verified: Only string equality of matchLabels is compared, so label selector
 |---|---|---|
 | `matched placements` | `a matching placement on this hub` | `all-managed-clusters` |
 | `unused labels` | `no placement on any hub` | `—` |
+| `labels with no placement on this hub` | `none` | `—` |
 
 </details>
 
