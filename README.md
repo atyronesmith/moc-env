@@ -7,6 +7,11 @@ merged `main` branches, and what exists only in an open pull request. It does
 not claim that a cluster is deployed, healthy, or compliant, and it does not
 mutate GitHub or connect to a live cluster.
 
+Current capabilities include fleet and per-environment status, hub/workload
+desired-state export, validation and comparison, read-only change planning,
+chart inventory and chart-value reference generation, and a filterable Markdown
+reference for every deployed `oac-apps` chart.
+
 This tool will be the basis for a system that generates all repo artifacts
 necessary for a new environment deployment.  Ideally, the config for that
 environment will exist in a single file.  The premise is to enhance the
@@ -25,6 +30,12 @@ uv run moc-env --help
 List every discovered hub and workload cluster:
 
 ```sh
+uv run moc-env list
+```
+
+Print the fleet-wide repository status:
+
+```sh
 uv run moc-env status
 ```
 
@@ -34,17 +45,47 @@ Inspect one environment:
 uv run moc-env status bu-ist-demo
 ```
 
+Read the report from top to bottom: the `RESULT` line gives the number of
+blocking and advisory gaps, the phase table shows where each scope stands, and
+`NEXT` lists repository actions in dependency order. The
+[Reading a status report](docs/user-guide.md#reading-a-status-report) section
+explains each part with a complete example.
+
 Print which charts each cluster receives from `oac-apps`:
 
 ```sh
 uv run moc-env charts
 ```
 
-Read the report from top to bottom: the `RESULT` line gives the number of
-blocking and advisory gaps, the phase table shows where each scope stands, and
-`NEXT` lists repository actions in dependency order. The
-[Reading a status report](docs/user-guide.md#reading-a-status-report) section
-explains each part with a complete example.
+Print one cluster's received charts, including the ApplicationSet, placement,
+feature label, values files, and unmet required values:
+
+```sh
+uv run moc-env charts --view cluster bu-ist-demo
+```
+
+Generate the environment-independent chart reference, or limit its tables to
+selected charts:
+
+```sh
+uv run moc-env charts --view reference --output reports/chart-reference.md
+uv run moc-env charts --view reference \
+  --chart hcp-config --chart metallb \
+  --output reports/chart-reference-hcp-metallb.md
+```
+
+The reference lists hub and workload chart groups, optional features and their
+labels, then one values table per deployed chart. It explains `(section)` and
+`(commented out)` defaults, shows known conditional requirements, and warns on
+stderr about required keys that upstream `values.yaml` files leave undescribed.
+The filtered footer distinguishes omitted deployed charts from undeployed and
+library charts.
+
+Generate the broader, topic-first chart-values guide:
+
+```sh
+uv run moc-env document-values --output reports/chart-values.md
+```
 
 ## Sample text report
 
@@ -93,6 +134,7 @@ Markdown: moc-env status bu-ist-demo --format markdown --output report.md
 ## Documentation
 
 - [User guide](docs/user-guide.md) — setup, authentication, workflows, report interpretation, options, and troubleshooting.
+- [Chart inventory and reference](docs/user-guide.md#chart-inventory-and-reference) — summary, cluster, and per-chart reference views.
 - [Roadmap](docs/roadmap.md) — milestone history and future desired-state work.
 - [Hub-cluster terminology](docs/hub-cluster-terminology.md) — hub, hosted, workload, and compatibility naming.
 
