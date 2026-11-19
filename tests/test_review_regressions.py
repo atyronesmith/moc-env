@@ -19,7 +19,8 @@ from moc_env.checks import StatusChecker
 from moc_env.github import GitHubClient
 from moc_env.model import Environment
 from moc_env.report import _phase_cell, render_markdown, render_text
-from moc_env.report_fields import failing_field_rows
+from moc_env.cross_repo import _feature_chart_values_next_action
+from moc_env.report_fields import failing_field_rows, field_rows
 
 from fakes import FullyConfiguredFakeGitHubClient
 from test_pr246_report import Pr246ReportClient, FIXTURES, WORKLOAD_PATH
@@ -242,6 +243,113 @@ class ReviewRegressionTest(unittest.TestCase):
         with patch("moc_env.github.urlopen", side_effect=HTTPError(url, 304, "Not modified", {}, io.BytesIO())):
             self.assertEqual(warm.get_json(url), {"value": 1})
         self.assertEqual((warm.requests_made, warm.api_calls_used, warm.cache_hits), (1, 0, 1))
+
+    def test_feature_chart_values_next_action_lists_only_unmet_values(self) -> None:
+        evidence = {
+            "chart_count": 27,
+            "unmet_required_values": {"object-storage-proxy": ["backend.address"]},
+            "missing_overlays": [],
+            "orphan_values_files": [],
+        }
+        check = {"id": "workload.feature_chart_values", "evidence": evidence}
+
+        self.assertEqual(
+            failing_field_rows(check),
+            [["unmet required values", "none", {"object-storage-proxy": ["backend.address"]}]],
+        )
+        self.assertEqual(
+            _feature_chart_values_next_action(
+                evidence, "bu-ist-demo-infra", "bu-ist-demo-workload0"
+            ),
+            "Set the missing required chart values in "
+            "values/bu-ist-demo-infra/bu-ist-demo-workload0/object-storage-proxy.yaml.",
+        )
+
+    def test_feature_chart_values_next_action_joins_all_three_clauses(self) -> None:
+        evidence = {
+            "chart_count": 27,
+            "unmet_required_values": {"chart-a": ["value"]},
+            "missing_overlays": ["kustomize/pure-cosi/overlays/workload0"],
+            "orphan_values_files": ["orphan"],
+        }
+        check = {"id": "workload.feature_chart_values", "evidence": evidence}
+
+        rows = failing_field_rows(check)
+        self.assertEqual(len(rows), 3)
+        self.assertEqual(
+            [row[0] for row in rows],
+            [
+                "unmet required values",
+                "missing kustomize overlays",
+                "orphan values files",
+            ],
+        )
+        self.assertEqual(
+            _feature_chart_values_next_action(evidence, "hub", "workload0"),
+            "Set the missing required chart values in values/hub/workload0/chart-a.yaml, "
+            "add the kustomize overlay and remove the values files for charts the "
+            "cluster does not receive.",
+        )
+
+    def test_feature_chart_values_next_action_with_only_orphans(self) -> None:
+        evidence = {
+            "chart_count": 27,
+            "unmet_required_values": {},
+            "missing_overlays": [],
+            "orphan_values_files": ["orphan"],
+        }
+        check = {"id": "workload.feature_chart_values", "evidence": evidence}
+
+        self.assertEqual(
+            failing_field_rows(check),
+            [["orphan values files", "none", ["orphan"]]],
+        )
+        self.assertEqual(
+            _feature_chart_values_next_action(evidence, "hub", "workload0"),
+            "Remove the values files for charts the cluster does not receive.",
+        )
+
+    def test_feature_placements_failure_names_the_missing_hub_label(self) -> None:
+        evidence = {
+            "matched_placements": ["all-managed-clusters"],
+            "unused_labels": [],
+            "missing_on_hub": {"massopen.cloud/feature-gpu": ["oac-dev-infra:gpu-clusters"]},
+        }
+        check = {"id": "workload.feature_placements", "evidence": evidence}
+
+        self.assertEqual(
+            field_rows(check)[2],
+            [
+                "labels with no placement on this hub",
+                "none",
+                "massopen.cloud/feature-gpu (defined on: oac-dev-infra:gpu-clusters)",
+            ],
+        )
+        self.assertEqual(
+            failing_field_rows(check),
+            [[
+                "labels with no placement on this hub",
+                "none",
+                "massopen.cloud/feature-gpu (defined on: oac-dev-infra:gpu-clusters)",
+            ]],
+        )
+
+    def test_default_rule_drops_none_against_an_empty_list(self) -> None:
+        dropped = {
+            "id": "example.check",
+            "expected": {"field": "none"},
+            "actual": {"field": []},
+        }
+        kept = {
+            "id": "example.check",
+            "expected": {"field": "none"},
+            "actual": {"field": ["x"]},
+        }
+
+        self.assertEqual(failing_field_rows(dropped), [])
+        self.assertEqual(
+            failing_field_rows(kept), [["field", "none", ["x"]]]
+        )
 
 
 if __name__ == "__main__":
