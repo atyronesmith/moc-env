@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .checks import Clock, StatusChecker, list_environments
+from .chart_reference import missing_description_warnings
 from .charts import (
     ChartInventoryError,
     collect_chart_inventory,
@@ -483,7 +484,12 @@ def _print_validation_error(input_path: Path, errors: list[str], prefix: str = "
         print(f"  - {error}", file=sys.stderr)
 
 
-def _charts_handler(args: argparse.Namespace, **_context: Any) -> int:
+def _charts_handler(
+    args: argparse.Namespace,
+    *,
+    arguments: list[str] | None = None,
+    **_context: Any,
+) -> int:
     repository_refs: dict[str, str] = {}
     for repository_ref in args.ref:
         repository, separator, ref = repository_ref.partition("=")
@@ -513,12 +519,18 @@ def _charts_handler(args: argparse.Namespace, **_context: Any) -> int:
         view=args.view,
         format=output_format,
         charts=args.chart,
+        command=arguments or (),
     )
     exit_code = write_output(
         args, rendered, f"{output_format} chart inventory"
     )
     if exit_code:
         return exit_code
+    if args.view == "reference" and inventory.reference is not None:
+        for line in missing_description_warnings(
+            inventory.reference, args.chart
+        ):
+            print(line, file=sys.stderr)
     return 1 if inventory.has_errors or inventory.unrecognized else 0
 
 
