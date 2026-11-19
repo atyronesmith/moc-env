@@ -12,6 +12,24 @@ check suites. The implementation moves through three connected capabilities:
 Ordinary status, export, check, plan, and local-generation commands must not
 push, create PRs, approve, merge, comment, or force-push anything.
 
+## Status at a glance
+
+| Capability | Status |
+|---|---|
+| Fleet, environment, hub, and workload status reports | Complete |
+| Issue, repository, pull-request, and source-provenance observations | Complete |
+| Hub, workload, and Environment export, validation, and comparison | Complete |
+| Read-only infrastructure change planning | Complete |
+| Chart inventory, per-cluster chart detail, and chart reference | Complete |
+| Chart-values discovery and generated documentation | Complete |
+| Local branch and commit generation | Planned |
+| Generated-change validation | Planned |
+| Coordinated PR publication | Planned |
+| Operational hardening | Partial |
+
+Everything through Phase 8 is implemented. Phases 9–11 describe future
+mutating workflows and are not available in the current CLI.
+
 ## Dependency policy
 
 The runtime is standard-library Python plus **PyYAML**. PyYAML is approved for
@@ -246,12 +264,12 @@ without descriptions. Text and JSON remain available alongside Markdown.
 
 **Status:** complete
 
-The next documentation milestone is captured in
+The implemented design is captured in
 [chart-values-documentation-plan.md](chart-values-documentation-plan.md). It
 separates human-authored variable explanations from refreshable repository
 discovery and assembles the final guide from both layers.
 
-Add a read-only command that explains how values are organized in `oac-apps`:
+The read-only command explains how values are organized in `oac-apps`:
 
 ```sh
 uv run moc-env document-values
@@ -368,7 +386,9 @@ Stacking is optional; the default is one branch per repository.
 
 ## Phase 9 — local change generation
 
-Generate local branches without pushing:
+**Status:** not implemented
+
+Planned command to generate local branches without pushing:
 
 ```sh
 uv run moc-env generate-infra \
@@ -390,7 +410,9 @@ must not push or create PRs.
 
 ## Phase 10 — local plan validation
 
-Add:
+**Status:** not implemented
+
+Planned command:
 
 ```sh
 uv run moc-env validate-plan generated-changes
@@ -408,7 +430,9 @@ Validate:
 
 ## Phase 11 — publish coordinated PR sets
 
-Only this phase mutates GitHub:
+**Status:** not implemented
+
+Only this phase would mutate GitHub:
 
 ```sh
 uv run moc-env publish-plan generated-changes \
@@ -424,18 +448,21 @@ source, changed files, validation results, and related PRs in dependency order.
 
 **Status:** partial
 
-Add:
+Implemented:
 
-- repository response caching and `--refresh`;
-- rate-limit retry and backoff;
+- repository response caching, immutable-SHA cache hits, `--offline`, and
+  `--refresh`;
+- rate-limit preflight, retry, and backoff;
+- deterministic report, export, comparison, plan, chart reference, and
+  chart-values output, including report snapshots through `--output`;
+- GitHub Actions CI that runs `uv sync --locked` and `make check` on Ubuntu;
+- user documentation for credentials, schemas, status, export, validation,
+  comparison, planning, chart inventory/reference, and chart-values discovery.
+
+Remaining:
+
 - bounded concurrent repository reads;
-- separate read and write credential scopes;
-- dry-run output for every mutating command;
-- report snapshots;
-- hosted CI;
-- user documentation for credentials, schemas, status, export, checking, and
-  PR generation.
-
-The current [user guide](user-guide.md) documents credentials and every
-implemented command through Phase 8. Hosted CI exists but currently fails on
-Linux because four credential tests assume the macOS Keychain executable.
+- separate read and write credential scopes, after a mutating command exists;
+- dry-run output for each future mutating command;
+- documentation for local change generation, generated-change validation, and
+  coordinated PR publication when those phases are implemented.
