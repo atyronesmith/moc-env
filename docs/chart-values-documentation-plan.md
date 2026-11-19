@@ -1,5 +1,9 @@
 # Chart-values documentation plan
 
+**Status:** implemented by `moc-env document-values`, `refresh-doc-catalog`, and
+`discover-values`. This plan remains as the design rationale for those
+commands.
+
 ## Purpose
 
 `moc-env document-values` should produce an educational, environment-independent

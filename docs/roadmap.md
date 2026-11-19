@@ -220,6 +220,28 @@ and component values, application path references, and relevant pull requests.
 Application absence is valid when desired state records it as absent. Text,
 JSON, and Markdown output are available; hard differences return exit code 1.
 
+## Chart inventory and reference
+
+**Status:** complete
+
+The `charts` command reports how `oac-apps` composes each cluster:
+
+```sh
+uv run moc-env charts
+uv run moc-env charts --view cluster bu-ist-demo
+uv run moc-env charts --view reference --output reports/chart-reference.md
+```
+
+The summary view covers workload and hub matrices, feature and group chart
+lists, undeployed charts, and library charts. The cluster view shows one
+section per cluster with its ApplicationSet, placement, feature label, values
+files, and unmet required values. The reference view documents hub and workload
+chart groups, optional feature labels, and one values table per deployed chart,
+including conditional requirements, section defaults, and commented-out key
+examples. It supports repeatable `--chart` filtering, deterministic command
+reproduction in the header, and a grouped stderr warning for required keys
+without descriptions. Text and JSON remain available alongside Markdown.
+
 ## Chart-values documentation
 
 **Status:** complete

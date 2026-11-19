@@ -57,6 +57,25 @@ spec:
     - bu-ist-demo-workload0
 ```
 
+## Chart inventory
+
+`moc-env charts` maps the terminology above onto repository mechanisms:
+
+```sh
+uv run moc-env charts
+uv run moc-env charts --view cluster bu-ist-demo
+uv run moc-env charts --view reference
+```
+
+The summary view shows which baseline and optional feature charts each workload
+cluster receives, plus the fixed charts, compliance group, and per-hub drop-ins
+for each hub. The cluster view resolves the ApplicationSet and placement behind
+every received chart, the feature label or `drop-in` marker, the values files
+that apply, and any unmet required values. The reference view lists the hub and
+workload chart groups, each optional feature and its `clusterLabels` entry, and
+the settings declared by every deployed chart. It reports declared repository
+configuration, not live cluster state.
+
 ## Chart-values documentation
 
 `moc-env document-values` explains values by scope, chart, type, and source:
