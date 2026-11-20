@@ -8,7 +8,6 @@ from pathlib import Path
 import unittest
 
 from fakes import (
-    FakeGitHubClient,
     FullyConfiguredFakeGitHubClient,
 )
 

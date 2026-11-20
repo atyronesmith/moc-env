@@ -18,7 +18,7 @@ from .charts import (
 )
 from .chart_values import documentation_directory, load_chart_values_manual, render_chart_values_markdown
 from .chart_value_discovery import build_discovery_report, render_discovery_json, render_discovery_markdown, render_discovery_text
-from .credentials import CredentialError, CredentialResolver
+from .credentials import CredentialError, CredentialResolver  # noqa: F401
 from .compare import compare_environment, compare_infra, compare_workload, desired_environment, render_comparison_json, render_comparison_markdown, render_comparison_text
 from .completion import (
     COMMANDS,

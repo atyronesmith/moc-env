@@ -607,7 +607,6 @@ def compare_workload(
     environment = desired_environment(document)
     checks: list[ComparisonCheck] = []
     metadata = _mapping(document, "metadata")
-    spec = _mapping(document, "spec")
     inventory = _mapping(document, "spec", "inventory")
     parent = _mapping(document, "spec", "parent")
     gitops = _mapping(document, "spec", "gitOps")

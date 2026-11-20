@@ -6,7 +6,6 @@ from pathlib import Path
 
 from moc_env.checks import StatusChecker
 from moc_env.registry import EnvironmentRegistry
-from moc_env.checks import StatusChecker
 from moc_env.checks import list_environments
 from moc_env.model import Environment
 from moc_env.github import GitHubError, RateLimitError

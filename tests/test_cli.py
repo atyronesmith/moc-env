@@ -351,9 +351,9 @@ class CliDispatchTest(unittest.TestCase):
         self.assertEqual(stderr, "")
 
     def test_text_golden_files(self) -> None:
-        fixed_clock = lambda: datetime(
-            2026, 11, 16, 12, 34, 56, tzinfo=timezone.utc
-        )
+        def fixed_clock():
+            return datetime(2026, 11, 16, 12, 34, 56, tzinfo=timezone.utc)
+
         cases = (
             (
                 ["status", "bu-ist-demo", "--format", "text", "--no-prs"],
@@ -403,9 +403,9 @@ class CliDispatchTest(unittest.TestCase):
         self.assertNotIn("fix in open PR", stdout)
 
     def test_markdown_golden_files(self) -> None:
-        fixed_clock = lambda: datetime(
-            2026, 11, 16, 12, 34, 56, tzinfo=timezone.utc
-        )
+        def fixed_clock():
+            return datetime(2026, 11, 16, 12, 34, 56, tzinfo=timezone.utc)
+
         cases = (
             (
                 ["status", "bu-ist-demo", "--format", "markdown", "--no-prs"],
@@ -793,9 +793,9 @@ class CliDispatchTest(unittest.TestCase):
         self.assertIn("defaults.bad-key", stderr)
 
     def test_status_json_is_byte_stable_with_fixed_client_and_clock(self) -> None:
-        fixed_clock = lambda: datetime(
-            2026, 11, 16, 12, 34, 56, tzinfo=timezone.utc
-        )
+        def fixed_clock():
+            return datetime(2026, 11, 16, 12, 34, 56, tzinfo=timezone.utc)
+
         with patch.dict(os.environ, {"GITHUB_TOKEN": ""}):
             exit_code, stdout, _ = self.run_cli(
                 [
