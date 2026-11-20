@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import json
-import os
 import stat
 import subprocess
 import tempfile
 import unittest
-from collections.abc import Callable
 from pathlib import Path
 
 from moc_env.credentials import (

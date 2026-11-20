@@ -9,8 +9,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import yaml
-
 from moc_env import cli
 from moc_env.chart_value_discovery import (
     build_discovery_report,

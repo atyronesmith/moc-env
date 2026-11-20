@@ -379,7 +379,6 @@ def _oidc_field_table(check: dict[str, Any]) -> list[str] | None:
         return None
     field_width = max(len(field) for field, _, _ in rows) + 2
     expected_width = max(len(_scalar_text(expected)) for _, expected, _ in rows) + 2
-    observed_width = max(len(_scalar_text(observed)) for _, _, observed in rows) + 2
     lines = [
         "  Keycloak OIDC fields:",
         "  Field:".ljust(field_width)
@@ -1184,7 +1183,6 @@ def render_text(
 ) -> str:
     environment = report["environment"]
     scope = report.get("scope", "environment")
-    dash = "[--]" if ascii_mode else "–"
     generated_text = _generated_timestamp(report)
     non_main = [
         source for source in (report.get("metadata") or {}).get("sources", [])

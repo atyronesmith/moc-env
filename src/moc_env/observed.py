@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 import re
 from typing import Any
@@ -628,7 +628,7 @@ def read_keycloak_observation(
 
     cluster = client_name or environment.infra_cluster
     pattern = re.compile(
-        rf'^\s*([A-Za-z0-9_-]+)\s*=\s*\{{(.*?)^\s*\}}',
+        r'^\s*([A-Za-z0-9_-]+)\s*=\s*\{(.*?)^\s*\}',
         re.MULTILINE | re.DOTALL,
     )
     client_observation: KeycloakClientObservation | None = None

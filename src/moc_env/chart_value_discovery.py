@@ -68,7 +68,6 @@ def _scope(path: Path, repository: Path) -> str:
 
 
 def _chart_name(path: Path, repository: Path, scope: str) -> str:
-    relative = path.relative_to(repository).as_posix()
     filename = path.stem
     if scope == "hosted-cluster" and filename == "values":
         return "hosted-cluster"

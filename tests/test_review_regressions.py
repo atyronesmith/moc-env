@@ -6,7 +6,6 @@ import contextlib
 import io
 import json
 import os
-from pathlib import Path
 import re
 import tempfile
 import unittest
@@ -176,7 +175,10 @@ class ReviewRegressionTest(unittest.TestCase):
               patch("moc_env.credentials.subprocess.run", side_effect=AssertionError("offline must not invoke gh or Keychain")),
               patch("moc_env.github.urlopen", side_effect=AssertionError("offline HTTP forbidden")) as http):
             offline, accounting = run(["status", "bu-ist-demo", "--no-auth", "--offline"])
-            self.assertEqual(next(l for l in online.splitlines() if l.startswith("RESULT:")), next(l for l in offline.splitlines() if l.startswith("RESULT:")))
+            self.assertEqual(
+                next(line for line in online.splitlines() if line.startswith("RESULT:")),
+                next(line for line in offline.splitlines() if line.startswith("RESULT:")),
+            )
             self.assertIn("GitHub API: 0 requests, 0 counted against quota", accounting)
             diff, _ = run(["diff", "bu-ist-demo", "bu-ist-demo", "--no-auth", "--offline"])
             for repository in fixture.SOURCE_SHAS:

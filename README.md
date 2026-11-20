@@ -137,6 +137,9 @@ Markdown: moc-env status bu-ist-demo --format markdown --output report.md
 - [Chart inventory and reference](docs/user-guide.md#chart-inventory-and-reference) — summary, cluster, and per-chart reference views.
 - [Roadmap](docs/roadmap.md) — milestone history and future desired-state work.
 - [Hub-cluster terminology](docs/hub-cluster-terminology.md) — hub, hosted, workload, and compatibility naming.
+- [Contributing](CONTRIBUTING.md) — local checks, pull-request expectations, and commit conventions.
+- [Security policy](SECURITY.md) — private vulnerability reporting and credential-handling guidance.
 
-Developers can run the full test and packaging gate with `make check`, and regenerate the
-offline sample reports with `make sample-reports`.
+Developers can run the full lint, coverage, test, and packaging gate with
+`make check`, and regenerate the offline sample reports with
+`make sample-reports`.
