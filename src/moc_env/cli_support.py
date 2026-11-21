@@ -7,6 +7,7 @@ import difflib
 import sys
 from dataclasses import replace
 from pathlib import Path
+from typing import Sequence
 
 from .credentials import (
     CredentialError,
@@ -47,8 +48,67 @@ def add_credential_arguments(parser: argparse.ArgumentParser) -> None:
     cache_mode.add_argument("--refresh", action="store_true", help="Ignore cached GitHub responses and request current data")
 
 
-def add_output(parser: argparse.ArgumentParser, help: str) -> None:
-    mark_file_argument(parser.add_argument("--output", help=help))
+def add_output(
+    parser: argparse.ArgumentParser, help: str, *, infers_format: bool = False
+) -> None:
+    if infers_format:
+        help = (
+            f"{help}; when --format is omitted, infer the format from "
+            "a .md, .markdown, .json, or .txt file extension"
+        )
+    mark_file_argument(
+        parser.add_argument("--output", help=help)
+    )
+
+
+_OUTPUT_EXTENSION_FORMATS = {
+    ".md": "markdown",
+    ".markdown": "markdown",
+    ".json": "json",
+    ".txt": "text",
+}
+
+
+def add_format_argument(
+    parser: argparse.ArgumentParser,
+    choices: Sequence[str] = ("text", "json", "markdown"),
+) -> None:
+    parser.add_argument(
+        "--format",
+        choices=choices,
+        default=None,
+        help=(
+            "Output format; when omitted with --output, infer it from a "
+            ".md, .markdown, .json, or .txt file extension"
+        ),
+    )
+
+
+def resolve_output_format(
+    args: argparse.Namespace,
+    *,
+    default: str,
+    supported: Sequence[str],
+) -> str:
+    """Resolve an explicit, inferred, or default output format."""
+
+    explicit = getattr(args, "format", None)
+    if explicit:
+        return explicit
+    output = getattr(args, "output", None)
+    if not output:
+        return default
+    inferred = _OUTPUT_EXTENSION_FORMATS.get(Path(output).suffix.lower())
+    if inferred is None:
+        return default
+    if inferred in supported:
+        return inferred
+    print(
+        f"moc-env: warning: {output}: {inferred} output is not supported "
+        f"by this command; using {default}.",
+        file=sys.stderr,
+    )
+    return default
 
 
 def configure_status(parser: argparse.ArgumentParser) -> None:
@@ -60,7 +120,7 @@ def configure_status(parser: argparse.ArgumentParser) -> None:
         )
     )
     parser.add_argument("--issue", type=int, help="MOC-issues number; overrides the packaged environment registry")
-    parser.add_argument("--format", choices=("text", "json", "markdown"), default="text", help="Output format")
+    add_format_argument(parser)
     pull_requests = parser.add_mutually_exclusive_group()
     pull_requests.add_argument("--no-prs", action="store_true", help="Do not inspect pull requests")
     pull_requests.add_argument("--prs", action="store_true", help="Inspect pull requests even when unauthenticated")
@@ -84,15 +144,18 @@ def configure_status(parser: argparse.ArgumentParser) -> None:
     add_output(
         parser,
         "Write the rendered report to this file instead of stdout; useful with --format markdown",
+        infers_format=True,
     )
 
 
 def configure_diff(parser: argparse.ArgumentParser) -> None:
     mark_environment_argument(parser.add_argument("environment_a", help="First environment to compare"))
     mark_environment_argument(parser.add_argument("environment_b", help="Second environment to compare"))
-    parser.add_argument("--format", choices=("text", "markdown", "json"), default="text", help="Output format")
-    mark_file_argument(
-        parser.add_argument("--output", help="Write the comparison to this file instead of stdout")
+    add_format_argument(parser, ("text", "markdown", "json"))
+    add_output(
+        parser,
+        "Write the comparison to this file instead of stdout",
+        infers_format=True,
     )
     parser.add_argument("--no-auth", action="store_true", help="Force unauthenticated GitHub access")
     parser.add_argument("--bws-secret-id", help="Bitwarden Secrets Manager UUID whose key is GITHUB_TOKEN")
@@ -122,6 +185,9 @@ def diff_handler(
     client_factory=GitHubClient,
     token_resolver=None,
 ) -> int:
+    args.format = resolve_output_format(
+        args, default="text", supported=("text", "markdown", "json")
+    )
     repository_refs: dict[str, str] = {}
     for repository_ref in getattr(args, "ref", ()):
         repository, separator, ref = repository_ref.partition("=")

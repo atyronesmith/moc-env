@@ -345,6 +345,13 @@ discovery is also skipped by default to preserve REST quota; `--prs` forces it.
 or blocking gap exists. Progress steps are printed to stderr; the report is
 printed to stdout or written with `--output`.
 
+When a command accepts both `--format` and `--output`, an omitted `--format`
+is inferred from the output file extension: `.md` and `.markdown` mean
+Markdown, `.json` means JSON, and `.txt` means text. Other extensions keep the
+command's usual default. If the extension names a format the command does not
+support, moc-env keeps the default and prints a warning naming the file. An
+explicit `--format` always wins.
+
 ### Chart inventory and reference
 
 `moc-env charts` reads every chart placement, feature label, and values file it

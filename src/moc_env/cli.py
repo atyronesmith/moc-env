@@ -48,7 +48,22 @@ from .plan import build_infra_change_plan, render_change_plan_json, render_chang
 from .registry import DEFAULT_REGISTRY_PATH, EnvironmentRegistry, RegistryError
 from .repositories import status_request_urls
 from .report import render_environment_list_json, render_environment_list_text, render_json, render_markdown, render_text
-from .cli_support import ProgressReporter, _print_unauthenticated_warning, add_credential_arguments, add_output, configure_diff, configure_status, diff_handler, print_unknown_environment, resolve_github_token, resolve_workload_argument, sanitize_command, write_output
+from .cli_support import (
+    ProgressReporter,
+    _print_unauthenticated_warning,
+    add_credential_arguments,
+    add_format_argument,
+    add_output,
+    configure_diff,
+    configure_status,
+    diff_handler,
+    print_unknown_environment,
+    resolve_github_token,
+    resolve_output_format,
+    resolve_workload_argument,
+    sanitize_command,
+    write_output,
+)
 from .validate import load_environment_document, load_infra_cluster_document, load_validation_result, load_yaml_document, render_validation_json, render_validation_markdown, render_validation_text, validate_workload_cluster
 
 Handler = Callable[..., int]
@@ -65,10 +80,9 @@ def _add_report_arguments(
     credentials: bool = False,
     output_help: str = "Write the report to this file instead of stdout",
     formats: tuple[str, ...] = ("text", "json", "markdown"),
-    default: str = "text",
 ) -> None:
-    parser.add_argument("--format", choices=formats, default=default, help="Output format")
-    _add_output(parser, output_help)
+    add_format_argument(parser, formats)
+    _add_output(parser, output_help, infers_format=True)
     if no_prs:
         parser.add_argument("--no-prs", action="store_true", help="Do not inspect pull requests")
     if credentials:
@@ -101,7 +115,6 @@ def _configure_discover_values(parser: argparse.ArgumentParser) -> None:
     _add_report_arguments(
         parser,
         formats=("markdown", "text", "json"),
-        default="markdown",
         output_help="Write the discovery report to this file instead of stdout",
     )
 
@@ -163,12 +176,7 @@ def _configure_charts(parser: argparse.ArgumentParser) -> None:
         metavar="NAME",
         help="Limit the reference chart section to the named chart; repeatable",
     )
-    parser.add_argument(
-        "--format",
-        choices=("text", "markdown", "json"),
-        default=None,
-        help="Output format (default: markdown for reference, text otherwise)",
-    )
+    add_format_argument(parser, ("text", "markdown", "json"))
     parser.add_argument(
         "--ref",
         action="append",
@@ -180,6 +188,7 @@ def _configure_charts(parser: argparse.ArgumentParser) -> None:
     add_output(
         parser,
         "Write the rendered chart inventory to this file instead of stdout",
+        infers_format=True,
     )
 
 
@@ -282,6 +291,9 @@ def _list_handler(args: argparse.Namespace, **_context: Any) -> int:
 
 
 def _refresh_doc_catalog_handler(args: argparse.Namespace, **_context: Any) -> int:
+    args.format = resolve_output_format(
+        args, default="text", supported=("text", "json")
+    )
     try:
         report = refresh_document_catalog(
             load_catalog_sources(documentation_directory() / "sources.yaml"),
@@ -296,6 +308,9 @@ def _refresh_doc_catalog_handler(args: argparse.Namespace, **_context: Any) -> i
 
 
 def _discover_values_handler(args: argparse.Namespace, **_context: Any) -> int:
+    args.format = resolve_output_format(
+        args, default="markdown", supported=("text", "json", "markdown")
+    )
     try:
         report = build_discovery_report(
             load_chart_values_manual(),
@@ -372,6 +387,9 @@ def _export_environment_handler(args: argparse.Namespace, registry: EnvironmentR
 
 
 def _validate_handler(args: argparse.Namespace, **_context: Any) -> int:
+    args.format = resolve_output_format(
+        args, default="text", supported=("text", "json", "markdown")
+    )
     input_path = Path(args.file)
     result = load_validation_result(input_path)
     if args.format == "json":
@@ -418,6 +436,9 @@ def _load_infra_comparison(args: argparse.Namespace) -> tuple[Any, Any, Any] | N
 
 
 def _write_comparison(args: argparse.Namespace, comparison: Any) -> int:
+    args.format = resolve_output_format(
+        args, default="text", supported=("text", "json", "markdown")
+    )
     exit_code = write_output(args, _render_comparison(comparison, args), f"{args.format} comparison report")
     return exit_code if exit_code else _comparison_exit(comparison)
 
@@ -428,6 +449,9 @@ def _check_infra_handler(args: argparse.Namespace, **_context: Any) -> int:
 
 
 def _plan_infra_handler(args: argparse.Namespace, **_context: Any) -> int:
+    args.format = resolve_output_format(
+        args, default="text", supported=("text", "json", "markdown")
+    )
     loaded = _load_infra_comparison(args)
     if loaded is None:
         return 2
@@ -500,6 +524,12 @@ def _charts_handler(
     arguments: list[str] | None = None,
     **_context: Any,
 ) -> int:
+    default_format = "markdown" if args.view == "reference" else "text"
+    args.format = resolve_output_format(
+        args,
+        default=default_format,
+        supported=("text", "json", "markdown"),
+    )
     repository_refs: dict[str, str] = {}
     for repository_ref in args.ref:
         repository, separator, ref = repository_ref.partition("=")
@@ -507,9 +537,7 @@ def _charts_handler(
             args.parser.error("--ref must have the form REPO=REF")
         repository_refs[f"CCI-MOC/{repository}"] = ref
     client = _new_github_client(args, _resolve_github_token(args), repository_refs)
-    output_format = args.format or (
-        "markdown" if args.view == "reference" else "text"
-    )
+    output_format = args.format
     try:
         inventory = collect_chart_inventory(
             client,
@@ -552,6 +580,9 @@ def _status_handler(
     clock: Clock | None,
     arguments: list[str],
 ) -> int:
+    args.format = resolve_output_format(
+        args, default="text", supported=("text", "json", "markdown")
+    )
     if args.environment is None:
         if args.format == "markdown":
             args.parser.error("--format markdown requires an environment name")
