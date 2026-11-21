@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fnmatch
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -36,7 +37,8 @@ _ALLOWED_KEYS = {
     "deferred",
 }
 
-_ALLOWED_ROOT_KEYS = {"defaults", "environments"}
+_ALLOWED_ROOT_KEYS = {"defaults", "environments", "cluster_scope"}
+_ALLOWED_CLUSTER_SCOPE_KEYS = {"deployment_hub_patterns"}
 
 
 @dataclass(frozen=True)
@@ -49,6 +51,7 @@ class EnvironmentRegistry:
     keycloak_client_names: dict[str, str]
     deferred_checks: dict[str, tuple[DeferredCheck, ...]]
     default_required_components: tuple[str, ...] = ()
+    deployment_hub_patterns: tuple[str, ...] = ()
 
     @classmethod
     def load(
@@ -85,6 +88,8 @@ class EnvironmentRegistry:
         environments = document.get("environments", {})
         if not isinstance(environments, dict):
             raise RegistryError("environments must be a mapping")
+
+        deployment_patterns = _cluster_scope_patterns(document.get("cluster_scope"))
 
         issues: dict[str, int] = {}
         required: dict[str, tuple[str, ...]] = {}
@@ -151,6 +156,7 @@ class EnvironmentRegistry:
                 defaults.get("required_local_cluster_components"),
                 "defaults.required_local_cluster_components",
             ),
+            deployment_hub_patterns=deployment_patterns,
         )
 
     def issue(self, environment: str) -> int | None:
@@ -169,6 +175,37 @@ class EnvironmentRegistry:
 
     def deferred(self, environment: str) -> tuple[DeferredCheck, ...]:
         return self.deferred_checks.get(environment, ())
+
+    def is_deployment_hub(self, hub: str) -> bool:
+        """Return whether a hub name matches a configured deployment pattern."""
+
+        return any(
+            fnmatch.fnmatchcase(hub, pattern)
+            for pattern in self.deployment_hub_patterns
+        )
+
+
+def _cluster_scope_patterns(value: Any) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, dict):
+        raise RegistryError("cluster_scope must be a mapping")
+    unknown = sorted(set(value) - _ALLOWED_CLUSTER_SCOPE_KEYS)
+    if unknown:
+        raise RegistryError(
+            f"cluster_scope.{unknown[0]} is not a supported registry key"
+        )
+    patterns = value.get("deployment_hub_patterns")
+    if (
+        not isinstance(patterns, (list, tuple))
+        or not patterns
+        or not all(isinstance(item, str) and item for item in patterns)
+    ):
+        raise RegistryError(
+            "cluster_scope.deployment_hub_patterns must be a non-empty list "
+            "of non-empty strings"
+        )
+    return tuple(patterns)
 
 
 def _validate_section(path: str, settings: dict[str, Any]) -> None:

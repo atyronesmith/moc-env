@@ -373,7 +373,14 @@ class ChartReferenceCommandTest(unittest.TestCase):
 
     def test_feature_without_a_matching_cluster_still_gets_a_section(self) -> None:
         exit_code, stdout, _ = self.run_cli(
-            ["charts", "--view", "reference", "--format", "json"]
+            [
+                "charts",
+                "--view",
+                "reference",
+                "--format",
+                "json",
+                "--all-clusters",
+            ]
         )
 
         self.assertEqual(exit_code, 0)

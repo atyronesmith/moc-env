@@ -136,8 +136,13 @@ def _configure_charts(parser: argparse.ArgumentParser) -> None:
         parser.add_argument(
             "environment",
             nargs="?",
-            help="Environment name, such as bu-ist-demo; omit it for every hub and workload cluster",
+            help="Environment name, such as bu-ist-demo; omit it for deployment hubs and workload clusters",
         )
+    )
+    parser.add_argument(
+        "--all-clusters",
+        action="store_true",
+        help="Include test clusters when no environment is named",
     )
     mark_workload_argument(
         parser.add_argument(
@@ -490,6 +495,7 @@ def _print_validation_error(input_path: Path, errors: list[str], prefix: str = "
 
 def _charts_handler(
     args: argparse.Namespace,
+    registry: EnvironmentRegistry,
     *,
     arguments: list[str] | None = None,
     **_context: Any,
@@ -511,6 +517,8 @@ def _charts_handler(
             workload=args.workload,
             progress=ProgressReporter(),
             include_reference=args.view == "reference",
+            deployment_patterns=registry.deployment_hub_patterns,
+            all_clusters=args.all_clusters,
         )
     except ChartInventoryError as exc:
         print(f"moc-env: {exc}", file=sys.stderr)

@@ -363,6 +363,23 @@ uv run moc-env charts bu-ist-demo
 uv run moc-env charts bu-ist-demo --workload workload0 --view cluster
 ```
 
+With no environment, `moc-env charts` covers deployment clusters only. The
+deployment hubs are configured in `src/moc_env/data/environments.yaml`:
+
+```yaml
+cluster_scope:
+  deployment_hub_patterns:
+    - "compliant-*"
+    - "oac-*"
+```
+
+Hubs whose names match a pattern are deployment hubs, and a workload cluster
+takes the class of its hub. The summary and cluster views name any test
+clusters they left out. Pass `--all-clusters` to include every hub and
+workload cluster, or name an environment to show that environment whatever its
+class. `--all-clusters` ends the view with a line naming the test clusters it
+showed.
+
 The summary view prints `x` marks in the cluster matrices and lists the charts
 each feature, hub group, or add-on installs. "Charts not deployed by GitOps"
 lists whole-repository charts that no ApplicationSet or drop-in installs; the

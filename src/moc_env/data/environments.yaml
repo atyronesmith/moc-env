@@ -21,3 +21,8 @@ defaults:
 environments:
   bu-ist-demo:
     issue: 666
+
+cluster_scope:
+  deployment_hub_patterns:
+    - "compliant-*"
+    - "oac-*"

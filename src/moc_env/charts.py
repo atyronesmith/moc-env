@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import re
 import textwrap
@@ -65,6 +66,9 @@ class ChartInventory:
     undeployed_charts: tuple[dict[str, Any], ...] = ()
     library_charts: tuple[str, ...] = ()
     reference: chart_reference.ChartReference | None = None
+    scope: str = "environment"
+    hidden_clusters: tuple[str, ...] = ()
+    test_clusters: tuple[str, ...] = ()
 
     @property
     def has_errors(self) -> bool:
@@ -373,13 +377,21 @@ def _files_gate_path(text: str) -> str | None:
     return None
 
 
-def _drop_in_names(tree: dict[str, Any]) -> tuple[str, ...]:
-    """Return every Application manifest name dropped under apps/*/."""
+def _drop_in_names(
+    tree: dict[str, Any], hubs: Sequence[str] = ()
+) -> tuple[str, ...]:
+    """Return every Application manifest name dropped under apps/<hub>/."""
 
     names: set[str] = set()
+    selected = set(hubs)
     for path in tree:
         parts = path.split("/")
-        if len(parts) == 3 and parts[0] == "apps" and parts[2]:
+        if (
+            len(parts) == 3
+            and parts[0] == "apps"
+            and parts[2]
+            and (not selected or parts[1] in selected)
+        ):
             names.add(parts[2].rsplit(".", 1)[0])
     return tuple(sorted(names))
 
@@ -459,10 +471,10 @@ def _collect_chart_reference(
     library_charts: tuple[str, ...],
     ref: str,
     sha: str,
+    hubs: Sequence[str],
 ) -> chart_reference.ChartReference:
     """Read every deployed chart's values and build the reference sections."""
 
-    hubs = hub_directories(tree)
     hub_chart_lists, _hub_errors = _hub_chart_lists(tree, read)
     literal_lists = _hub_literal_lists(tree, read)
     application_sets, _application_set_errors = (
@@ -497,7 +509,7 @@ def _collect_chart_reference(
         for entry in hub_chart_lists
         if entry.gate_path is not None
     )
-    drop_ins = _drop_in_names(tree)
+    drop_ins = _drop_in_names(tree, hubs)
 
     workload_creators: list[chart_reference.ChartList] = []
     for literal in sorted(literal_lists, key=lambda value: value["chart"]):
@@ -669,10 +681,27 @@ def _workload_labels(
 
 
 def _select_scope(
-    tree: dict[str, Any], environment: str | None, workload: str | None
-) -> tuple[list[str], dict[str, list[str]]]:
+    tree: dict[str, Any],
+    environment: str | None,
+    workload: str | None,
+    deployment_patterns: Sequence[str] = (),
+    all_clusters: bool = False,
+) -> tuple[
+    list[str],
+    dict[str, list[str]],
+    str,
+    tuple[str, ...],
+    tuple[str, ...],
+]:
     hubs = hub_directories(tree)
     workloads = workload_directories(tree)
+
+    def deployment(hub: str) -> bool:
+        return any(
+            fnmatch.fnmatchcase(hub, pattern)
+            for pattern in deployment_patterns
+        )
+
     if environment is not None:
         selected = [
             hub
@@ -685,6 +714,30 @@ def _select_scope(
                 f"unknown environment: {environment}. Known environments: {known}"
             )
         hubs = selected
+        scope = "environment"
+        hidden: list[str] = []
+    elif all_clusters or not deployment_patterns:
+        scope = "all"
+        hidden = []
+    else:
+        scope = "deployment"
+        hidden = sorted(
+            name
+            for hub in hubs
+            if not deployment(hub)
+            for name in (hub, *workloads.get(hub, []))
+        )
+        hubs = [hub for hub in hubs if deployment(hub)]
+
+    test_clusters = tuple(
+        sorted(
+            name
+            for hub in hubs
+            if not deployment(hub)
+            for name in (hub, *workloads.get(hub, []))
+        )
+    )
+
     if workload is not None:
         if environment is None:
             raise ChartInventoryError("--workload requires an environment")
@@ -709,7 +762,10 @@ def _select_scope(
             if matches[0] in names
         }
         hubs = [hub for hub in hubs if hub in workloads]
-    return hubs, workloads
+        test_clusters = tuple(
+            name for name in test_clusters if name in {*hubs, matches[0]}
+        )
+    return hubs, workloads, scope, tuple(hidden), test_clusters
 
 
 def collect_chart_inventory(
@@ -718,6 +774,8 @@ def collect_chart_inventory(
     workload: str | None = None,
     progress: Any = None,
     include_reference: bool = False,
+    deployment_patterns: Sequence[str] = (),
+    all_clusters: bool = False,
 ) -> ChartInventory:
     """Read oac-apps and build the chart rows for the selected clusters."""
 
@@ -727,7 +785,13 @@ def collect_chart_inventory(
         raise ChartInventoryError(
             f"{OAC_APPS_REPOSITORY} tree could not be read: {exc}"
         ) from exc
-    hubs, workloads = _select_scope(tree, environment, workload)
+    hubs, workloads, scope, hidden_clusters, test_clusters = _select_scope(
+        tree,
+        environment,
+        workload,
+        deployment_patterns,
+        all_clusters,
+    )
     read = _github_reader(client, progress)
 
     hub_chart_lists: list[HubChartList] = []
@@ -808,6 +872,7 @@ def collect_chart_inventory(
             library_charts,
             client.ref_for(OAC_APPS_REPOSITORY),
             sha,
+            hubs,
         )
     return ChartInventory(
         ref=client.ref_for(OAC_APPS_REPOSITORY),
@@ -825,6 +890,9 @@ def collect_chart_inventory(
         undeployed_charts=undeployed_charts,
         library_charts=library_charts,
         reference=reference,
+        scope=scope,
+        hidden_clusters=hidden_clusters,
+        test_clusters=test_clusters,
     )
 
 
@@ -873,6 +941,8 @@ def _text_table(rows: list[dict[str, Any]]) -> list[str]:
 
 
 def _render_cluster_text(inventory: ChartInventory) -> str:
+    if not inventory.clusters and inventory.hidden_clusters:
+        return _no_deployment_clusters_line(inventory) + "\n"
     lines: list[str] = []
     for cluster in inventory.clusters:
         lines.append(f"{cluster.name} · {cluster.kind}")
@@ -886,6 +956,9 @@ def _render_cluster_text(inventory: ChartInventory) -> str:
         lines.append(_unrecognized_line(inventory))
         lines.append("")
     lines.append(footer(inventory.ref, inventory.sha))
+    scope_note = _scope_note(inventory)
+    if scope_note:
+        lines.append(scope_note)
     return "\n".join(lines) + "\n"
 
 
@@ -1156,6 +1229,27 @@ def _inventory_notes(inventory: ChartInventory) -> list[str]:
     ]
 
 
+def _no_deployment_clusters_line(inventory: ChartInventory) -> str:
+    count = len(inventory.hidden_clusters)
+    noun = "test cluster" if count == 1 else "test clusters"
+    return (
+        f"No deployment clusters found. {count} {noun} not shown; "
+        "pass --all-clusters to include them."
+    )
+
+
+def _scope_note(inventory: ChartInventory) -> str | None:
+    if inventory.hidden_clusters:
+        return (
+            "Test clusters not shown: "
+            + ", ".join(inventory.hidden_clusters)
+            + ". Pass --all-clusters to include them."
+        )
+    if inventory.scope == "all" and inventory.test_clusters:
+        return "Test clusters shown: " + ", ".join(inventory.test_clusters) + "."
+    return None
+
+
 def _unrecognized_line(inventory: ChartInventory) -> str:
     return (
         "Unrecognized ApplicationSets (charts may be missing): "
@@ -1164,6 +1258,8 @@ def _unrecognized_line(inventory: ChartInventory) -> str:
 
 
 def _render_summary_text(inventory: ChartInventory) -> str:
+    if not inventory.clusters and inventory.hidden_clusters:
+        return _no_deployment_clusters_line(inventory) + "\n"
     lines: list[str] = []
     for table in _summary_tables(inventory):
         lines.append(table.name)
@@ -1182,6 +1278,9 @@ def _render_summary_text(inventory: ChartInventory) -> str:
         lines.append(_unrecognized_line(inventory))
         lines.append("")
     lines.append(footer(inventory.ref, inventory.sha))
+    scope_note = _scope_note(inventory)
+    if scope_note:
+        lines.append(scope_note)
     return "\n".join(lines) + "\n"
 
 
@@ -1212,6 +1311,8 @@ def _markdown_table(
 
 
 def _render_cluster_markdown(inventory: ChartInventory) -> str:
+    if not inventory.clusters and inventory.hidden_clusters:
+        return _no_deployment_clusters_line(inventory) + "\n"
     lines: list[str] = []
     for cluster in inventory.clusters:
         lines.append(f"### {cluster.name} ({cluster.kind})")
@@ -1230,10 +1331,15 @@ def _render_cluster_markdown(inventory: ChartInventory) -> str:
         lines.append(_unrecognized_line(inventory))
         lines.append("")
     lines.append(footer(inventory.ref, inventory.sha))
+    scope_note = _scope_note(inventory)
+    if scope_note:
+        lines.append(scope_note)
     return "\n".join(lines) + "\n"
 
 
 def _render_summary_markdown(inventory: ChartInventory) -> str:
+    if not inventory.clusters and inventory.hidden_clusters:
+        return _no_deployment_clusters_line(inventory) + "\n"
     lines: list[str] = []
     for table in _summary_tables(inventory):
         lines.append(f"## {table.name}")
@@ -1267,6 +1373,9 @@ def _render_summary_markdown(inventory: ChartInventory) -> str:
         lines.append(_unrecognized_line(inventory))
         lines.append("")
     lines.append(footer(inventory.ref, inventory.sha))
+    scope_note = _scope_note(inventory)
+    if scope_note:
+        lines.append(scope_note)
     return "\n".join(lines) + "\n"
 
 
@@ -1301,6 +1410,11 @@ def _render_summary_json(inventory: ChartInventory) -> str:
             for cluster in inventory.clusters
             if cluster.error
         ],
+        "scope": {
+            "mode": inventory.scope,
+            "hidden_test_clusters": list(inventory.hidden_clusters),
+            "test_clusters": list(inventory.test_clusters),
+        },
         "footer": footer(inventory.ref, inventory.sha),
     }
     return json.dumps(document, indent=2) + "\n"
@@ -1354,6 +1468,11 @@ def render_chart_inventory(
             "undeployed_charts": [dict(row) for row in inventory.undeployed_charts],
             "library_charts": list(inventory.library_charts),
             "unrecognized": list(inventory.unrecognized),
+            "scope": {
+                "mode": inventory.scope,
+                "hidden_test_clusters": list(inventory.hidden_clusters),
+                "test_clusters": list(inventory.test_clusters),
+            },
             "footer": footer(inventory.ref, inventory.sha),
         }
         return json.dumps(document, indent=2) + "\n"
