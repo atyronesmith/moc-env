@@ -134,6 +134,13 @@ class _UniqueKeyLoader(yaml.SafeLoader):
 
 
 def _construct_mapping(loader: _UniqueKeyLoader, node: yaml.Node, deep: bool = False):
+    if not isinstance(node, yaml.MappingNode):
+        raise yaml.constructor.ConstructorError(
+            "while constructing a mapping",
+            node.start_mark,
+            "expected a mapping node",
+            node.start_mark,
+        )
     loader.flatten_mapping(node)
     mapping: dict[Any, Any] = {}
     for key_node, value_node in node.value:
@@ -373,7 +380,7 @@ def _validation_checks(
         "Mapping" if metadata_mapping else type(metadata).__name__,
         metadata_mapping,
     )
-    metadata = metadata if metadata_mapping else {}
+    metadata = metadata if isinstance(metadata, dict) else {}
     infra_name = (
         metadata.get("name", {}).get("value")
         if isinstance(metadata.get("name"), dict)
@@ -440,7 +447,7 @@ def _validation_checks(
         "Mapping" if spec_mapping else type(spec).__name__,
         spec_mapping,
     )
-    spec = spec if spec_mapping else {}
+    spec = spec if isinstance(spec, dict) else {}
     inventory = spec.get("inventory")
     inventory_mapping = isinstance(inventory, dict)
     record(
@@ -451,7 +458,7 @@ def _validation_checks(
         "Mapping" if inventory_mapping else type(inventory).__name__,
         inventory_mapping,
     )
-    inventory = inventory if inventory_mapping else {}
+    inventory = inventory if isinstance(inventory, dict) else {}
     clusters = inventory.get("clusters")
     clusters_mapping = isinstance(clusters, dict)
     record(
@@ -462,7 +469,7 @@ def _validation_checks(
         "Mapping" if clusters_mapping else type(clusters).__name__,
         clusters_mapping,
     )
-    clusters = clusters if clusters_mapping else {}
+    clusters = clusters if isinstance(clusters, dict) else {}
     expected_cluster_present = isinstance(infra_name, str) and infra_name in clusters
     record(
         "Inventory",
@@ -499,7 +506,7 @@ def _validation_checks(
         "Mapping" if variables_mapping else type(variables).__name__,
         variables_mapping,
     )
-    variables = variables if variables_mapping else {}
+    variables = variables if isinstance(variables, dict) else {}
     variable_fields = variables.get("fields")
     fields_mapping = isinstance(variable_fields, dict)
     record(
@@ -510,7 +517,7 @@ def _validation_checks(
         "Mapping" if fields_mapping else type(variable_fields).__name__,
         fields_mapping,
     )
-    variable_fields = variable_fields if fields_mapping else {}
+    variable_fields = variable_fields if isinstance(variable_fields, dict) else {}
     values: dict[str, Any] = {}
     for variable_name in REQUIRED_VARIABLE_FIELDS:
         path = f"spec.variables.fields.{variable_name}"
@@ -963,7 +970,7 @@ def validate_environment(document: Any) -> ValidationResult:
         "Mapping" if metadata_mapping else type(metadata).__name__,
         metadata_mapping,
     )
-    metadata = metadata if metadata_mapping else {}
+    metadata = metadata if isinstance(metadata, dict) else {}
     environment_name = _required_source(metadata, "name", "metadata.name", errors)
     record(
         "Metadata",
@@ -986,7 +993,7 @@ def validate_environment(document: Any) -> ValidationResult:
         "Mapping" if spec_mapping else type(spec).__name__,
         spec_mapping,
     )
-    spec = spec if spec_mapping else {}
+    spec = spec if isinstance(spec, dict) else {}
 
     issue = _required_source(spec, "issue", "spec.issue", errors)
     issue_valid = (
@@ -1054,7 +1061,7 @@ def validate_environment(document: Any) -> ValidationResult:
             "Mapping" if workload_mapping else type(workload).__name__,
             workload_mapping,
         )
-        workload = workload if workload_mapping else {}
+        workload = workload if isinstance(workload, dict) else {}
         workload_name = _required_source(
             workload,
             "name",
@@ -1131,7 +1138,7 @@ def validate_environment(document: Any) -> ValidationResult:
         "Mapping" if network_mapping else type(network).__name__,
         network_mapping,
     )
-    network = network if network_mapping else {}
+    network = network if isinstance(network, dict) else {}
     machine_network = _required_source(
         network,
         "machineNetwork",

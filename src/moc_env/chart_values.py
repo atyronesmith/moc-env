@@ -415,8 +415,8 @@ def load_chart_values_manual() -> ManualDocumentation:
     for source_id, source_data in source_document.get("sources", {}).items():
         if not isinstance(source_data, dict):
             raise ValueError(f"source {source_id!r} must be a mapping")
-        topics = source_data.get("topics", [])
-        if not isinstance(topics, list):
+        source_topics = source_data.get("topics", [])
+        if not isinstance(source_topics, list):
             raise ValueError(f"source {source_id!r} topics must be a list")
         sources[source_id] = ManualSource(
             source_id=source_id,
@@ -426,7 +426,7 @@ def load_chart_values_manual() -> ManualDocumentation:
             path=str(source_data.get("path", "")),
             ref=str(source_data.get("ref", "")),
             kind=str(source_data.get("kind", "")),
-            topics=tuple(str(topic) for topic in topics),
+            topics=tuple(str(topic) for topic in source_topics),
             summary=str(source_data.get("summary", "")),
             url=source_data.get("url"),
         )

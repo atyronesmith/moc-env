@@ -26,7 +26,7 @@ endif
 
 RUN_ARGS := status $(ENV) --format $(FORMAT) $(PRS_FLAG) $(ARGS)
 
-.PHONY: help setup completion-init sync test lint coverage list export-infra export-infra-file \
+.PHONY: help setup completion-init sync test lint typecheck coverage list export-infra export-infra-file \
         export-workload export-workload-file validate validate-markdown \
         check-infra check-infra-markdown plan-infra \
         plan-infra-markdown check-workload \
@@ -89,6 +89,9 @@ test: ## Run the unit-test suite
 
 lint: ## Run Ruff checks
 	$(UV) run --locked ruff check src tests tools
+
+typecheck: ## Run mypy over the package
+	$(UV) run --locked mypy
 
 coverage: ## Run the tests under coverage and enforce the baseline threshold
 	$(UV) run --locked coverage run -m unittest discover -s tests
@@ -173,7 +176,7 @@ diff-check: ## Check the Git worktree diff for whitespace errors
 pii-check: ## Check tracked files for personal identifiers
 	$(UV) run --locked python tools/check_pii.py
 
-check: lint coverage compile diff-check pii-check build ## Run lint, tests, coverage, compilation, checks, and build
+check: lint typecheck coverage compile diff-check pii-check build ## Run lint, type checks, tests, coverage, compilation, checks, and build
 
 sample-reports: ## Regenerate deterministic offline sample reports
 	$(UV) run --locked python tools/generate_sample_reports.py

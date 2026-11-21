@@ -15,7 +15,9 @@ dependencies = [
 [dependency-groups]
 dev = [
   "coverage[toml]>=7.6",
+  "mypy>=1.13",
   "ruff>=0.9",
+  "types-PyYAML>=6.0.12",
 ]
 
 [project.scripts]
@@ -47,3 +49,10 @@ source = ["moc_env"]
 fail_under = 84
 show_missing = true
 skip_covered = true
+
+[tool.mypy]
+files = ["src/moc_env"]
+python_version = "3.11"
+check_untyped_defs = true
+warn_redundant_casts = true
+warn_unused_ignores = true

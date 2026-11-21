@@ -117,6 +117,8 @@ def _copy_entry(reference: Entry, check: CheckResult) -> str:
         replacements[old] = value
     if not cert and check.id.endswith("moc_aws_oidc_cluster"):
         old_cluster = _hcl_string(reference.code, "cluster_name")
+        if old_cluster is None:
+            raise CannotSuggest("cluster_name cannot be derived")
         replacements[old_cluster.replace("-", "_")] = cluster.replace("-", "_")
 
     # Reject new/unknown attributes instead of guessing their values. The two
@@ -139,7 +141,11 @@ def _copy_entry(reference: Entry, check: CheckResult) -> str:
             description = _hcl_string(reference.code, field)
             old_cluster = reference.key.removeprefix("cert_manager_policy_").replace("_", "-")
             replacements[old_cluster] = cluster
-            if not description or not any(name in description for name in (old_domain, old_cluster)):
+            if (
+                description is None
+                or old_domain is None
+                or not any(name in description for name in (old_domain, old_cluster))
+            ):
                 raise CannotSuggest(f"{field} cannot be derived")
         elif field in shared and re.fullmatch(shared[field] + r'\s*(?:#.*|//.*)?', rhs):
             pass

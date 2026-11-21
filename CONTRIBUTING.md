@@ -22,6 +22,7 @@ Install the locked development environment and run the checks:
 ```sh
 uv sync --locked
 uv run --locked ruff check src tests tools
+uv run --locked mypy
 make test
 make coverage
 ```
@@ -32,7 +33,7 @@ Before submitting a pull request, run the full gate:
 make check
 ```
 
-That target runs Ruff, the tests under coverage, byte-compilation, the
+That target runs Ruff, mypy, the tests under coverage, byte-compilation, the
 whitespace and personal-identifier checks, and the package build.
 
 To install the optional pre-commit hook:

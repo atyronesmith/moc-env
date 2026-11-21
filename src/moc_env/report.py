@@ -1129,7 +1129,7 @@ def _detail_section(check: dict[str, Any], ascii_mode: bool) -> list[str]:
     rows = field_rows(check)
     field_width = max([len("Field")] + [len(plain(row[0])) for row in rows])
     expected_width = max([len("Expected")] + [len(plain(row[1])) for row in rows])
-    source = next(
+    source: dict[str, Any] = next(
         (
             item for item in check.get("_sources", [])
             if item.get("repository") == check["repository"] and item.get("ref") == check["ref"]
@@ -1600,8 +1600,8 @@ def _check_markdown_details(
         else:
             lines.extend(["None.", ""])
     lines.extend(_host_table(check, evidence))
-    lines.extend(_agent_label_markdown_table(check))
-    lines.extend(_feature_chart_markdown_table(check))
+    lines.extend(_agent_label_markdown_table(check) or [])
+    lines.extend(_feature_chart_markdown_table(check) or [])
     lines.extend(["</details>", ""])
     return lines
 
@@ -2128,12 +2128,14 @@ def build_environment_diff(
         labels_b = {check.get("id"): check.get("check") or check.get("id") for check in checks_b}
         pass_states = {"declared_in_main", "requested", "pr_merged"}
         passing_a = {
-            check.get("id")
-            for check in checks_a if check.get("state") in pass_states
+            str(check.get("id"))
+            for check in checks_a
+            if check.get("id") is not None and check.get("state") in pass_states
         }
         passing_b = {
-            check.get("id")
-            for check in checks_b if check.get("state") in pass_states
+            str(check.get("id"))
+            for check in checks_b
+            if check.get("id") is not None and check.get("state") in pass_states
         }
         files_a = _diff_files(checks_a, report_a["environment"])
         files_b = _diff_files(checks_b, report_b["environment"])

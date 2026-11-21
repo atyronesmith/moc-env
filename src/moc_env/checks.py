@@ -971,12 +971,17 @@ class StatusChecker:
         """Return the repository-status report scoped to the workload cluster."""
 
         if workload is not None:
-            if environment.workload_clusters is None:
+            workload_clusters = environment.workload_clusters
+            if workload_clusters is None:
+                fallback = environment.workload_cluster
+                if fallback is None:
+                    raise ValueError("no workload cluster is declared for this hub")
+                workload_clusters = (fallback,)
                 environment = replace(
                     environment,
-                    workload_clusters=(environment.workload_cluster,),
+                    workload_clusters=workload_clusters,
                 )
-            if workload not in environment.workload_clusters:
+            if workload not in workload_clusters:
                 raise ValueError(f"unknown workload cluster: {workload}")
             environment = replace(environment, workload_clusters=(workload,))
         report = self.run(environment, path_scope="workload")
@@ -1159,6 +1164,8 @@ class StatusChecker:
                 else "workload.boot_image"
             )
             boot_scope = "hub" if is_hub else "workload"
+            boot_present: dict[str, Any]
+            boot_missing: dict[str, Any] | None
             if boot_state == "declared_in_main":
                 boot_reason = (
                     f"The boot image URL is specific to {cluster}."
@@ -1294,6 +1301,8 @@ class StatusChecker:
             )
 
         hub_found = observation.hub_inventory.cluster_key_present.value
+        hub_present: dict[str, Any]
+        hub_missing: dict[str, Any] | None
         if hub_found:
             hub_state = "declared_in_main"
             hub_reason = (
@@ -1837,6 +1846,7 @@ class StatusChecker:
             required_found = [path for path in required_paths if path in tree]
             required_missing = [path for path in required_paths if path not in tree]
             optional_missing = [path for path in optional_paths if path not in tree]
+            missing: dict[str, Any] | None
             if expected_paths:
                 if not required_missing and not optional_missing:
                     state = "declared_in_main"
@@ -1915,7 +1925,7 @@ class StatusChecker:
                 if expected_paths
                 else "At least one matching path"
             )
-            present = {"file_count": len(found)}
+            present: dict[str, Any] = {"file_count": len(found)}
             if state != "declared_in_main" and found:
                 present["paths"] = found
             if missing is not None and missing.get("paths"):
