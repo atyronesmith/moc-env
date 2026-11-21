@@ -11,7 +11,7 @@ from typing import Any, Sequence
 
 import yaml
 
-from . import chart_reference, feature_charts
+from . import chart_overrides, chart_reference, feature_charts
 from .github import GitHubClient, GitHubError
 from .repositories import OAC_APPS_REPOSITORY
 
@@ -24,6 +24,11 @@ FOOTER_PREFIX = (
 )
 FOOTER_SUFFIX = " Declared configuration,\nnot live cluster state."
 UNDEPLOYED_NOTE = "No ApplicationSet or drop-in installs these charts yet."
+OVERRIDES_SCOPE_NOTE = (
+    "This view does not cover: Helm parameters set inside an ApplicationSet, "
+    "defaults that come from a chart dependency, kustomize applications, and "
+    "the hosted-cluster chart."
+)
 
 
 class ChartInventoryError(RuntimeError):
@@ -39,6 +44,8 @@ class ChartCluster:
     environment: str
     rows: tuple[dict[str, Any], ...] = ()
     error: str | None = None
+    override_charts: tuple[dict[str, Any], ...] = ()
+    not_compared: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -657,8 +664,69 @@ def _row(
             f"values/{hub}/local-cluster/{chart}.yaml" in tree
         ),
         "unmet_required_values": [],
-        "component": application_set == "hub-components",
+        "component": application_set != "cluster-apps",
     }
+
+
+def _override_layer_paths(
+    kind: str, hub: str, cluster: str, chart: str
+) -> tuple[str, str]:
+    """Return the two values layers for one cluster, hub layer first."""
+
+    second = "local-cluster" if kind == "hub" else cluster
+    return (
+        f"values/{hub}/{chart}.yaml",
+        f"values/{hub}/{second}/{chart}.yaml",
+    )
+
+
+def _cluster_overrides(
+    tree: dict[str, Any],
+    hub: str,
+    kind: str,
+    cluster: str,
+    rows: Sequence[dict[str, Any]],
+    read: feature_charts.TextReader,
+    selected: Sequence[str] = (),
+) -> tuple[tuple[dict[str, Any], ...], tuple[str, ...]]:
+    """Build per-chart override entries and the names left uncompared."""
+
+    wanted = set(selected)
+    entries: list[dict[str, Any]] = []
+    not_compared: list[str] = []
+    seen: set[str] = set()
+    for row in rows:
+        chart = str(row.get("chart") or "")
+        if not chart or chart in seen or (wanted and chart not in wanted):
+            continue
+        seen.add(chart)
+        if not row.get("component"):
+            not_compared.append(chart)
+            continue
+        defaults = feature_charts.read_values_file(
+            tree, f"charts/{chart}/values.yaml", read
+        )
+        layers = [
+            (path, feature_charts.read_values_file(tree, path, read))
+            for path in _override_layer_paths(kind, hub, cluster, chart)
+            if path in tree
+        ]
+        compared = chart_overrides.override_rows(defaults, layers)
+        entries.append(
+            {
+                "chart": chart,
+                "files": [path for path, _values in layers],
+                "overrides": [
+                    item for item in compared if item["status"] != chart_overrides.RESTATED
+                ],
+                "restated": sum(
+                    1
+                    for item in compared
+                    if item["status"] == chart_overrides.RESTATED
+                ),
+            }
+        )
+    return tuple(entries), tuple(not_compared)
 
 
 def _workload_labels(
@@ -771,6 +839,8 @@ def collect_chart_inventory(
     workload: str | None = None,
     progress: Any = None,
     include_reference: bool = False,
+    include_overrides: bool = False,
+    charts: Sequence[str] = (),
     deployment_patterns: Sequence[str] = (),
     all_clusters: bool = False,
 ) -> ChartInventory:
@@ -808,12 +878,21 @@ def collect_chart_inventory(
     clusters: list[ChartCluster] = []
     for hub in hubs:
         if workload is None:
+            hub_rows = tuple(_hub_rows(tree, hub, hub_chart_lists))
+            override_charts: tuple[dict[str, Any], ...] = ()
+            not_compared: tuple[str, ...] = ()
+            if include_overrides:
+                override_charts, not_compared = _cluster_overrides(
+                    tree, hub, "hub", hub, hub_rows, read, charts
+                )
             clusters.append(
                 ChartCluster(
                     name=hub,
                     kind="hub",
                     environment=environment_name(hub),
-                    rows=tuple(_hub_rows(tree, hub, hub_chart_lists)),
+                    rows=hub_rows,
+                    override_charts=override_charts,
+                    not_compared=not_compared,
                 )
             )
         placements, placement_error = feature_charts.load_placements(
@@ -844,6 +923,12 @@ def collect_chart_inventory(
                         application_sets,
                         read,
                     )
+            override_charts = ()
+            not_compared = ()
+            if include_overrides:
+                override_charts, not_compared = _cluster_overrides(
+                    tree, hub, "workload", name, rows, read, charts
+                )
             clusters.append(
                 ChartCluster(
                     name=name,
@@ -851,6 +936,8 @@ def collect_chart_inventory(
                     environment=environment_name(hub),
                     rows=tuple(rows),
                     error=error,
+                    override_charts=override_charts,
+                    not_compared=not_compared,
                 )
             )
 
@@ -957,6 +1044,165 @@ def _render_cluster_text(inventory: ChartInventory) -> str:
     if scope_note:
         lines.append(scope_note)
     return "\n".join(lines) + "\n"
+
+
+_OVERRIDE_COLUMNS = ("Key", "Status", "Default", "Value", "Set in")
+
+
+def _override_values(row: dict[str, Any]) -> list[str]:
+    default = row.get("default")
+    return [
+        str(row["key"]),
+        str(row["status"]),
+        "-" if "default" not in row else chart_reference.truncated_default(default),
+        chart_reference.truncated_default(row["value"]),
+        str(row.get("source") or "-"),
+    ]
+
+
+def _override_text_table(rows: Sequence[dict[str, Any]]) -> list[str]:
+    rendered = [_override_values(row) for row in rows]
+    widths = [
+        max([len(_OVERRIDE_COLUMNS[index]), *(len(row[index]) for row in rendered)])
+        for index in range(len(_OVERRIDE_COLUMNS))
+    ]
+    lines = [
+        "    "
+        + "  ".join(
+            header.ljust(widths[index])
+            for index, header in enumerate(_OVERRIDE_COLUMNS)
+        )
+    ]
+    lines.extend(
+        "    "
+        + "  ".join(value.ljust(widths[index]) for index, value in enumerate(row))
+        for row in rendered
+    )
+    return [line.rstrip() for line in lines]
+
+
+def _cluster_override_summary(cluster: ChartCluster) -> list[str]:
+    no_overrides = [
+        str(entry["chart"]) for entry in cluster.override_charts if not entry["overrides"]
+    ]
+    restated = sum(int(entry["restated"]) for entry in cluster.override_charts)
+    return [
+        "  Charts with no overrides: " + (", ".join(no_overrides) or "(none)"),
+        f"  Restated values not shown: {restated}",
+        "  Not compared: " + (", ".join(cluster.not_compared) or "(none)"),
+    ]
+
+
+def _render_overrides_text(inventory: ChartInventory) -> str:
+    lines: list[str] = []
+    for cluster in inventory.clusters:
+        lines.append(f"{cluster.name} · {cluster.kind}")
+        if cluster.error:
+            lines.append(f"  Error: {cluster.error}")
+            lines.append("")
+            continue
+        for entry in cluster.override_charts:
+            if not entry["overrides"]:
+                continue
+            lines.append(f"  Chart: {entry['chart']}")
+            lines.extend(_override_text_table(entry["overrides"]))
+        lines.extend(_cluster_override_summary(cluster))
+        lines.append("")
+    if inventory.unrecognized:
+        lines.append(_unrecognized_line(inventory))
+        lines.append("")
+    lines.append(footer(inventory.ref, inventory.sha))
+    scope_note = _scope_note(inventory)
+    if scope_note:
+        lines.append(scope_note)
+    lines.append(OVERRIDES_SCOPE_NOTE)
+    return "\n".join(lines) + "\n"
+
+
+def _render_overrides_markdown(inventory: ChartInventory) -> str:
+    lines: list[str] = []
+    for cluster in inventory.clusters:
+        lines.append(f"## {cluster.name} ({cluster.kind})")
+        lines.append("")
+        if cluster.error:
+            lines.append(f"Error: {cluster.error}")
+            lines.append("")
+            continue
+        for entry in cluster.override_charts:
+            if not entry["overrides"]:
+                continue
+            lines.append(f"### {entry['chart']}")
+            lines.append("")
+            lines.extend(
+                _markdown_table(
+                    list(_OVERRIDE_COLUMNS),
+                    [_override_values(row) for row in entry["overrides"]],
+                )
+            )
+            lines.append("")
+        no_overrides = [
+            str(entry["chart"])
+            for entry in cluster.override_charts
+            if not entry["overrides"]
+        ]
+        restated = sum(int(entry["restated"]) for entry in cluster.override_charts)
+        lines.append(
+            "Charts with no overrides: " + (", ".join(no_overrides) or "(none)")
+        )
+        lines.append("")
+        lines.append(f"Restated values not shown: {restated}")
+        lines.append("")
+        lines.append("Not compared: " + (", ".join(cluster.not_compared) or "(none)"))
+        lines.append("")
+    if inventory.unrecognized:
+        lines.append(_unrecognized_line(inventory))
+        lines.append("")
+    lines.append(footer(inventory.ref, inventory.sha))
+    scope_note = _scope_note(inventory)
+    if scope_note:
+        lines.append(scope_note)
+    lines.append(OVERRIDES_SCOPE_NOTE)
+    return "\n".join(lines) + "\n"
+
+
+def _render_overrides_json(inventory: ChartInventory) -> str:
+    clusters: dict[str, Any] = {}
+    for cluster in inventory.clusters:
+        entry: dict[str, Any] = {
+            "type": cluster.kind,
+            "environment": cluster.environment,
+            "charts": {
+                item["chart"]: {
+                    "files": list(item["files"]),
+                    "overrides": [dict(row) for row in item["overrides"]],
+                    "restated": item["restated"],
+                }
+                for item in cluster.override_charts
+            },
+            "not_compared": list(cluster.not_compared),
+        }
+        if cluster.error:
+            entry["error"] = cluster.error
+        clusters[cluster.name] = entry
+    document = {
+        "repository": OAC_APPS_REPOSITORY,
+        "ref": inventory.ref,
+        "sha": inventory.sha,
+        "short_sha": inventory.sha[:7],
+        "view": "overrides",
+        "clusters": clusters,
+        "undeployed_charts": [dict(row) for row in inventory.undeployed_charts],
+        "library_charts": list(inventory.library_charts),
+        "unrecognized": list(inventory.unrecognized),
+        "scope": {
+            "mode": inventory.scope,
+            "hidden_test_clusters": list(inventory.hidden_clusters),
+            "test_clusters": list(inventory.test_clusters),
+        },
+        "footer": footer(inventory.ref, inventory.sha),
+        "scope_note": OVERRIDES_SCOPE_NOTE,
+    }
+    return json.dumps(document, indent=2) + "\n"
 
 
 def _feature_column(row: dict[str, Any]) -> str:
@@ -1444,6 +1690,12 @@ def render_chart_inventory(
             selected=charts,
             command=command,
         )
+    if view == "overrides":
+        if format == "json":
+            return _render_overrides_json(inventory)
+        if format == "markdown":
+            return _render_overrides_markdown(inventory)
+        return _render_overrides_text(inventory)
     if format == "json":
         clusters: dict[str, Any] = {}
         for cluster in inventory.clusters:

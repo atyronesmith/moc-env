@@ -165,16 +165,16 @@ def _configure_charts(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--view",
-        choices=("summary", "cluster", "reference"),
+        choices=("summary", "cluster", "reference", "overrides"),
         default="summary",
-        help="Feature summary tables, one section per cluster, or the chart reference (default: summary)",
+        help="Feature summary tables, one section per cluster, the chart reference, or per-cluster value overrides (default: summary)",
     )
     parser.add_argument(
         "--chart",
         action="append",
         default=[],
         metavar="NAME",
-        help="Limit the reference chart section to the named chart; repeatable",
+        help="Limit the reference and overrides views to the named chart; repeatable",
     )
     add_format_argument(parser, ("text", "markdown", "json"))
     parser.add_argument(
@@ -545,6 +545,8 @@ def _charts_handler(
             workload=args.workload,
             progress=ProgressReporter(),
             include_reference=args.view == "reference",
+            include_overrides=args.view == "overrides",
+            charts=args.chart,
             deployment_patterns=registry.deployment_hub_patterns,
             all_clusters=args.all_clusters,
         )
