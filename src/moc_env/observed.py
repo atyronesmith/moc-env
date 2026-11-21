@@ -349,8 +349,11 @@ class ObservedEnvironment:
     def workload_cluster(self) -> ObservedWorkloadCluster:
         if not self.environment.workload_clusters:
             raise ValueError("no workload cluster is declared for this hub")
+        workload_cluster = self.environment.workload_cluster
+        if workload_cluster is None:
+            raise ValueError("no workload cluster is declared for this hub")
         return ObservedWorkloadCluster(
-            inventory=self.infra.clusters[self.environment.workload_cluster],
+            inventory=self.infra.clusters[workload_cluster],
             apps=self.apps,
         )
 
@@ -440,8 +443,10 @@ def read_infra_observation(
             and cluster != environment.infra_cluster
         )
     )
+    workload_clusters: tuple[str, ...]
     if environment.workload_clusters is None:
-        workload_clusters = discovered_workloads or (environment.workload_cluster,)
+        fallback = environment.workload_cluster
+        workload_clusters = discovered_workloads or ((fallback,) if fallback else ())
     else:
         workload_clusters = environment.workload_clusters
     cluster_observations: dict[str, ClusterInventoryObservation] = {}
@@ -837,6 +842,7 @@ def read_apps_observation(
                     )
                     if not infra_paths:
                         continue
+                    cluster_names: tuple[str, ...]
                     if path_scope == "hub":
                         cluster_names = (hub,)
                     elif path_scope == "workload":

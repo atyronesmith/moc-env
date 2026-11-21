@@ -475,36 +475,36 @@ def _collect_chart_reference(
         placements, _error = feature_charts.load_placements(
             placement_paths.get(hub, {}), read
         )
-        for placement in placements:
+        for placement in placements or ():
             placements_by_name.setdefault(placement.name, placement)
 
     hub_always = tuple(
         sorted(
             {
                 chart
-                for item in hub_chart_lists
-                if item.gate_path is None
-                for chart in item.components
+                for entry in hub_chart_lists
+                if entry.gate_path is None
+                for chart in entry.components
             }
         )
     )
     hub_gated = tuple(
         chart_reference.ChartList(
-            name=item.name,
-            charts=tuple(sorted(set(item.components))),
-            detail=feature_charts.gated_path_for_hub(item.gate_path, "<hub>"),
+            name=entry.name,
+            charts=tuple(sorted(set(entry.components))),
+            detail=feature_charts.gated_path_for_hub(entry.gate_path, "<hub>"),
         )
-        for item in hub_chart_lists
-        if item.gate_path is not None
+        for entry in hub_chart_lists
+        if entry.gate_path is not None
     )
     drop_ins = _drop_in_names(tree)
 
     workload_creators: list[chart_reference.ChartList] = []
-    for item in sorted(literal_lists, key=lambda value: value["chart"]):
-        detail = f"ApplicationSet {item['application_set']}"
-        if item["gate_path"]:
+    for literal in sorted(literal_lists, key=lambda value: value["chart"]):
+        detail = f"ApplicationSet {literal['application_set']}"
+        if literal["gate_path"]:
             marker = feature_charts.gated_path_for_hub(
-                item["gate_path"], "<hub>"
+                literal["gate_path"], "<hub>"
             )
             detail += (
                 "; applies on compliant hubs (marker "
@@ -512,7 +512,9 @@ def _collect_chart_reference(
             )
         workload_creators.append(
             chart_reference.ChartList(
-                name=item["chart"], charts=(item["chart"],), detail=detail
+                name=literal["chart"],
+                charts=(literal["chart"],),
+                detail=detail,
             )
         )
 
@@ -568,15 +570,15 @@ def _collect_chart_reference(
                 labels.append(label)
 
     add_usage(hub_always, "Hub cluster: Charts every hub receives")
-    for item in hub_gated:
+    for gated in hub_gated:
         add_usage(
-            item.charts,
+            gated.charts,
             "Hub cluster: Charts compliant hubs also receive"
-            f" ({item.name})",
+            f" ({gated.name})",
         )
     add_usage(drop_ins, "Hub cluster: Per-hub drop-ins")
     add_usage(
-        (item.name for item in workload_creators),
+        (creator.name for creator in workload_creators),
         "Workload cluster: Charts that create the cluster",
     )
     add_usage(baseline_charts, "Workload cluster: Baseline")
@@ -597,7 +599,7 @@ def _collect_chart_reference(
     )
     excluded = {row["chart"] for row in undeployed_charts}
     excluded.update(library_charts)
-    charts = tuple(
+    chart_entries = tuple(
         _chart_entry(
             tree, read, chart, tuple(used_by.get(chart, ()))
         )
@@ -614,7 +616,7 @@ def _collect_chart_reference(
         workload_creators=tuple(workload_creators),
         workload_baseline=baseline_charts,
         workload_features=tuple(features),
-        charts=charts,
+        charts=chart_entries,
         undeployed_count=len(undeployed_charts),
         library_count=len(library_charts),
     )
@@ -915,12 +917,12 @@ def _summary_tables(inventory: ChartInventory) -> list[SummaryTable]:
     membership: dict[str, set[str]] = {}
     charts_by_column: dict[str, set[str]] = {}
     for cluster in workloads:
-        columns: set[str] = set()
+        cluster_columns: set[str] = set()
         for row in cluster.rows:
             column = _feature_column(row)
-            columns.add(column)
+            cluster_columns.add(column)
             charts_by_column.setdefault(column, set()).add(str(row["chart"]))
-        membership[cluster.name] = columns
+        membership[cluster.name] = cluster_columns
     has_workloads = bool(workloads)
     features = sorted(
         column for column in charts_by_column if column != "baseline"
@@ -1104,8 +1106,8 @@ def _summary_text_table(table: SummaryTable) -> list[str]:
     ]
     wrapped = list_columns[-1] if list_columns else None
     if wrapped is not None and wrapped == len(headers) - 1:
-        prefix = 2 + sum(widths[index] + 2 for index in range(wrapped))
-        widths[wrapped] = min(widths[wrapped], max(20, 110 - prefix))
+        wrap_prefix_width = 2 + sum(widths[index] + 2 for index in range(wrapped))
+        widths[wrapped] = min(widths[wrapped], max(20, 110 - wrap_prefix_width))
     lines = [
         "  "
         + "  ".join(

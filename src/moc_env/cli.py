@@ -357,6 +357,8 @@ def _export_environment_handler(args: argparse.Namespace, registry: EnvironmentR
     environment = Environment(name=args.environment, issue_number=issue_number)
     def render(client: GitHubClient, progress: ProgressReporter) -> str:
         issue = read_issue_observation(client, environment, progress=progress)
+        if issue is None:
+            raise GitHubError("MOC issue observation is unavailable")
         infra = read_infra_observation(client, environment, progress=progress)
         apps = read_apps_observation(client, environment, progress=progress, include_pull_requests=False)
         return render_environment_export(environment, issue, infra, apps)
@@ -469,6 +471,8 @@ def _check_environment_handler(args: argparse.Namespace, **_context: Any) -> int
     progress = ProgressReporter()
     try:
         issue = read_issue_observation(client, environment, progress=progress)
+        if issue is None:
+            raise GitHubError("MOC issue observation is unavailable")
         infra = read_infra_observation(client, environment, progress=progress)
         apps = read_apps_observation(client, environment, progress=progress, include_pull_requests=not args.no_prs)
         comparison = compare_environment(document, environment, issue, infra, apps)

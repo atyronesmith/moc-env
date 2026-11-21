@@ -110,15 +110,16 @@ def _apps_source(
 def workload_cluster_name(environment: Environment, workload: str) -> str:
     """Resolve a full or shortened workload name for the current model."""
 
-    if workload == environment.workload_cluster:
+    workload_cluster = environment.workload_cluster
+    if workload_cluster is None:
+        raise ValueError("no workload cluster is declared for this environment")
+    if workload == workload_cluster:
         return workload
-    if workload == environment.workload_cluster.removeprefix(
-        f"{environment.base_name}-"
-    ):
-        return environment.workload_cluster
+    if workload == workload_cluster.removeprefix(f"{environment.base_name}-"):
+        return workload_cluster
     raise ValueError(
-        f"workload must be {environment.workload_cluster} or "
-        f"{environment.workload_cluster.removeprefix(f'{environment.base_name}-')}"
+        f"workload must be {workload_cluster} or "
+        f"{workload_cluster.removeprefix(f'{environment.base_name}-')}"
     )
 
 
@@ -428,7 +429,10 @@ def build_infra_export(
     """Build a deterministic draft InfraCluster snapshot."""
 
     infra_cluster = observation.clusters[environment.infra_cluster]
-    workload_cluster = observation.clusters[environment.workload_cluster]
+    workload_name = environment.workload_cluster
+    if workload_name is None:
+        raise ValueError("no workload cluster is declared for this environment")
+    workload_cluster = observation.clusters[workload_name]
     variables = observation.hub_variables.values
     domain = None
     domain_confidence = "unsupported"

@@ -169,7 +169,7 @@ class GitHubClient:
         else:
             data = self.get_json(f"/repos/{repository}/commits/{quote(ref, safe='/')}")
             sha = data.get("sha") if isinstance(data, dict) else None
-            if not self._is_commit_sha(sha):
+            if not isinstance(sha, str) or not self._is_commit_sha(sha):
                 raise GitHubError(f"GitHub did not resolve a commit SHA for {repository}@{ref}")
         self.record_source(repository, ref, sha)
         return sha
@@ -420,7 +420,7 @@ class GitHubClient:
         if params:
             query = "&".join(f"{key}={value}" for key, value in params.items())
             query = "?" + query
-        url = self.base_url + path + query
+        url: str | None = self.base_url + path + query
 
         while url:
             data, headers = self._get_response(url)

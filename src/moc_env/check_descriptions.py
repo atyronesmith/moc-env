@@ -13,6 +13,7 @@ so the rendered text names the real paths instead of placeholders.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -526,7 +527,7 @@ def _context_for(check, context: DescriptionContext) -> DescriptionContext:
 
     expected = check.expected if isinstance(check.expected, dict) else {}
     evidence = getattr(check, "evidence", None) or {}
-    updates: dict[str, object] = {
+    updates: dict[str, Any] = {
         "workload": check.cluster or context.workload,
         "ref": getattr(check, "ref", None) or context.ref,
     }

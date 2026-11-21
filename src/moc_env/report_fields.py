@@ -218,8 +218,11 @@ def field_rows(check: dict[str, Any]) -> list[list[Any]]:
         return rows
     paths = evidence.get("expected_paths")
     if isinstance(paths, list) and paths:
-        found = set(evidence.get("paths") or [])
-        return [[path, "present", "present" if path in found else "missing"] for path in paths]
+        present_paths = set(evidence.get("paths") or [])
+        return [
+            [path, "present", "present" if path in present_paths else "missing"]
+            for path in paths
+        ]
     if check_id == "workload.agent_labels_inputs":
         return [
             [f"{host.get('host')}.{key}",

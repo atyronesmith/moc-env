@@ -140,6 +140,6 @@ Markdown: moc-env status bu-ist-demo --format markdown --output report.md
 - [Contributing](CONTRIBUTING.md) — local checks, pull-request expectations, and commit conventions.
 - [Security policy](SECURITY.md) — private vulnerability reporting and credential-handling guidance.
 
-Developers can run the full lint, coverage, test, and packaging gate with
+Developers can run the full lint, type-check, coverage, test, and packaging gate with
 `make check`, and regenerate the offline sample reports with
 `make sample-reports`.

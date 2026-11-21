@@ -304,7 +304,7 @@ def _moc_aws_checks(
             )
         ]
         if not cert_matches:
-            expected_policy = {"cluster": cluster}
+            expected_policy: dict[str, Any] = {"cluster": cluster}
             if scope == "workload":
                 domain = (hub_values_file or {}).get("hcpExternalDomain")
                 expected_policy.update({
@@ -341,7 +341,7 @@ def _dns_records_check(
     api_ip, ingress_ip = hub_values.get("api_ip"), hub_values.get("ingress_ip")
     if not all(isinstance(part, str) and part for part in (*domain_parts, api_ip, ingress_ip)):
         return _unknown("hub.moc_dns_records", "hub", environment.infra_cluster, MOC_DNS_REPOSITORY, "zonefiles/", "Hub-image variables required for DNS validation are unavailable.", {"api": api_ip, "api-int": api_ip, "*.apps": ingress_ip})
-    domain = ".".join(domain_parts)
+    domain = ".".join(str(part) for part in domain_parts)
     _progress(progress, "read DNS zonefiles", MOC_DNS_REPOSITORY, "zonefiles/")
     try:
         tree = client.get_tree(MOC_DNS_REPOSITORY)
@@ -639,7 +639,7 @@ def _identity_provider_check(
     )
 
 
-def _address_in(value: Any, network: str) -> bool:
+def _address_in(value: Any, network: Any) -> bool:
     try:
         address = (
             ipaddress.ip_interface(value).ip
@@ -1061,7 +1061,15 @@ def _workload_value_checks(
         values, values_error = _workload_values(apps, environment, workload)
         if values is None:
             results.extend([
-                _unknown(check_id, "workload", workload, "CCI-MOC/oac-apps", path, values_error, {})
+                _unknown(
+                    check_id,
+                    "workload",
+                    workload,
+                    "CCI-MOC/oac-apps",
+                    path,
+                    values_error or "Workload values are unavailable.",
+                    {},
+                )
                 for check_id in (
                     "workload.api_address_network", "workload.ingress_address_network",
                     "workload.dns_base_domain", "workload.node_pool_hosts",
@@ -1128,7 +1136,7 @@ def _workload_value_checks(
         cluster_observation = infra.clusters.get(workload)
         hosts = cluster_observation.hosts.value if cluster_observation else []
         pools = values.get("nodePools") or []
-        pool_results = []
+        pool_results: list[dict[str, Any]] = []
         for pool_item in pools:
             if not isinstance(pool_item, dict):
                 continue
@@ -1404,7 +1412,7 @@ def _workload_value_checks(
             "services.APIServer.externalIpAddress",
             "ingress.externalIpAddress",
         }
-        duplicates = {
+        internal_duplicates = {
             address: fields
             for address, fields in groups.items()
             if len(fields) > 1 and set(fields) != allowed_external_share
@@ -1421,24 +1429,24 @@ def _workload_value_checks(
                 "address": str(address),
                 "duplicate_fields": (
                     [other for other in groups[_address_key(address)] if other != field]
-                    if _address_key(address) in duplicates
+                    if _address_key(address) in internal_duplicates
                     else []
                 ),
             }
             for field, address in own_fields.items()
             if address is not None
         ]
-        expected = f"No address is used by more than one field of {workload}."
-        if not duplicates:
-            reason = expected
+        expected_reason = f"No address is used by more than one field of {workload}."
+        if not internal_duplicates:
+            reason = expected_reason
             if allowed_pairs:
-                address, fields = next(iter(allowed_pairs.items()))
-                expected = (
+                address, shared_fields = next(iter(allowed_pairs.items()))
+                expected_reason = (
                     f"No other address is used by more than one field of {workload}."
                 )
                 reason = (
-                    f"{address} is shared by {fields[0]} and {fields[1]}, "
-                    f"which is allowed. {expected}"
+                    f"{address} is shared by {shared_fields[0]} and "
+                    f"{shared_fields[1]}, which is allowed. {expected_reason}"
                 )
             results.append(
                 _result(
@@ -1449,7 +1457,7 @@ def _workload_value_checks(
                     path,
                     "declared_in_main",
                     "info",
-                    expected,
+                    expected_reason,
                     {"duplicates": {}},
                     reason,
                     evidence={"address_rows": rows},
@@ -1458,14 +1466,15 @@ def _workload_value_checks(
             continue
         reasons = []
         actions = []
-        for address, fields in duplicates.items():
+        for address, shared_fields in internal_duplicates.items():
             used = (
-                f"{fields[0]} and {fields[1]}"
-                if len(fields) == 2
-                else ", ".join(fields[:-1]) + f" and {fields[-1]}"
+                f"{shared_fields[0]} and {shared_fields[1]}"
+                if len(shared_fields) == 2
+                else ", ".join(shared_fields[:-1]) + f" and {shared_fields[-1]}"
             )
             reasons.append(
-                f"{address} is used by {'both ' if len(fields) == 2 else ''}{used}; "
+                f"{address} is used by "
+                f"{'both ' if len(shared_fields) == 2 else ''}{used}; "
                 "possible error unless the address is shared on purpose."
             )
             actions.append(
