@@ -664,7 +664,7 @@ def _row(
             f"values/{hub}/local-cluster/{chart}.yaml" in tree
         ),
         "unmet_required_values": [],
-        "component": application_set != "cluster-apps",
+        "component": application_set == "hub-components",
     }
 
 
@@ -691,6 +691,14 @@ def _cluster_overrides(
 ) -> tuple[tuple[dict[str, Any], ...], tuple[str, ...]]:
     """Build per-chart override entries and the names left uncompared."""
 
+    def is_component(row: dict[str, Any]) -> bool:
+        if row.get("component"):
+            return True
+        # ``_row`` names only the base hub-components list in its legacy
+        # component flag.  Gated hub component lists still install component
+        # charts, while cluster-apps rows are per-hub drop-ins.
+        return kind == "hub" and row.get("application_set") != "cluster-apps"
+
     wanted = set(selected)
     entries: list[dict[str, Any]] = []
     not_compared: list[str] = []
@@ -700,7 +708,7 @@ def _cluster_overrides(
         if not chart or chart in seen or (wanted and chart not in wanted):
             continue
         seen.add(chart)
-        if not row.get("component"):
+        if not is_component(row):
             not_compared.append(chart)
             continue
         defaults = feature_charts.read_values_file(

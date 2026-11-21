@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 from fakes import FakeGitHubClient
 from moc_env import chart_overrides, cli
+from moc_env.charts import _cluster_overrides
 
 DEFAULTS = {
     "replicas": 1,
@@ -217,6 +218,27 @@ class OverrideRowsTest(unittest.TestCase):
                 }
             ],
         )
+
+    def test_gated_hub_components_are_compared_but_drop_ins_are_not(self) -> None:
+        rows = [
+            {
+                "chart": "gated-chart",
+                "component": False,
+                "application_set": "hub-components-compliance",
+            },
+            {
+                "chart": "drop-in",
+                "component": False,
+                "application_set": "cluster-apps",
+            },
+        ]
+
+        entries, not_compared = _cluster_overrides(
+            {}, "hub", "hub", "hub", rows, lambda path: (None, None)
+        )
+
+        self.assertEqual([entry["chart"] for entry in entries], ["gated-chart"])
+        self.assertEqual(not_compared, ("drop-in",))
 
 
 class OverridesCommandTest(unittest.TestCase):
