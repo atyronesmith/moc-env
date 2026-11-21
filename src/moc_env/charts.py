@@ -23,10 +23,7 @@ FOOTER_PREFIX = (
     "each workload cluster on the hub, and kustomize overlays.\n"
 )
 FOOTER_SUFFIX = " Declared configuration,\nnot live cluster state."
-UNDEPLOYED_NOTE = (
-    "These charts are not installed by any ApplicationSet or drop-in. Some\n"
-    "may be applied by hand."
-)
+UNDEPLOYED_NOTE = "No ApplicationSet or drop-in installs these charts yet."
 
 
 class ChartInventoryError(RuntimeError):
