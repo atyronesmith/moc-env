@@ -176,6 +176,22 @@ class InternalDuplicateCheckTest(unittest.TestCase):
         self.assertIn("services.APIServer.ipAddress", check["reason"])
         self.assertIn("services.APIServer.externalIpAddress", check["reason"])
         self.assertIn("ingress.externalIpAddress", check["reason"])
+        self.assertEqual(
+            check["expected"],
+            f"No address is used by more than one field of {WORKLOAD0}.",
+        )
+        self.assertEqual(
+            check["actual"],
+            {
+                "duplicates": {
+                    "129.10.5.104": [
+                        "services.APIServer.ipAddress",
+                        "services.APIServer.externalIpAddress",
+                        "ingress.externalIpAddress",
+                    ]
+                }
+            },
+        )
 
     def test_cidr_and_bare_ip_are_equal(self) -> None:
         report = report_for(CidrDuplicateFixture())
@@ -183,6 +199,21 @@ class InternalDuplicateCheckTest(unittest.TestCase):
         self.assertEqual(check["state"], "value_mismatch")
         self.assertEqual(check["severity"], "advisory")
         self.assertIn("10.0.0.5", check["reason"])
+        self.assertEqual(
+            check["expected"],
+            f"No address is used by more than one field of {WORKLOAD0}.",
+        )
+        self.assertEqual(
+            check["actual"],
+            {
+                "duplicates": {
+                    "10.0.0.5": [
+                        "services.APIServer.ipAddress",
+                        "ingress.poolAddress",
+                    ]
+                }
+            },
+        )
 
     def test_four_distinct_addresses_pass_with_four_rows(self) -> None:
         report = report_for(DistinctFixture())
