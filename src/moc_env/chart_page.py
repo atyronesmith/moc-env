@@ -7,18 +7,17 @@ only controls document structure, Markdown escaping, and anchor links.
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 from typing import Iterable, Sequence
 from urllib.parse import quote
 
 from . import chart_reference
 from .charts import (
-    OVERRIDES_SCOPE_NOTE,
     UNDEPLOYED_NOTE,
     ChartCluster,
     ChartInventory,
     ChartInventoryError,
     _markdown_table,
-    _scope_note,
     _summary_cell,
     _summary_tables,
 )
@@ -41,6 +40,11 @@ _VALUES_PARAGRAPH = (
     "the order the manifest lists them, so later files win."
 )
 _CLUSTER_COLUMNS = ("Chart", "Key", "Status", "Default", "Value", "Set in")
+_COVERAGE_NOTE = (
+    "This page does not cover: Helm parameters set inside an ApplicationSet, "
+    "defaults that come from a chart dependency, kustomize applications, and "
+    "the values of the hosted-cluster chart."
+)
 
 _HEADING = re.compile(r"^(#{1,6}) +(.+?)\s*$")
 _SAFE_URL_CHARACTERS = "!'()*-._~"
@@ -92,7 +96,8 @@ def _summary_section(inventory: ChartInventory, rendered: set[str]) -> list[str]
                         _chart_cell(name, rendered)
                         for name in value
                     )
-                    if table.name == "Workload features" and index == 1
+                    if table.name in {"Workload features", "Hub groups"}
+                    and index == 1
                     else _summary_cell(value)
                 )
                 for index, value in enumerate(row)
@@ -112,6 +117,19 @@ def _summary_section(inventory: ChartInventory, rendered: set[str]) -> list[str]
             )
         )
         lines.append("")
+        if table.name == "Charts not deployed by GitOps":
+            lines.extend(
+                [
+                    UNDEPLOYED_NOTE,
+                    "",
+                    "Library charts (dependencies only): "
+                    + (
+                        ", ".join(_cell(name) for name in inventory.library_charts)
+                        or "(none)"
+                    ),
+                    "",
+                ]
+            )
     return lines
 
 
@@ -192,6 +210,50 @@ def _values_section(inventory: ChartInventory, rendered: set[str]) -> list[str]:
     return lines
 
 
+def _page_chart_entries(
+    inventory: ChartInventory,
+    reference: chart_reference.ChartReference,
+) -> tuple[chart_reference.ChartEntry, ...]:
+    """Give reference entries page-local usage labels without mutating them."""
+
+    names = {
+        table.name: {str(row[0]) for row in table.rows}
+        for table in _summary_tables(inventory)
+        if table.name in {"Hub groups", "Workload features"}
+    }
+    uses: dict[str, list[str]] = {}
+
+    def add(charts: Iterable[str], label: str) -> None:
+        for chart in charts:
+            labels = uses.setdefault(chart, [])
+            if label not in labels:
+                labels.append(label)
+
+    def group(charts: Iterable[str], kind: str, name: str) -> None:
+        table = "Hub groups" if kind == "Hub group" else "Workload features"
+        label = f"{kind}: {name}"
+        if name not in names.get(table, set()):
+            label += " (no cluster on this page uses it)"
+        add(charts, label)
+
+    group(reference.hub_always, "Hub group", "hub charts")
+    for gated in reference.hub_gated:
+        group(gated.charts, "Hub group", gated.name)
+    for drop_in in reference.hub_drop_ins:
+        group((drop_in,), "Hub group", drop_in)
+    add(
+        (chart for creator in reference.workload_creators for chart in creator.charts),
+        "Hub, once for each workload cluster",
+    )
+    group(reference.workload_baseline, "Workload feature", "baseline")
+    for feature in reference.workload_features:
+        group(feature.charts, "Workload feature", feature.name)
+    return tuple(
+        replace(entry, used_by=tuple(uses.get(entry.name, ())))
+        for entry in reference.charts
+    )
+
+
 def _reference_section(inventory: ChartInventory) -> list[str]:
     reference = inventory.reference
     if reference is None:
@@ -208,27 +270,30 @@ def _reference_section(inventory: ChartInventory) -> list[str]:
     lines.extend(["", chart_reference._CHART_REFERENCE_NOTE, ""])
     lines.extend(
         chart_reference.chart_entries_markdown(
-            reference.charts, escape_addresses=True
+            _page_chart_entries(inventory, reference), escape_addresses=True
         )
     )
     return lines
 
 
 def _coverage_section(inventory: ChartInventory) -> list[str]:
-    lines = ["## What this page does not cover", "", OVERRIDES_SCOPE_NOTE, ""]
-    scope_note = _scope_note(inventory) if inventory.hidden_clusters else None
-    if scope_note:
-        lines.extend([scope_note, ""])
+    lines = ["## What this page does not cover", "", _COVERAGE_NOTE, ""]
+    if inventory.hidden_clusters:
+        lines.extend(
+            [
+                "Test clusters are not shown: "
+                + ", ".join(_cell(name) for name in inventory.hidden_clusters)
+                + ".",
+                "",
+            ]
+        )
     undeployed = len(inventory.undeployed_charts)
     library = len(inventory.library_charts)
-    lines.extend(
-        [
-            UNDEPLOYED_NOTE,
-            "",
-            f"{undeployed} undeployed and {library} library charts are not "
-            "shown.",
-        ]
-    )
+    if undeployed or library:
+        lines.append(
+            f"Charts that no cluster receives ({undeployed} not deployed, "
+            f"{library} library) have no entry under Chart values reference."
+        )
     return lines
 
 
