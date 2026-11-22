@@ -74,6 +74,8 @@ class ApplicationSet:
     components: tuple[str, ...] = ()
     literal_chart: str | None = None
     kustomize_path: str | None = None
+    value_files: tuple[str, ...] = ()
+    manifest_path: str = ""
 
 
 def parse_placements(text: str) -> list[Placement]:
@@ -118,7 +120,81 @@ def merge_placements(
     return merged
 
 
-def parse_application_set(text: str, name: str = "") -> ApplicationSet:
+def _value_file_scalar(raw: str) -> str:
+    """Return one valueFiles list item without its YAML quoting or comment."""
+
+    try:
+        parsed = yaml.safe_load(raw)
+    except yaml.YAMLError:
+        parsed = None
+    if isinstance(parsed, str):
+        return parsed
+    text = raw.split(" #", 1)[0].strip()
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in {"'", '"'}:
+        return text[1:-1]
+    return text
+
+
+def parse_value_files(text: str) -> tuple[str, ...]:
+    """Read the entries under the first ``valueFiles:`` block, in order.
+
+    The ApplicationSet files are Helm templates, so this walks the YAML text
+    by indentation instead of parsing the whole document with ``yaml``.
+    """
+
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        match = re.match(r"^([ \t]*)valueFiles:\s*(.*)$", line)
+        if match is None:
+            continue
+        indent = len(match.group(1))
+        remainder = match.group(2).strip()
+        if remainder:
+            if remainder.startswith("["):
+                try:
+                    parsed = yaml.safe_load(remainder)
+                except yaml.YAMLError:
+                    parsed = None
+                if isinstance(parsed, list):
+                    return tuple(
+                        str(item) for item in parsed if isinstance(item, str)
+                    )
+            return (_value_file_scalar(remainder),)
+        entries: list[str] = []
+        for following in lines[index + 1 :]:
+            stripped = following.strip()
+            if not stripped:
+                continue
+            following_indent = len(following) - len(following.lstrip(" \t"))
+            if following_indent <= indent:
+                break
+            if stripped.startswith("#"):
+                continue
+            if not stripped.startswith("-"):
+                break
+            value = stripped[1:].strip()
+            if value:
+                entries.append(_value_file_scalar(value))
+        return tuple(entries)
+    return ()
+
+
+def resolve_value_file(
+    entry: str, hub: str, cluster: str, chart: str
+) -> str | None:
+    """Resolve one manifest valueFiles entry for a cluster and chart."""
+
+    value = gated_path_for_hub(entry, hub)
+    value = value.replace("{{`{{name}}`}}", cluster)
+    value = value.replace("{{`{{component}}`}}", chart)
+    if "{{" in value:
+        return None
+    return value.lstrip("/")
+
+
+def parse_application_set(
+    text: str, name: str = "", manifest_path: str = ""
+) -> ApplicationSet:
     """Extract the placement, components and source path from a Helm template."""
 
     placement_match = _PLACEMENT.search(text)
@@ -139,6 +215,8 @@ def parse_application_set(text: str, name: str = "") -> ApplicationSet:
         components=components,
         literal_chart=literal_chart,
         kustomize_path=kustomize_path,
+        value_files=parse_value_files(text),
+        manifest_path=manifest_path,
     )
 
 
@@ -404,7 +482,7 @@ def load_application_sets(
             errors.append(f"Unrecognized ApplicationSet template: {path}.")
             continue
         name = path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
-        application_sets.append(parse_application_set(text, name))
+        application_sets.append(parse_application_set(text, name, path))
     return application_sets, errors
 
 

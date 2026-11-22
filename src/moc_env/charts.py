@@ -29,6 +29,11 @@ OVERRIDES_SCOPE_NOTE = (
     "defaults that come from a chart dependency, kustomize applications, and "
     "the hosted-cluster chart."
 )
+HOSTED_CLUSTERS_REASON = (
+    "values come from hosted-clusters/ files shared with the hosted-cluster chart"
+)
+UNRESOLVED_REASON = "value files could not be resolved from {manifest}"
+NOT_HELM_REASON = "not a Helm chart source in {manifest}"
 
 
 class ChartInventoryError(RuntimeError):
@@ -45,7 +50,7 @@ class ChartCluster:
     rows: tuple[dict[str, Any], ...] = ()
     error: str | None = None
     override_charts: tuple[dict[str, Any], ...] = ()
-    not_compared: tuple[str, ...] = ()
+    not_compared: tuple[dict[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -55,6 +60,18 @@ class HubChartList:
     name: str
     components: tuple[str, ...]
     gate_path: str | None = None
+    value_files: tuple[str, ...] = ()
+    manifest_path: str = ""
+
+
+@dataclass(frozen=True)
+class ChartManifest:
+    """The manifest that deploys one chart and the files it names."""
+
+    chart: str
+    path: str
+    value_files: tuple[str, ...] = ()
+    error: str | None = None
 
 
 @dataclass(frozen=True)
@@ -182,12 +199,14 @@ def _hub_chart_lists(
         if kind != "component" or not feature_charts.has_component_source(text):
             continue
         stem = path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
-        parsed = feature_charts.parse_application_set(text, stem)
+        parsed = feature_charts.parse_application_set(text, stem, path)
         lists.append(
             HubChartList(
                 name=feature_charts.application_set_name(text, stem),
                 components=parsed.components,
                 gate_path=feature_charts.hub_gate_path(text),
+                value_files=parsed.value_files,
+                manifest_path=path,
             )
         )
     return lists, unrecognized
@@ -668,62 +687,80 @@ def _row(
     }
 
 
-def _override_layer_paths(
-    kind: str, hub: str, cluster: str, chart: str
-) -> tuple[str, str]:
-    """Return the two values layers for one cluster, hub layer first."""
-
-    second = "local-cluster" if kind == "hub" else cluster
-    return (
-        f"values/{hub}/{chart}.yaml",
-        f"values/{hub}/{second}/{chart}.yaml",
-    )
-
-
 def _cluster_overrides(
     tree: dict[str, Any],
     hub: str,
-    kind: str,
     cluster: str,
     rows: Sequence[dict[str, Any]],
+    sources: dict[str, ChartManifest],
     read: feature_charts.TextReader,
     selected: Sequence[str] = (),
-) -> tuple[tuple[dict[str, Any], ...], tuple[str, ...]]:
-    """Build per-chart override entries and the names left uncompared."""
-
-    def is_component(row: dict[str, Any]) -> bool:
-        if row.get("component"):
-            return True
-        # ``_row`` names only the base hub-components list in its legacy
-        # component flag.  Gated hub component lists still install component
-        # charts, while cluster-apps rows are per-hub drop-ins.
-        return kind == "hub" and row.get("application_set") != "cluster-apps"
+) -> tuple[tuple[dict[str, Any], ...], tuple[dict[str, str], ...]]:
+    """Build per-chart override entries and the charts left uncompared."""
 
     wanted = set(selected)
     entries: list[dict[str, Any]] = []
-    not_compared: list[str] = []
+    not_compared: list[dict[str, str]] = []
     seen: set[str] = set()
     for row in rows:
-        chart = str(row.get("chart") or "")
-        if not chart or chart in seen or (wanted and chart not in wanted):
+        row_chart = str(row.get("chart") or "")
+        source = sources.get(row_chart)
+        chart = source.chart if source is not None else row_chart
+        if (
+            not chart
+            or chart in seen
+            or (wanted and chart not in wanted and row_chart not in wanted)
+        ):
             continue
         seen.add(chart)
-        if not is_component(row):
-            not_compared.append(chart)
+        if source is None:
+            not_compared.append(
+                {
+                    "chart": chart,
+                    "reason": UNRESOLVED_REASON.format(
+                        manifest=str(row.get("application_set") or "unknown manifest")
+                    ),
+                }
+            )
             continue
+        if source.error is not None:
+            not_compared.append({"chart": chart, "reason": source.error})
+            continue
+
+        resolved: list[str] = []
+        unresolved = not source.value_files
+        for entry in source.value_files:
+            path = feature_charts.resolve_value_file(entry, hub, cluster, chart)
+            if path is None:
+                unresolved = True
+                break
+            resolved.append(path)
+        if unresolved:
+            not_compared.append(
+                {
+                    "chart": chart,
+                    "reason": UNRESOLVED_REASON.format(manifest=source.path),
+                }
+            )
+            continue
+        if any(not path.startswith("values/") for path in resolved):
+            not_compared.append({"chart": chart, "reason": HOSTED_CLUSTERS_REASON})
+            continue
+
+        files = [path for path in resolved if path in tree]
         defaults = feature_charts.read_values_file(
             tree, f"charts/{chart}/values.yaml", read
         )
         layers = [
             (path, feature_charts.read_values_file(tree, path, read))
-            for path in _override_layer_paths(kind, hub, cluster, chart)
-            if path in tree
+            for path in files
         ]
         compared = chart_overrides.override_rows(defaults, layers)
         entries.append(
             {
                 "chart": chart,
-                "files": [path for path, _values in layers],
+                "manifest": source.path,
+                "files": files,
                 "overrides": [
                     item for item in compared if item["status"] != chart_overrides.RESTATED
                 ],
@@ -735,6 +772,88 @@ def _cluster_overrides(
             }
         )
     return tuple(entries), tuple(not_compared)
+
+
+def _drop_in_manifest(
+    path: str, fallback_chart: str, read: feature_charts.TextReader
+) -> ChartManifest:
+    """Read the chart source and value files from one apps/<hub> drop-in."""
+
+    not_helm = NOT_HELM_REASON.format(manifest=path)
+    text, _error = read(path)
+    if text is None:
+        return ChartManifest(fallback_chart, path, error=not_helm)
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError:
+        return ChartManifest(fallback_chart, path, error=not_helm)
+    if not isinstance(data, dict) or data.get("kind") != "Application":
+        return ChartManifest(fallback_chart, path, error=not_helm)
+    spec = data.get("spec")
+    source = spec.get("source") if isinstance(spec, dict) else None
+    chart_path = source.get("path") if isinstance(source, dict) else None
+    match = (
+        re.fullmatch(r"charts/([^/]+)", chart_path)
+        if isinstance(chart_path, str)
+        else None
+    )
+    if match is None or "{{" in match.group(1):
+        return ChartManifest(fallback_chart, path, error=not_helm)
+    helm = source.get("helm") if isinstance(source, dict) else None
+    raw_files = helm.get("valueFiles") if isinstance(helm, dict) else None
+    value_files = (
+        tuple(item for item in raw_files if isinstance(item, str))
+        if isinstance(raw_files, list)
+        else ()
+    )
+    return ChartManifest(match.group(1), path, value_files=value_files)
+
+
+def _hub_override_sources(
+    tree: dict[str, Any],
+    hub: str,
+    chart_lists: Sequence[HubChartList],
+    read: feature_charts.TextReader,
+) -> dict[str, ChartManifest]:
+    """Map hub row chart names to the manifests that deploy them."""
+
+    sources: dict[str, ChartManifest] = {}
+    for item in chart_lists:
+        if not _hub_applies(item, hub, tree):
+            continue
+        for chart in dict.fromkeys(item.components):
+            sources.setdefault(
+                chart,
+                ChartManifest(chart, item.manifest_path, item.value_files),
+            )
+    prefix = f"apps/{hub}/"
+    for path in sorted(
+        path
+        for path in tree
+        if path.startswith(prefix) and "/" not in path[len(prefix) :]
+    ):
+        stem = path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+        sources.setdefault(stem, _drop_in_manifest(path, stem, read))
+    return sources
+
+
+def _workload_override_sources(
+    rows: Sequence[dict[str, Any]],
+    application_sets: Sequence[feature_charts.ApplicationSet],
+) -> dict[str, ChartManifest]:
+    """Map workload row chart names to their selected ApplicationSet."""
+
+    by_name = {item.name: item for item in application_sets}
+    sources: dict[str, ChartManifest] = {}
+    for row in rows:
+        chart = str(row.get("chart") or "")
+        item = by_name.get(str(row.get("application_set") or ""))
+        if chart and item is not None:
+            sources.setdefault(
+                chart,
+                ChartManifest(chart, item.manifest_path, item.value_files),
+            )
+    return sources
 
 
 def _workload_labels(
@@ -888,10 +1007,16 @@ def collect_chart_inventory(
         if workload is None:
             hub_rows = tuple(_hub_rows(tree, hub, hub_chart_lists))
             override_charts: tuple[dict[str, Any], ...] = ()
-            not_compared: tuple[str, ...] = ()
+            not_compared: tuple[dict[str, str], ...] = ()
             if include_overrides:
                 override_charts, not_compared = _cluster_overrides(
-                    tree, hub, "hub", hub, hub_rows, read, charts
+                    tree,
+                    hub,
+                    hub,
+                    hub_rows,
+                    _hub_override_sources(tree, hub, hub_chart_lists, read),
+                    read,
+                    charts,
                 )
             clusters.append(
                 ChartCluster(
@@ -935,7 +1060,13 @@ def collect_chart_inventory(
             not_compared = ()
             if include_overrides:
                 override_charts, not_compared = _cluster_overrides(
-                    tree, hub, "workload", name, rows, read, charts
+                    tree,
+                    hub,
+                    name,
+                    rows,
+                    _workload_override_sources(rows, application_sets),
+                    read,
+                    charts,
                 )
             clusters.append(
                 ChartCluster(
@@ -1097,7 +1228,14 @@ def _cluster_override_summary(cluster: ChartCluster) -> list[str]:
     return [
         "  Charts with no overrides: " + (", ".join(no_overrides) or "(none)"),
         f"  Restated values not shown: {restated}",
-        "  Not compared: " + (", ".join(cluster.not_compared) or "(none)"),
+        "  Not compared: "
+        + (
+            "; ".join(
+                f"{item['chart']} ({item['reason']})"
+                for item in cluster.not_compared
+            )
+            or "(none)"
+        ),
     ]
 
 
@@ -1160,7 +1298,16 @@ def _render_overrides_markdown(inventory: ChartInventory) -> str:
         lines.append("")
         lines.append(f"Restated values not shown: {restated}")
         lines.append("")
-        lines.append("Not compared: " + (", ".join(cluster.not_compared) or "(none)"))
+        lines.append(
+            "Not compared: "
+            + (
+                "; ".join(
+                    f"{item['chart']} ({item['reason']})"
+                    for item in cluster.not_compared
+                )
+                or "(none)"
+            )
+        )
         lines.append("")
     if inventory.unrecognized:
         lines.append(_unrecognized_line(inventory))
@@ -1181,13 +1328,14 @@ def _render_overrides_json(inventory: ChartInventory) -> str:
             "environment": cluster.environment,
             "charts": {
                 item["chart"]: {
+                    "manifest": item["manifest"],
                     "files": list(item["files"]),
                     "overrides": [dict(row) for row in item["overrides"]],
                     "restated": item["restated"],
                 }
                 for item in cluster.override_charts
             },
-            "not_compared": list(cluster.not_compared),
+            "not_compared": [dict(item) for item in cluster.not_compared],
         }
         if cluster.error:
             entry["error"] = cluster.error
