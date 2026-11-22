@@ -602,6 +602,24 @@ def _escape_markdown_text(value: str) -> str:
     return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
+_BARE_ADDRESS = re.compile(
+    r"(?<![\w/])(?:https?://[^\s<>()|]+|[\w.+-]+@[\w.-]+\.[A-Za-z]{2,})"
+)
+
+
+def _escape_addresses(value: str) -> str:
+    """Escape prose and code-span any bare URL or e-mail address."""
+
+    parts: list[str] = []
+    start = 0
+    for match in _BARE_ADDRESS.finditer(value):
+        parts.append(_escape_markdown_text(value[start : match.start()]))
+        parts.append(_code_span(match.group(0)))
+        start = match.end()
+    parts.append(_escape_markdown_text(value[start:]))
+    return "".join(parts)
+
+
 def _code_span(value: str) -> str:
     """Wrap a value in a markdown code span, widening it for backticks."""
 
@@ -631,13 +649,20 @@ def _link(name: str, rendered: set[str]) -> str:
     return f"[{name}](#{name})" if name in rendered else name
 
 
-def _markdown_table(entry: ChartEntry) -> list[str]:
+def _markdown_table(
+    entry: ChartEntry, *, escape_addresses: bool = False
+) -> list[str]:
     lines = [
         "| Key | Default | Required | Description |",
         "|---|---|---|---|",
     ]
     for row in entry.values.rows:
         default = default_cell(row)
+        description = (
+            _escape_addresses(row.description)
+            if escape_addresses
+            else _escape_markdown_text(row.description)
+        )
         lines.append(
             "| "
             + " | ".join(
@@ -645,7 +670,7 @@ def _markdown_table(entry: ChartEntry) -> list[str]:
                     _markdown_cell(_code_span(row.key)),
                     _markdown_cell(_code_span(default)) if default else "",
                     _markdown_cell(_escape_markdown_text(required_cell(row))),
-                    _markdown_cell(_escape_markdown_text(row.description)),
+                    _markdown_cell(description),
                 )
             )
             + " |"
@@ -655,6 +680,58 @@ def _markdown_table(entry: ChartEntry) -> list[str]:
 
 def _rendered_names(charts: Sequence[ChartEntry]) -> set[str]:
     return {entry.name for entry in charts}
+
+
+def chart_entries_markdown(
+    charts: Sequence[ChartEntry], *, escape_addresses: bool = False
+) -> list[str]:
+    """Render one ``###`` values section per chart, in the given order."""
+
+    lines: list[str] = []
+    for index, entry in enumerate(charts):
+        if index:
+            _append_rule(lines, text=False)
+        lines.append(f"### {entry.name}")
+        lines.append("")
+        if entry.description:
+            lines.append(
+                _escape_addresses(entry.description)
+                if escape_addresses
+                else _escape_markdown_text(entry.description)
+            )
+            lines.append("")
+        if entry.used_by:
+            lines.append(
+                "Used by: "
+                + _escape_markdown_text("; ".join(entry.used_by))
+            )
+            lines.append("")
+        if not entry.values.present:
+            lines.append("No values.yaml.")
+            lines.append("")
+            continue
+        lines.extend(
+            _markdown_table(entry, escape_addresses=escape_addresses)
+        )
+        lines.append("")
+        for row in entry.values.rows:
+            if row.example is None:
+                continue
+            lines.append(f"Example for `{row.key}`:")
+            lines.append("")
+            lines.append("```yaml")
+            lines.extend(row.example.splitlines())
+            lines.append("```")
+            lines.append("")
+        if entry.values.other_comments:
+            lines.append("Other comments in values.yaml:")
+            lines.append("")
+            lines.append("```yaml")
+            for comment in entry.values.other_comments:
+                lines.extend(comment.splitlines())
+            lines.append("```")
+            lines.append("")
+    return lines
 
 
 def _append_rule(lines: list[str], *, text: bool) -> None:
@@ -876,43 +953,7 @@ def render_markdown(
     )
     lines.extend(f"- {item}" for item in _CHART_REFERENCE_ITEMS)
     lines.extend(["", _CHART_REFERENCE_NOTE, ""])
-    for index, entry in enumerate(charts):
-        if index:
-            _append_rule(lines, text=False)
-        lines.append(f"### {entry.name}")
-        lines.append("")
-        if entry.description:
-            lines.append(_escape_markdown_text(entry.description))
-            lines.append("")
-        if entry.used_by:
-            lines.append(
-                "Used by: "
-                + _escape_markdown_text("; ".join(entry.used_by))
-            )
-            lines.append("")
-        if not entry.values.present:
-            lines.append("No values.yaml.")
-            lines.append("")
-            continue
-        lines.extend(_markdown_table(entry))
-        lines.append("")
-        for row in entry.values.rows:
-            if row.example is None:
-                continue
-            lines.append(f"Example for `{row.key}`:")
-            lines.append("")
-            lines.append("```yaml")
-            lines.extend(row.example.splitlines())
-            lines.append("```")
-            lines.append("")
-        if entry.values.other_comments:
-            lines.append("Other comments in values.yaml:")
-            lines.append("")
-            lines.append("```yaml")
-            for comment in entry.values.other_comments:
-                lines.extend(comment.splitlines())
-            lines.append("```")
-            lines.append("")
+    lines.extend(chart_entries_markdown(charts))
     _append_rule(lines, text=False)
     lines.append(_closing_line(reference, charts, filtered=filtered))
     lines.extend(["", reference.footer])

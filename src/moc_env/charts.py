@@ -1199,6 +1199,29 @@ def _override_values(row: dict[str, Any]) -> list[str]:
     ]
 
 
+def _override_markdown_values(row: dict[str, Any]) -> list[str]:
+    """Render override cells as escaped Markdown code spans."""
+
+    default = (
+        "-"
+        if "default" not in row
+        else chart_reference.truncated_default(row["default"])
+    )
+    key, value, source = (
+        str(row["key"]),
+        chart_reference.truncated_default(row["value"]),
+        str(row.get("source") or "-"),
+    )
+    status = chart_reference._markdown_cell(str(row["status"]))
+    return [
+        chart_reference._markdown_cell(chart_reference._code_span(key)),
+        status,
+        chart_reference._markdown_cell(chart_reference._code_span(default)),
+        chart_reference._markdown_cell(chart_reference._code_span(value)),
+        chart_reference._markdown_cell(chart_reference._code_span(source)),
+    ]
+
+
 def _override_text_table(rows: Sequence[dict[str, Any]]) -> list[str]:
     rendered = [_override_values(row) for row in rows]
     widths = [
@@ -1282,7 +1305,11 @@ def _render_overrides_markdown(inventory: ChartInventory) -> str:
             lines.extend(
                 _markdown_table(
                     list(_OVERRIDE_COLUMNS),
-                    [_override_values(row) for row in entry["overrides"]],
+                    [
+                        _override_markdown_values(row)
+                        for row in entry["overrides"]
+                    ],
+                    escape_cells=False,
                 )
             )
             lines.append("")
@@ -1691,10 +1718,15 @@ def _markdown_table(
     headers: list[str],
     rows: list[list[str]],
     center_columns: set[int] | None = None,
+    *,
+    escape_cells: bool = True,
 ) -> list[str]:
     centered = center_columns or set()
+    def cell(value: str) -> str:
+        return _markdown_cell(value) if escape_cells else value
+
     lines = [
-        "| " + " | ".join(_markdown_cell(header) for header in headers) + " |",
+        "| " + " | ".join(cell(header) for header in headers) + " |",
         "|"
         + "|".join(
             ":---:" if index in centered else "---"
@@ -1703,7 +1735,7 @@ def _markdown_table(
         + "|",
     ]
     lines.extend(
-        "| " + " | ".join(_markdown_cell(value) for value in row) + " |"
+        "| " + " | ".join(cell(value) for value in row) + " |"
         for row in rows
     )
     return lines
@@ -1829,6 +1861,15 @@ def render_chart_inventory(
 ) -> str:
     """Render a chart inventory in the requested view and format."""
 
+    if view == "page":
+        from .chart_page import render_chart_page
+
+        if format != "markdown":
+            raise ChartInventoryError(
+                "--view page only supports Markdown output; use "
+                "--format markdown or omit --format"
+            )
+        return render_chart_page(inventory)
     if view == "summary":
         if format == "json":
             return _render_summary_json(inventory)

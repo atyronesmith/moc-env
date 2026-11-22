@@ -476,7 +476,11 @@ class OverridesCommandTest(unittest.TestCase):
         self.assertIn("## demo-workload0 (workload)", stdout)
         self.assertIn("### alpha", stdout)
         self.assertIn("| Key | Status | Default | Value | Set in |", stdout)
-        self.assertIn("| nodes | changed | [] | [{\"name\":\"a\"}] |", stdout)
+        self.assertIn(
+            "| `nodes` | changed | `[]` | `[{\"name\":\"a\"}]` | "
+            "`values/demo-infra/demo-workload0/alpha.yaml` |",
+            stdout,
+        )
         self.assertIn("Not compared: hosted-ingress", stdout)
         self.assertIn(
             f"Not compared: hosted-ingress ({HOSTED_CLUSTERS_REASON})",

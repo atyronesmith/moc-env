@@ -355,7 +355,7 @@ explicit `--format` always wins.
 ### Chart inventory and reference
 
 `moc-env charts` reads every chart placement, feature label, and values file it
-can determine from `oac-apps`. It has four views:
+can determine from `oac-apps`. It has five views:
 
 | View | Command | Contents |
 |---|---|---|
@@ -363,6 +363,7 @@ can determine from `oac-apps`. It has four views:
 | `cluster` | `moc-env charts --view cluster ENV` | One section per cluster with its ApplicationSet, placement, feature label, values files, and unmet required values |
 | `overrides` | `moc-env charts --view overrides ENV` | One section per cluster with only the chart values that differ from the chart defaults, plus counts of restated values |
 | `reference` | `moc-env charts --view reference` | Hub and workload chart groups, optional features with their labels, and one values table per deployed chart |
+| `page` | `moc-env charts --view page` | One Markdown page combining the summary tables, the per-cluster changed and added values, and the per-chart values reference |
 
 Limit the inventory to one environment or workload:
 
@@ -433,6 +434,24 @@ block with the normalized `moc-env` command and shell-quoted arguments, so the
 report can be reproduced without recording a timestamp. Use repeatable
 `--ref REPO=REF` options, for example `--ref oac-apps=pull/246/head`, to read a
 non-default ref; the footer records the resolved commit.
+
+The page view produces a single Markdown document intended for the ops-docs
+site. It has YAML front matter with the title `oac-apps charts and values by
+cluster`, no level-one heading, and four sections: which clusters get which
+charts, the values set for each cluster, the chart values reference, and the
+page's coverage limits. Values and file paths are code spans so typographic
+Markdown processing keeps them literal, and every chart link targets exactly
+one chart heading. If any value contains Liquid syntax (`{{` or `{%`), the page
+wraps its body in `{% raw %}` and `{% endraw %}` tags.
+
+`--view page` supports Markdown only: omitting `--format` renders Markdown and
+`--format markdown` is accepted, while `--format text` and `--format json` stop
+with an error. `--chart` and `--workload` are also rejected because the page
+always describes the selected deployment clusters in full. Cluster selection
+is the same as for the other views, including `--all-clusters` and a named
+environment, and `--output page.md` writes the page to a file. The page records
+the resolved commit instead of a generation date, so the same `oac-apps` commit
+and arguments produce identical bytes.
 
 Each chart table uses the chart's own `values.yaml`:
 

@@ -165,9 +165,9 @@ def _configure_charts(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--view",
-        choices=("summary", "cluster", "reference", "overrides"),
+        choices=("summary", "cluster", "reference", "overrides", "page"),
         default="summary",
-        help="Feature summary tables, one section per cluster, the chart reference, or per-cluster value overrides (default: summary)",
+        help="Feature summary tables, one section per cluster, the chart reference, per-cluster value overrides, or one Markdown page combining all three (default: summary)",
     )
     parser.add_argument(
         "--chart",
@@ -524,12 +524,34 @@ def _charts_handler(
     arguments: list[str] | None = None,
     **_context: Any,
 ) -> int:
-    default_format = "markdown" if args.view == "reference" else "text"
+    default_format = (
+        "markdown" if args.view in {"reference", "page"} else "text"
+    )
     args.format = resolve_output_format(
         args,
         default=default_format,
         supported=("text", "json", "markdown"),
     )
+    if args.view == "page":
+        if args.chart:
+            print(
+                "moc-env: --chart cannot be used with --view page",
+                file=sys.stderr,
+            )
+            return 2
+        if args.workload:
+            print(
+                "moc-env: --workload cannot be used with --view page",
+                file=sys.stderr,
+            )
+            return 2
+        if args.format != "markdown":
+            print(
+                "moc-env: --view page only supports Markdown output; use "
+                "--format markdown or omit --format",
+                file=sys.stderr,
+            )
+            return 2
     repository_refs: dict[str, str] = {}
     for repository_ref in args.ref:
         repository, separator, ref = repository_ref.partition("=")
@@ -544,8 +566,8 @@ def _charts_handler(
             environment=args.environment,
             workload=args.workload,
             progress=ProgressReporter(),
-            include_reference=args.view == "reference",
-            include_overrides=args.view == "overrides",
+            include_reference=args.view in {"reference", "page"},
+            include_overrides=args.view in {"overrides", "page"},
             charts=args.chart,
             deployment_patterns=registry.deployment_hub_patterns,
             all_clusters=args.all_clusters,
