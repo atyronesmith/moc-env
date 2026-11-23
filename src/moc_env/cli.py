@@ -43,6 +43,7 @@ from .environment_cache import read_environment_cache, write_environment_cache
 from .export import render_environment_export, render_infra_export, render_workload_export, workload_cluster_name
 from .github import GitHubClient, GitHubError, RateLimitError
 from .model import Environment
+from .live_cli import configure_capture, configure_verify, capture_handler, verify_handler
 from .observed import read_apps_observation, read_chart_values_reference_observation, read_infra_observation, read_issue_observation
 from .plan import build_infra_change_plan, render_change_plan_json, render_change_plan_markdown, render_change_plan_text
 from .registry import DEFAULT_REGISTRY_PATH, EnvironmentRegistry, RegistryError
@@ -212,6 +213,8 @@ def _build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", metavar="COMMAND")
 
     commands: dict[str, tuple[str, Callable[[argparse.ArgumentParser], None], Handler]] = {
+        "capture-live": ("Capture read-only live JSON with an existing oc session", configure_capture, capture_handler),
+        "verify-live": ("Compare repository declarations with an offline live snapshot", configure_verify, verify_handler),
         "status": ("Report combined hub and workload repository configuration state", _configure_status, _status_handler),
         "diff": ("Compare repository configuration state for two environments", configure_diff, _diff_handler),
         "status-hub": ("Report hub-cluster repository configuration state", _configure_status, _status_handler),

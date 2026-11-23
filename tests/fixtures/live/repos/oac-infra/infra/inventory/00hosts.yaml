@@ -1,0 +1,33 @@
+# Hand-written synthetic inventory. Host identity only.
+all:
+  children:
+    test-env-workload0:
+      vars:
+        cluster: test-env-workload0
+      hosts:
+        test-env-workload0-compute-0:
+          node_name: NODE-A01
+        test-env-workload0-compute-1:
+          node_name: NODE-A02
+        test-env-workload0-compute-2:
+          node_name: NODE-A03
+        test-env-workload0-gpu-0:
+          node_name: NODE-A04
+        test-env-workload0-gpu-1:
+          node_name: NODE-A05
+        test-env-workload0-gpu-2:
+          node_name: NODE-A06
+        test-env-workload0-gpu-3:
+          node_name: NODE-A07
+        test-env-workload0-gpu-4:
+          node_name: NODE-A08
+        test-env-workload0-gpu-5:
+          node_name: NODE-A09
+        test-env-workload0-gpu-6:
+          node_name: NODE-A10
+    test-env-workload1:
+      vars:
+        cluster: test-env-workload1
+      hosts:
+        test-env-workload1-compute-0:
+          node_name: NODE-B01

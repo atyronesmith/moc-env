@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "environment": "test-env",
+  "workload": "test-env-workload0",
+  "timestamp": "2026-11-23T12:00:00+00:00",
+  "api_url": "https://api.fixture.invalid:6443",
+  "user": "fixture-reader",
+  "discovery_complete": true,
+  "forbidden": ["dnses.operator.openshift.io"],
+  "resources": {
+    "operatorgroups.operators.coreos.com": {"kind":"OperatorGroup","status":"captured"},
+    "nodes": {"kind":"Node","status":"captured"},
+    "pods": {"kind":"Pod","status":"captured"},
+    "namespaces": {"kind":"Namespace","status":"captured"},
+    "resourcequotas": {"kind":"ResourceQuota","status":"captured"},
+    "datascienceclusters.datasciencecluster.opendatahub.io": {"kind":"DataScienceCluster","status":"captured"},
+    "hardwareprofiles.infrastructure.opendatahub.io": {"kind":"HardwareProfile","status":"captured"},
+    "dnses.operator.openshift.io": {"kind":"DNS","status":"Forbidden"},
+    "jobsetoperators.operator.openshift.io": {"kind":"JobSetOperator","status":"not-served"},
+    "kueues.kueue.openshift.io": {"kind":"Kueue","status":"not-served"},
+    "clusterversions.config.openshift.io": {"kind":"ClusterVersion","status":"captured"},
+    "clusteroperators.config.openshift.io": {"kind":"ClusterOperator","status":"captured"},
+    "applications.argoproj.io": {"kind":"Application","status":"not-served"},
+    "certificates.cert-manager.io": {"kind":"Certificate","status":"captured"},
+    "baselineadminnetworkpolicies.policy.networking.k8s.io": {"kind":"BaselineAdminNetworkPolicy","status":"captured"},
+    "clusterrolebindings.rbac.authorization.k8s.io": {"kind":"ClusterRoleBinding","status":"captured"},
+    "subscriptions.operators.coreos.com": {"kind":"Subscription","status":"captured"},
+    "customresourcedefinitions.apiextensions.k8s.io": {"kind":"CustomResourceDefinition","status":"captured"}
+  }
+}

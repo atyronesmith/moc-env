@@ -1,0 +1,8 @@
+{{ include "operator-library.resources" . }}
+---
+# A synthetic custom API exercises declared-kind discovery, not CRD sweeping.
+apiVersion: fixture.example/v1
+kind: Widget
+metadata:
+  name: example
+  namespace: fixture

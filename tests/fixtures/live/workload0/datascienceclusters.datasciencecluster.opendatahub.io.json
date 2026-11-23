@@ -1,0 +1,10 @@
+{"apiVersion":"v1","kind":"List","items":[
+  {"apiVersion":"datasciencecluster.opendatahub.io/v1","kind":"DataScienceCluster","metadata":{"name":"default-dsc","annotations":{"argocd.argoproj.io/tracking-id":"test-env-workload0-rhoai:datasciencecluster.opendatahub.io/DataScienceCluster:/default-dsc"}},"spec":{"components":{
+    "codeflare":{"managementState":"Managed"},"dashboard":{"managementState":"Managed"},
+    "datasciencepipelines":{"managementState":"Managed"},"kserve":{"managementState":"Managed"},
+    "kueue":{"managementState":"Managed"},"modelmeshserving":{"managementState":"Managed"},
+    "modelregistry":{"managementState":"Removed"},"ray":{"managementState":"Managed"},
+    "trainingoperator":{"managementState":"Managed"},"trustyai":{"managementState":"Managed"},
+    "workbenches":{"managementState":"Managed"}
+  }}}
+]}

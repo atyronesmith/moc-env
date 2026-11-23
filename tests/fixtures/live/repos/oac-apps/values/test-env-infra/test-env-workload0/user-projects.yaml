@@ -1,0 +1,11 @@
+projects:
+  - name: tenant-a
+    quota:
+      hard:
+        requests.cpu: "320"
+        limits.cpu: "320"
+        requests.memory: "2Ti"
+        limits.memory: "2Ti"
+        requests.storage: "2Ti"
+        requests.nvidia.com/gpu: "20"
+        pods: "50"

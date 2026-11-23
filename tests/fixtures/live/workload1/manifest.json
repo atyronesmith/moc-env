@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "environment": "test-env",
+  "workload": "test-env-workload1",
+  "timestamp": "2026-11-23T12:00:00+00:00",
+  "api_url": "https://api.fixture.invalid:6443",
+  "user": "fixture-reader",
+  "discovery_complete": true,
+  "forbidden": [],
+  "resources": {
+    "nodes": {"kind":"Node","status":"captured"},
+    "pods": {"kind":"Pod","status":"captured"},
+    "namespaces": {"kind":"Namespace","status":"captured"},
+    "operatorgroups.operators.coreos.com": {"kind":"OperatorGroup","status":"captured"},
+    "subscriptions.operators.coreos.com": {"kind":"Subscription","status":"captured"},
+    "jobsetoperators.operator.openshift.io": {"kind":"JobSetOperator","status":"not-served"}
+  }
+}

@@ -1,0 +1,4 @@
+apiVersion: operator.openshift.io/v1
+kind: DNS
+metadata:
+  name: default

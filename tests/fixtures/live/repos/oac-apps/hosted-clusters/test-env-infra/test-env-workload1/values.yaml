@@ -1,0 +1,6 @@
+clusterName: test-env-workload1
+clusterLabels: {}
+services:
+    APIServer:
+        ipAddress: 192.0.2.20
+        externalIpAddress: 192.0.2.21

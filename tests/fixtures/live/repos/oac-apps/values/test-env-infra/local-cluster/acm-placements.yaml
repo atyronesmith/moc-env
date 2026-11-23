@@ -1,0 +1,4 @@
+placements:
+  - name: synthetic-workload
+    matchLabels:
+      fixture/full: "true"

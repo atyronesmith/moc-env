@@ -1,0 +1,8 @@
+# Synthetic values, deliberately keeping the acceptance citation on line 8.
+# The real chart name is retained.
+# No upstream infrastructure data is included.
+# All values here are hand-written.
+# Cluster values can enable this operator.
+# Defaults are tested independently of placement.
+# Default activation:
+enabled: false

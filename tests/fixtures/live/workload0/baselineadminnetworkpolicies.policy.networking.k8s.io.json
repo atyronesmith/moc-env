@@ -1,0 +1,3 @@
+{"apiVersion":"v1","kind":"List","items":[
+  {"apiVersion":"policy.networking.k8s.io/v1alpha1","kind":"BaselineAdminNetworkPolicy","metadata":{"name":"default","annotations":{"argocd.argoproj.io/tracking-id":"test-env-workload0-restrict-tenant-networks:policy.networking.k8s.io/BaselineAdminNetworkPolicy:/default"}}}
+]}

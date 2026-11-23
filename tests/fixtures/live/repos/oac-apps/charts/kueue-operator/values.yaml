@@ -1,0 +1,7 @@
+# Synthetic values, keeping the acceptance citation on line 7.
+# Only activation is needed by these tests.
+# No upstream file contents were copied.
+# Enabled clusters must supply an override.
+# Absent and disabled is expected-absent.
+# Default activation:
+enabled: false

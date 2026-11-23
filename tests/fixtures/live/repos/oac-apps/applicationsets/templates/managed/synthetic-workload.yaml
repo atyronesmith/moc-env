@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: synthetic-workload
+spec:
+  placement:
+    cluster.open-cluster-management.io/placement: synthetic-workload
+  elements:
+    - component: kueue-operator
+    - component: dns-operator-config
+    - component: restrict-tenant-networks
+    - component: user-projects
+    - component: rhoai
+    - component: nvidia-maintenance-operator
+  template:
+    spec:
+      source:
+        path: "charts/{{`{{component}}`}}"
+        helm:
+          valueFiles:
+            - "/values/{{ $hub }}/{{`{{component}}`}}.yaml"
+            - "/values/{{ $hub }}/{{`{{name}}`}}/{{`{{component}}`}}.yaml"

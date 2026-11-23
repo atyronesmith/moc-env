@@ -1,0 +1,11 @@
+{"apiVersion":"v1","kind":"List","items":[
+  {"apiVersion":"v1","kind":"Node","metadata":{"name":"node-a01"}},
+  {"apiVersion":"v1","kind":"Node","metadata":{"name":"node-a02"}},
+  {"apiVersion":"v1","kind":"Node","metadata":{"name":"node-a03"}},
+  {"apiVersion":"v1","kind":"Node","metadata":{"name":"node-a04"}},
+  {"apiVersion":"v1","kind":"Node","metadata":{"name":"node-a05"}},
+  {"apiVersion":"v1","kind":"Node","metadata":{"name":"node-a06"}},
+  {"apiVersion":"v1","kind":"Node","metadata":{"name":"node-a07"}},
+  {"apiVersion":"v1","kind":"Node","metadata":{"name":"node-a08"}},
+  {"apiVersion":"v1","kind":"Node","metadata":{"name":"node-a09"}}
+]}

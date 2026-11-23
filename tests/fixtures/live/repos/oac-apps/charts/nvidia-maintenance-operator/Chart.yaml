@@ -1,0 +1,7 @@
+apiVersion: v2
+name: nvidia-maintenance-operator
+version: 0.1.0
+dependencies:
+  - name: operator-library
+    repository: file://../operator-library
+    version: 0.1.0

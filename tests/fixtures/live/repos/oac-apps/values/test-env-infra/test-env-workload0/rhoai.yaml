@@ -1,0 +1,3 @@
+enabledHardwareProfiles:
+  - gpu-profile-a
+  - gpu-profile-b

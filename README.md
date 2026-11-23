@@ -5,7 +5,9 @@ state of Mass Open Cloud environments by reading public CCI-MOC GitHub
 repositories. It distinguishes what an issue requests, what is declared in
 merged `main` branches, and what exists only in an open pull request. It does
 not claim that a cluster is deployed, healthy, or compliant, and it does not
-mutate GitHub or connect to a live cluster.
+mutate GitHub. Existing reporting commands never connect to a live cluster;
+the opt-in `capture-live` command uses an already logged-in `oc` session to
+collect a read-only snapshot for offline `verify-live` comparisons.
 
 Current capabilities include fleet and per-environment status, hub/workload
 desired-state export, validation and comparison, read-only change planning,
@@ -122,6 +124,20 @@ NOT CHECKED — verify by hand:
 Details:  moc-env status bu-ist-demo --details
 Markdown: moc-env status bu-ist-demo --format markdown --output report.md
 ```
+
+## Live snapshots (opt-in)
+
+```sh
+uv run moc-env capture-live oac-prod --workload workload0 --out snapshots/prod
+uv run moc-env verify-live oac-prod --workload workload0 --snapshot snapshots/prod
+```
+
+Only capture accesses the cluster. Verification reads the snapshot and declared
+repositories; use `--repository-root <dir>` with local `oac-apps/` and
+`oac-infra/` directories to avoid network access entirely. Text is the default;
+`--format json|markdown` and `--output` follow the existing report conventions.
+See [Live snapshot verification](docs/live-verification.md) for credential
+safety, coverage, verdicts, pinned fixtures, and the exact capture command forms.
 
 ## Authentication
 

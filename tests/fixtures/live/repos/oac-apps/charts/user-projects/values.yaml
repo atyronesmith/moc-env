@@ -1,0 +1,4 @@
+defaultQuota:
+  hard:
+    persistentvolumeclaims: "20"
+projects: []

@@ -10,6 +10,8 @@ WORKLOAD_COMPLETION = "workload"
 COMPLETION_ATTRIBUTE = "moc_env_completion"
 
 COMMANDS = (
+    "capture-live",
+    "verify-live",
     "check-environment",
     "check-infra",
     "check-workload",
@@ -31,6 +33,8 @@ COMMANDS = (
 )
 
 COMMAND_DESCRIPTIONS = {
+    "capture-live": "capture a read-only snapshot using an existing oc session",
+    "verify-live": "verify repository declarations against an offline snapshot",
     "list": "list hub and workload clusters",
     "status": "report combined hub and workload repository status",
     "charts": "print the charts each cluster receives from oac-apps",
