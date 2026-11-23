@@ -14,12 +14,6 @@ desired-state export, validation and comparison, read-only change planning,
 chart inventory and chart-value reference generation, and a filterable Markdown
 reference for every deployed `oac-apps` chart.
 
-This tool will be the basis for a system that generates all repo artifacts
-necessary for a new environment deployment.  Ideally, the config for that
-environment will exist in a single file.  The premise is to enhance the
-repeatibility of deployments and reduce errors.  Eventually, the entire
-process of deploying an environment should be completely automated.
-
 ## Quickstart
 
 Install the locked environment and verify the command:
@@ -128,16 +122,18 @@ Markdown: moc-env status bu-ist-demo --format markdown --output report.md
 ## Live snapshots (opt-in)
 
 ```sh
-uv run moc-env capture-live oac-prod --workload workload0 --out snapshots/prod
-uv run moc-env verify-live oac-prod --workload workload0 --snapshot snapshots/prod
+uv run moc-env capture-live oac-prod --workload workload0 --out ~/moc-snapshots/oac-prod-workload0
+uv run moc-env verify-live oac-prod --workload workload0 --snapshot ~/moc-snapshots/oac-prod-workload0
 ```
+
+Snapshots contain real cluster names and the capturing user's identity and must not be committed.
 
 Only capture accesses the cluster. Verification reads the snapshot and declared
 repositories; use `--repository-root <dir>` with local `oac-apps/` and
 `oac-infra/` directories to avoid network access entirely. Text is the default;
 `--format json|markdown` and `--output` follow the existing report conventions.
 See [Live snapshot verification](docs/live-verification.md) for credential
-safety, coverage, verdicts, pinned fixtures, and the exact capture command forms.
+safety, coverage, verdicts, synthetic fixtures, and the exact capture command forms.
 
 ## Authentication
 

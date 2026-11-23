@@ -12,3 +12,5 @@ htmlcov/
 reports/
 desired-state/
 .cache/
+snapshots/
+moc-snapshots/

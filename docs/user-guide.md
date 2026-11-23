@@ -435,8 +435,8 @@ report can be reproduced without recording a timestamp. Use repeatable
 `--ref REPO=REF` options, for example `--ref oac-apps=pull/246/head`, to read a
 non-default ref; the footer records the resolved commit.
 
-The page view produces a single Markdown document intended for the ops-docs
-site. It has YAML front matter with the title `oac-apps charts and values by
+The page view produces a single Markdown document a reader can generate on
+demand. It has YAML front matter with the title `oac-apps charts and values by
 cluster`, no level-one heading, and four sections: which clusters get which
 charts, the values set for each cluster, the chart values reference, and the
 page's coverage limits. Values and file paths are code spans so typographic
