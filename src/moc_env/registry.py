@@ -38,7 +38,7 @@ _ALLOWED_KEYS = {
 }
 
 _ALLOWED_ROOT_KEYS = {"defaults", "environments", "cluster_scope"}
-_ALLOWED_CLUSTER_SCOPE_KEYS = {"deployment_hub_patterns"}
+_ALLOWED_CLUSTER_SCOPE_KEYS = {"deployment_hub_patterns", "test_clusters"}
 
 
 @dataclass(frozen=True)
@@ -52,6 +52,7 @@ class EnvironmentRegistry:
     deferred_checks: dict[str, tuple[DeferredCheck, ...]]
     default_required_components: tuple[str, ...] = ()
     deployment_hub_patterns: tuple[str, ...] = ()
+    test_clusters: tuple[str, ...] = ()
 
     @classmethod
     def load(
@@ -89,7 +90,7 @@ class EnvironmentRegistry:
         if not isinstance(environments, dict):
             raise RegistryError("environments must be a mapping")
 
-        deployment_patterns = _cluster_scope_patterns(document.get("cluster_scope"))
+        deployment_patterns, test_clusters = _cluster_scope(document.get("cluster_scope"))
 
         issues: dict[str, int] = {}
         required: dict[str, tuple[str, ...]] = {}
@@ -157,6 +158,7 @@ class EnvironmentRegistry:
                 "defaults.required_local_cluster_components",
             ),
             deployment_hub_patterns=deployment_patterns,
+            test_clusters=test_clusters,
         )
 
     def issue(self, environment: str) -> int | None:
@@ -185,9 +187,9 @@ class EnvironmentRegistry:
         )
 
 
-def _cluster_scope_patterns(value: Any) -> tuple[str, ...]:
+def _cluster_scope(value: Any) -> tuple[tuple[str, ...], tuple[str, ...]]:
     if value is None:
-        return ()
+        return (), ()
     if not isinstance(value, dict):
         raise RegistryError("cluster_scope must be a mapping")
     unknown = sorted(set(value) - _ALLOWED_CLUSTER_SCOPE_KEYS)
@@ -205,7 +207,14 @@ def _cluster_scope_patterns(value: Any) -> tuple[str, ...]:
             "cluster_scope.deployment_hub_patterns must be a non-empty list "
             "of non-empty strings"
         )
-    return tuple(patterns)
+    test_clusters = value.get("test_clusters", [])
+    if not isinstance(test_clusters, list) or not all(
+        isinstance(item, str) and item for item in test_clusters
+    ):
+        raise RegistryError(
+            "cluster_scope.test_clusters must be a list of non-empty strings"
+        )
+    return tuple(patterns), tuple(test_clusters)
 
 
 def _validate_section(path: str, settings: dict[str, Any]) -> None:

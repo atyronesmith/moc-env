@@ -13,6 +13,7 @@ import yaml
 
 from . import chart_overrides, chart_reference, feature_charts
 from .github import GitHubClient, GitHubError
+from .registry import RegistryError
 from .repositories import OAC_APPS_REPOSITORY
 
 HUB_TEMPLATES_PREFIX = "applicationsets/templates/hub/"
@@ -878,6 +879,7 @@ def _select_scope(
     workload: str | None,
     deployment_patterns: Sequence[str] = (),
     all_clusters: bool = False,
+    test_clusters: Sequence[str] = (),
 ) -> tuple[
     list[str],
     dict[str, list[str]],
@@ -887,6 +889,13 @@ def _select_scope(
 ]:
     hubs = hub_directories(tree)
     workloads = workload_directories(tree)
+    explicit_tests = set(test_clusters)
+    test_hubs = sorted(explicit_tests.intersection(hubs))
+    if test_hubs:
+        raise RegistryError(
+            f"cluster_scope.test_clusters names hub {test_hubs[0]}; "
+            "hubs are scoped by deployment_hub_patterns"
+        )
 
     def deployment(hub: str) -> bool:
         return any(
@@ -916,8 +925,8 @@ def _select_scope(
         hidden = sorted(
             name
             for hub in hubs
-            if not deployment(hub)
             for name in (hub, *workloads.get(hub, []))
+            if not deployment(hub) or name in explicit_tests
         )
         hubs = [hub for hub in hubs if deployment(hub)]
 
@@ -925,10 +934,16 @@ def _select_scope(
         sorted(
             name
             for hub in hubs
-            if not deployment(hub)
             for name in (hub, *workloads.get(hub, []))
+            if not deployment(hub) or name in explicit_tests
         )
     )
+    if scope == "deployment":
+        test_clusters = tuple(hidden)
+        workloads = {
+            hub: [name for name in names if name not in explicit_tests]
+            for hub, names in workloads.items()
+        }
 
     if workload is not None:
         if environment is None:
@@ -970,6 +985,7 @@ def collect_chart_inventory(
     charts: Sequence[str] = (),
     deployment_patterns: Sequence[str] = (),
     all_clusters: bool = False,
+    test_clusters: Sequence[str] = (),
 ) -> ChartInventory:
     """Read oac-apps and build the chart rows for the selected clusters."""
 
@@ -985,6 +1001,7 @@ def collect_chart_inventory(
         workload,
         deployment_patterns,
         all_clusters,
+        test_clusters,
     )
     read = _github_reader(client, progress)
 

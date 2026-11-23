@@ -381,11 +381,17 @@ cluster_scope:
   deployment_hub_patterns:
     - "compliant-*"
     - "oac-*"
+  test_clusters:
+    - andalusia
 ```
 
 Hubs whose names match a pattern are deployment hubs, and a workload cluster
-takes the class of its hub. The summary and cluster views name any test
-clusters they left out. Pass `--all-clusters` to include every hub and
+takes the class of its hub unless its exact name is listed in `test_clusters`.
+That list excludes test clusters from default deployment scope even when their
+hub matches a deployment pattern. It may be empty or omitted; names absent
+from the repository tree are ignored. Listing a hub is an error: use
+`deployment_hub_patterns` to scope hubs. The summary and cluster views name any
+test clusters they left out. Pass `--all-clusters` to include every hub and
 workload cluster, or name an environment to show that environment whatever its
 class. `--all-clusters` ends the view with a line naming the test clusters it
 showed.

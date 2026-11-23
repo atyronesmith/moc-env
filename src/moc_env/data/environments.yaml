@@ -26,3 +26,6 @@ cluster_scope:
   deployment_hub_patterns:
     - "compliant-*"
     - "oac-*"
+  # Test clusters remain outside deployment scope even under a deployment hub.
+  test_clusters:
+    - andalusia

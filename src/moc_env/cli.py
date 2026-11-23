@@ -574,8 +574,9 @@ def _charts_handler(
             charts=args.chart,
             deployment_patterns=registry.deployment_hub_patterns,
             all_clusters=args.all_clusters,
+            test_clusters=registry.test_clusters,
         )
-    except ChartInventoryError as exc:
+    except (ChartInventoryError, RegistryError) as exc:
         print(f"moc-env: {exc}", file=sys.stderr)
         return 2
     except (GitHubError, RateLimitError) as exc:
