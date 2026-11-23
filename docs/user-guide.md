@@ -985,38 +985,57 @@ Common targets:
 make setup
 make test
 make check
-make list
-make run ENV=bu-ist-demo
-make run-json ENV=bu-ist-demo
-make run-no-prs ENV=bu-ist-demo
-make report-markdown ENV=bu-ist-demo
+make cli ARGS="list"
+make cli ARGS="status oac-prod"
+make cli ARGS="status oac-prod --format json"
+make cli ARGS="status oac-prod --no-prs"
+make cli ARGS="status oac-prod --format markdown --output reports/oac-prod.md"
 make sample-reports
 ```
 
-Desired-state targets:
+`cli` forwards `ARGS` to `moc-env` without choosing an environment, format,
+or file path. Use `make cli ARGS="--help"` for the CLI's command help.
+`UV` selects the uv executable (default `uv`); `COMPLETION_SHELL` and
+`COMPLETION_RC` configure `completion-init` as described above.
+
+Desired-state commands, with explicit input and output paths:
 
 ```sh
-make export-infra-file ENV=bu-ist-demo \
-  OUTPUT=desired-state/infra-clusters/bu-ist-demo-infra.yaml
-make export-workload-file ENV=bu-ist-demo WORKLOAD=workload0 \
-  OUTPUT=desired-state/workload-clusters/bu-ist-demo-workload0.yaml
-make validate FILE=desired-state/infra-clusters/bu-ist-demo-infra.yaml
-make validate-markdown FILE=desired-state/infra-clusters/bu-ist-demo-infra.yaml
-make check-infra FILE=desired-state/infra-clusters/bu-ist-demo-infra.yaml
-make check-infra-markdown FILE=desired-state/infra-clusters/bu-ist-demo-infra.yaml
-make plan-infra FILE=desired-state/infra-clusters/bu-ist-demo-infra.yaml
-make plan-infra-markdown FILE=desired-state/infra-clusters/bu-ist-demo-infra.yaml
-make check-workload FILE=desired-state/workload-clusters/bu-ist-demo-workload0.yaml
-make check-workload-markdown FILE=desired-state/workload-clusters/bu-ist-demo-workload0.yaml
+make cli ARGS="export-infra oac-prod --output desired-state/infra-clusters/oac-prod-infra.yaml"
+make cli ARGS="export-workload oac-prod workload0 --output desired-state/workload-clusters/oac-prod-workload0.yaml"
+make cli ARGS="validate desired-state/infra-clusters/oac-prod-infra.yaml"
+make cli ARGS="validate desired-state/infra-clusters/oac-prod-infra.yaml --format markdown --output reports/oac-prod-validation.md"
+make cli ARGS="check-infra desired-state/infra-clusters/oac-prod-infra.yaml"
+make cli ARGS="check-infra desired-state/infra-clusters/oac-prod-infra.yaml --format markdown --output reports/oac-prod-infra-comparison.md"
+make cli ARGS="plan-infra desired-state/infra-clusters/oac-prod-infra.yaml"
+make cli ARGS="plan-infra desired-state/infra-clusters/oac-prod-infra.yaml --format markdown --output reports/oac-prod-infra-plan.md"
+make cli ARGS="check-workload desired-state/workload-clusters/oac-prod-workload0.yaml"
+make cli ARGS="check-workload desired-state/workload-clusters/oac-prod-workload0.yaml --format markdown --output reports/oac-prod-workload0-comparison.md"
 ```
 
-`NO_PRS=1` adds `--no-prs` to the `make run`, `make run-json`, and
-`make run-markdown` status targets. For check or plan targets, pass
-`ARGS="--no-prs"` explicitly.
+To skip pull-request discovery, include `--no-prs` in the CLI arguments, for
+example `make cli ARGS="status oac-prod --format markdown --no-prs"`.
 
 `make sample-reports` regenerates the offline `example-env` status, export,
 validation, comparison, plan, and chart-values samples under `docs/samples/`
 with synthetic fixtures and a fixed clock. It does not call GitHub.
+
+`make sample-live` instead reads real repository configuration and produces
+four files: `charts-summary.txt`, `charts-page.md`, `status-oac-prod.txt`, and
+`status-compliant-dev.txt`. `SAMPLE_DIR` defaults to `reports/samples`, which
+is ignored by Git. Real output is refreshed by hand and is not kept current.
+It must never replace the fixture samples under `docs/samples/`.
+
+`make update-samples` copies all four generated files into `EXAMPLE_DIR`
+(default `docs/examples`); it fails if any input is missing. Review the diff
+and record the named `oac-apps` source commit before publishing a refresh.
+See [the live examples README](examples/README.md). Override directories on
+both commands when needed:
+
+```sh
+make sample-live SAMPLE_DIR=reports/review-samples
+make update-samples SAMPLE_DIR=reports/review-samples EXAMPLE_DIR=docs/examples
+```
 
 ## Output and exit codes
 
@@ -1256,5 +1275,5 @@ Current commands do not:
 - connect to a live OpenShift or Argo CD cluster;
 - claim deployment, health, or compliance.
 
-The only external publishing actions are the explicit `make report-gist-*`
-targets, which use `gh` and require deliberate invocation.
+Reports remain local unless you deliberately publish them with an external
+tool such as `gh gist create`. No Make target publishes reports.

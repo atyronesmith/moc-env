@@ -50,6 +50,17 @@ uv run --locked python tools/generate_report_fixtures.py
 make sample-reports
 ```
 
+`make sample-reports` produces offline fixture samples under `docs/samples/`;
+keep their synthetic banner and do not put real output there.
+For an individual CLI command, use `make cli ARGS="charts --view page"`.
+
+`make sample-live` generates real chart and status output into `SAMPLE_DIR`
+(default `reports/samples`). These live samples are refreshed by hand and are
+not kept current. After generation, `make update-samples` copies the four files
+into `EXAMPLE_DIR` (default `docs/examples`). Review the diff, check for
+sensitive information, and record the named `oac-apps` commit before publishing
+a refresh; see [the live examples README](docs/examples/README.md).
+
 ## Pull requests
 
 - Create a focused branch and keep one logical change per pull request.

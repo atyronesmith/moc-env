@@ -154,4 +154,12 @@ safety, coverage, verdicts, synthetic fixtures, and the exact capture command fo
 
 Developers can run the full lint, type-check, coverage, test, and packaging gate with
 `make check`, and regenerate the offline sample reports with
-`make sample-reports`.
+`make sample-reports`. Those fixture samples live under `docs/samples/`.
+Run CLI commands through `make cli ARGS="charts --view page"` or invoke
+`moc-env` directly.
+
+`make sample-live` generates real chart and status output in `SAMPLE_DIR`
+(default `reports/samples`). It is not kept current automatically.
+`make update-samples` copies the four generated files to `EXAMPLE_DIR`
+(default `docs/examples`) for manual diff review. See the
+[live examples README](docs/examples/README.md) before publishing a refresh.
