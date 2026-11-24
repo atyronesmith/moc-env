@@ -234,7 +234,11 @@ def verify_live(client: GitHubClient, environment: str, workload: str, directory
         if progress is not None:
             progress({"event": event, **details})
 
+    files_read = 0
+
     def chart_progress(stage: str, action: str, repository: str, path: str) -> None:
+        nonlocal files_read
+        files_read += 1
         emit("chart", stage=stage, action=action, repository=repository, path=path)
 
     emit("manifest", message="Reading snapshot manifest")
@@ -242,8 +246,10 @@ def verify_live(client: GitHubClient, environment: str, workload: str, directory
     if snapshot.manifest.get("workload") != workload:
         raise ValueError(f"snapshot workload {snapshot.manifest.get('workload')} does not match requested workload {workload}")
     emit("inventory", message="Reading chart declarations")
+    inventory_started = monotonic()
     inventory = collect_chart_inventory(client, environment, workload,
-                                        progress=chart_progress if progress is not None else None)
+                                        progress=chart_progress)
+    emit("inventory_end", files=files_read, elapsed=monotonic() - inventory_started)
     cluster = inventory.clusters[0]
     if cluster.error:
         raise ChartInventoryError(cluster.error)
@@ -257,6 +263,7 @@ def verify_live(client: GitHubClient, environment: str, workload: str, directory
     sections: dict[str, list[dict[str, Any]]] = {name: [] for name in ("Charts", "Nodes", "Quotas", "OpenShift AI", "Health")}
     undeclared: list[dict[str, str]] = []
     resolved: dict[str, tuple[dict[str, Any], dict[str, str]]] = {}
+    charts_started = monotonic()
     for position, declared in enumerate(sorted(cluster.rows, key=lambda item: item["chart"]), 1):
         chart = declared["chart"]
         started = monotonic()
@@ -292,6 +299,7 @@ def verify_live(client: GitHubClient, environment: str, workload: str, directory
             detail = "; ".join(filter(None, (detail, f"{sources.get('enabled', 'unknown source')} enabled: false")))
         sections["Charts"].append(_row(chart, verdict, "enabled" if enabled else "disabled", len(live), detail))
         emit("chart_end", **details, verdict=verdict, elapsed=monotonic() - started)
+    emit("charts_end", total=len(cluster.rows), elapsed=monotonic() - charts_started)
 
     emit("section", section="Nodes")
     hosts_text = client.get_file(INFRA, "infra/inventory/00hosts.yaml")

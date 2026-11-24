@@ -24,6 +24,22 @@ Snapshots of real clusters must be kept outside this repository. They can
 contain identifying cluster, user, node, namespace, and object names even though
 credential material and arbitrary resource payloads are excluded.
 
+## Progress and verbosity
+
+Both commands show progress on stderr automatically when it is a terminal.
+Use `--progress` to force progress when redirecting stderr or running in CI.
+By default, progress is limited to stages and capture requests; verification
+prints one elapsed-time summary for reading chart declarations and another for
+checking charts. While declarations are read on a terminal, a single line is
+rewritten with the file count to show activity without scrolling. Redirected
+stderr has no per-file updates.
+
+Add `--verbose` to either command to also show each file read and each chart
+checked. It implies progress even when stderr is not a terminal. Per-chart
+lines show only the verdict, not a timing; use the stage summaries to identify
+slow work. These options do not change report stdout, `--output` file bytes, or
+captured snapshot contents.
+
 ## Capture safety
 
 Capture runs only `oc get ... -o json`, with the user's environment unchanged.

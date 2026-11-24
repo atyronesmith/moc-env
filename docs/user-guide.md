@@ -39,6 +39,20 @@ compliant. It reports repository configuration evidence.
 The Makefile also has gist targets. Those are explicit external actions and
 require the `gh` CLI; they are not part of the read-only inspection workflow.
 
+### Live snapshot progress
+
+The opt-in `capture-live` and `verify-live` workflow is documented in
+[Live snapshot verification](live-verification.md). Both commands show concise
+progress on terminal stderr; `--progress` forces it on redirected stderr too.
+Verification reports elapsed time for reading declarations and checking charts.
+During declaration reads, terminals rewrite one file-count line in place;
+redirected stderr has no per-file updates.
+
+Use `--verbose` to also show each file read and each chart checked. This flag
+implies progress and leaves stdout reports and `--output` file bytes unchanged.
+Per-chart lines show verdicts only; stage summaries carry the timings. Capture's
+per-request oc progress is unchanged.
+
 ## Prerequisites and setup
 
 Required:
