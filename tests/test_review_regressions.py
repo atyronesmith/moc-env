@@ -161,6 +161,8 @@ class ReviewRegressionTest(unittest.TestCase):
             return stream
 
         def run(arguments):
+            # This fixture exercises the original per-file response cache.
+            arguments = [*arguments, "--backend", "api"]
             stdout, stderr = io.StringIO(), io.StringIO()
             with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
                 code = cli.main(arguments)

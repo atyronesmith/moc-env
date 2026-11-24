@@ -25,6 +25,8 @@ from .report import build_environment_diff, render_diff_markdown, render_diff_te
 
 
 def add_credential_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--backend", choices=("tarball", "api"), default="tarball",
+                        help="Repository reader backend (default: tarball)")
     parser.add_argument("--no-auth", action="store_true", help="Force unauthenticated GitHub access")
     parser.add_argument("--bws-secret-id", help="Bitwarden Secrets Manager UUID whose key is GITHUB_TOKEN")
     parser.add_argument(
@@ -149,6 +151,8 @@ def configure_status(parser: argparse.ArgumentParser) -> None:
 
 
 def configure_diff(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--backend", choices=("tarball", "api"), default="tarball",
+                        help="Repository reader backend (default: tarball)")
     mark_environment_argument(parser.add_argument("environment_a", help="First environment to compare"))
     mark_environment_argument(parser.add_argument("environment_b", help="Second environment to compare"))
     add_format_argument(parser, ("text", "markdown", "json"))

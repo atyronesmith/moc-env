@@ -138,10 +138,17 @@ safety, coverage, verdicts, synthetic fixtures, and the exact capture command fo
 ## Authentication
 
 - Public repositories can be read without a token, but GitHub allows only 60 unauthenticated REST requests per hour.
-- For repeated use, set a read-only `GITHUB_TOKEN` or log in with GitHub CLI.
+- A token is optional for occasional use; recommended for frequent runs or on a shared network address (VPN, office NAT). Set a read-only `GITHUB_TOKEN` or log in with GitHub CLI.
 - Detailed Bitwarden Secrets Manager and macOS Keychain setup is in the [user guide](docs/user-guide.md#authentication).
 - A token needs only public-repository read access to contents, issues, pull requests, and metadata.
 - Never place a token in a command-line argument or commit it to the repository.
+
+Repository reads default to `--backend tarball`: resolve each ref once, download
+its commit archive, and reuse the local tree (keeping the three most recently
+used commits per repository under the existing cache root). Use `--backend api`
+for the original per-file reader. Pull requests and issues always use the API.
+Transient archive download failures fall back to the API only with a token;
+without one, set a token or retry later. Downloads are not automatically retried.
 
 ## Documentation
 

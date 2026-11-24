@@ -41,7 +41,8 @@ from .completion import (
 from .doc_catalog import DocumentCatalogError, load_catalog_sources, refresh_document_catalog, render_catalog_refresh_json, render_catalog_refresh_text
 from .environment_cache import read_environment_cache, write_environment_cache
 from .export import render_environment_export, render_infra_export, render_workload_export, workload_cluster_name
-from .github import GitHubClient, GitHubError, RateLimitError
+from .github import GitHubClient as ApiGitHubClient, GitHubError, RateLimitError
+from .github_tarball import DownloadError, new_github_client as GitHubClient, selected_backend
 from .model import Environment
 from .live_cli import configure_capture, configure_verify, capture_handler, verify_handler
 from .observed import read_apps_observation, read_chart_values_reference_observation, read_infra_observation, read_issue_observation
@@ -259,7 +260,7 @@ def _resolve_github_token(args: argparse.Namespace) -> str | None:
     return resolve_github_token(args)
 
 
-def _new_github_client(args: argparse.Namespace, github_token: str | None, refs: dict[str, str] | None = None) -> GitHubClient:
+def _new_github_client(args: argparse.Namespace, github_token: str | None, refs: dict[str, str] | None = None) -> ApiGitHubClient:
     client = GitHubClient(
         token=github_token,
         timeout=args.timeout,
@@ -343,7 +344,7 @@ def _document_values_handler(args: argparse.Namespace, **_context: Any) -> int:
     return write_output(args, rendered, "chart-values reference")
 
 
-def _render_export(args: argparse.Namespace, render: Callable[[GitHubClient, ProgressReporter], str], label: str) -> int:
+def _render_export(args: argparse.Namespace, render: Callable[[ApiGitHubClient, ProgressReporter], str], label: str) -> int:
     client = _new_github_client(args, _resolve_github_token(args))
     try:
         return write_output(args, render(client, ProgressReporter()), label)
@@ -364,7 +365,7 @@ def _export_workload_handler(args: argparse.Namespace, **_context: Any) -> int:
     except ValueError as exc:
         print(f"moc-env: {exc}", file=sys.stderr)
         return 2
-    def render(client: GitHubClient, progress: ProgressReporter) -> str:
+    def render(client: ApiGitHubClient, progress: ProgressReporter) -> str:
         infra = read_infra_observation(client, environment, progress=progress)
         apps = read_apps_observation(client, environment, progress=progress, include_pull_requests=False)
         return render_workload_export(environment, workload_cluster, infra, apps)
@@ -378,7 +379,7 @@ def _export_environment_handler(args: argparse.Namespace, registry: EnvironmentR
         print("moc-env: environment has no known MOC issue; pass --issue", file=sys.stderr)
         return 2
     environment = Environment(name=args.environment, issue_number=issue_number)
-    def render(client: GitHubClient, progress: ProgressReporter) -> str:
+    def render(client: ApiGitHubClient, progress: ProgressReporter) -> str:
         issue = read_issue_observation(client, environment, progress=progress)
         if issue is None:
             raise GitHubError("MOC issue observation is unavailable")
@@ -828,12 +829,17 @@ def _complete_positional(arguments: list[str]) -> int:
 def main(argv: list[str] | None = None, clock: Clock | None = None) -> int:
     from .github import run_clients
 
-    clients: list[GitHubClient] = []
+    clients: list[ApiGitHubClient] = []
     token = run_clients.set(clients)
+    backend_token = selected_backend.set("tarball")
     try:
         return _main(argv, clock)
+    except DownloadError as exc:
+        print(f"moc-env: {exc}", file=sys.stderr)
+        return 2
     finally:
         run_clients.reset(token)
+        selected_backend.reset(backend_token)
         if clients:
             arguments = argv if argv is not None else sys.argv[1:]
             if "--verbose" in arguments:
@@ -852,7 +858,13 @@ def main(argv: list[str] | None = None, clock: Clock | None = None) -> int:
             print(
                 f"GitHub API: {sum(c.requests_made for c in clients)} requests, "
                 f"{sum(c.api_calls_used for c in clients)} counted against quota, "
-                f"{sum(c.cache_hits for c in clients)} from cache",
+                f"{sum(c.cache_hits for c in clients)} from cache"
+                + (
+                    f"; backend {getattr(clients[0], 'backend_name')}: "
+                    f"{sum(getattr(c, 'tarball_downloads', 0) for c in clients)} tarball downloads, "
+                    f"{sum(getattr(c, 'cached_trees', 0) for c in clients)} cached trees"
+                    if hasattr(clients[0], "backend_name") else ""
+                ),
                 file=sys.stderr,
             )
 
@@ -884,6 +896,7 @@ def _main(argv: list[str] | None = None, clock: Clock | None = None) -> int:
         return 2
     parser = _build_parser()
     args = parser.parse_args(arguments)
+    selected_backend.set(getattr(args, "backend", "tarball"))
     args.parser = parser
     return args.handler(args, registry=registry, clock=clock, arguments=arguments)
 
