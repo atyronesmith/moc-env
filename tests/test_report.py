@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import unittest
 import re
+import copy
 
 from moc_env.model import CheckResult, Environment, StatusReport
-from moc_env.report import _phase_cell, render_markdown, render_text
+from moc_env.report import _phase_cell, render_json, render_markdown, render_text
 
 
 class ReportRenderingTest(unittest.TestCase):
@@ -227,6 +228,246 @@ class ReportRenderingTest(unittest.TestCase):
         )
         self.assertNotIn("- UNKNOWN:", legend)
 
+    def test_agent_input_presence_is_separate_from_advisory_documentation(self) -> None:
+        hosts = [
+            {
+                "host": "compute-0",
+                "bm_management": "bmc",
+                "mac_addr": "00:11:22:33:44:55",
+                "resource_class": None,
+                "documented_resource_class": "fc430",
+            },
+            {
+                "host": "gpu-0",
+                "bm_management": "bmc",
+                "mac_addr": "00:11:22:33:44:66",
+                "resource_class": "lenovo-sd665nv3-h100",
+                "documented_resource_class": "h100",
+            },
+        ]
+        check = {
+            **self.report["checks"][0],
+            "id": "workload.agent_labels_inputs",
+            "check": "Workload update-agents inputs",
+            "state": "partial",
+            "severity": "blocking",
+            "scope": "workload",
+            "cluster": "fixture-env-workload0",
+            "phase": 5,
+            "path": "infra/update-agents.yaml",
+            "reason": "Some non-openstack hosts are missing required inputs.",
+            "next_action": "Set compute-0 resource_class to `fc430`.",
+            "actual": hosts,
+            "evidence": {
+                "agent_label_hosts": hosts,
+                "missing_variables": {"compute-0": ["resource_class"]},
+                "resource_class_mismatches": [{
+                    "host": "gpu-0",
+                    "inventory_resource_class": "lenovo-sd665nv3-h100",
+                    "documented_resource_class": "h100",
+                }],
+            },
+        }
+        report = {**self.report, "checks": [check]}
+        before = copy.deepcopy(report)
+        original_json = render_json(report)
+        text = render_text(report, details=True)
+        markdown = render_markdown(report)
+        text_required = text.split("Required agent inputs", 1)[1].split(
+            "Resource-class documentation comparison", 1
+        )[0]
+        markdown_required = markdown.split("**Required agent inputs", 1)[1].split(
+            "**Resource-class documentation comparison", 1
+        )[0]
+
+        self.assertRegex(text_required, r"compute-0\.resource_class\s+present\s+not found")
+        self.assertRegex(text_required, r"gpu-0\.resource_class\s+present\s+lenovo-sd665nv3-h100")
+        for required in (text_required, markdown_required):
+            self.assertNotIn("fc430", required)
+        self.assertIn("| `compute-0.resource_class` | `present` | `—` |", markdown_required)
+        self.assertIn(
+            "| `gpu-0.resource_class` | `present` | `lenovo-sd665nv3-h100` |",
+            markdown_required,
+        )
+        for rendered in (text, markdown):
+            compact = " ".join(rendered.split())
+            self.assertIn("Resource-class documentation comparison (advisory only)", compact)
+            self.assertIn("not defaults or required values", compact)
+            self.assertIn("Advisory difference only", rendered)
+            self.assertIn("fc430", rendered)
+            self.assertIn("h100", rendered)
+            self.assertIn("Advisory documentation difference for gpu-0.resource_class", compact)
+            self.assertNotIn("Set compute-0 resource_class to", rendered)
+            self.assertNotIn("expected h100", compact)
+        self.assertIn("1 blocking gaps", text)
+        self.assertEqual(report, before)
+        self.assertEqual(render_json(report), original_json)
+
+    def test_agent_input_documentation_comparison_skips_openstack_hosts(self) -> None:
+        check = {
+            **self.report["checks"][0],
+            "id": "workload.agent_labels_inputs",
+            "state": "declared_in_main",
+            "severity": "info",
+            "evidence": {"agent_label_hosts": [{
+                "host": "openstack-0",
+                "bm_management": "openstack",
+                "resource_class": None,
+                "documented_resource_class": "fc430",
+            }]},
+        }
+        report = {**self.report, "checks": [check]}
+        for rendered in (render_text(report, details=True), render_markdown(report)):
+            self.assertIn("not required (OpenStack)", rendered)
+            self.assertNotIn("Resource-class documentation comparison", rendered)
+
+    def test_agent_descriptions_only_explain_the_observed_management_mode(self) -> None:
+        for mode, label in (("bmc", "BMC-managed"), ("openstack", "OpenStack-managed")):
+            with self.subTest(mode=mode):
+                check = {
+                    **self.report["checks"][0],
+                    "id": "workload.agent_labels_inputs",
+                    "check": "Workload update-agents inputs",
+                    "state": "declared_in_main",
+                    "severity": "info",
+                    "reason": "Every non-openstack host has its required inputs.",
+                    "verifies": "Generic description of both management modes.",
+                    "not_verified": "Generic OpenStack exclusions.",
+                    "evidence": {"agent_label_hosts": [{
+                        "host": "worker-0",
+                        "bm_management": mode,
+                        "mac_addr": "00:11:22:33:44:55",
+                        "resource_class": "fc430",
+                    }]},
+                }
+                report = {**self.report, "checks": [check]}
+                before = copy.deepcopy(report)
+                for rendered in (render_text(report, details=True), render_markdown(report)):
+                    detail = rendered.split("DETAILED CHECKS", 1)[1] if "DETAILED CHECKS" in rendered else rendered.split("## Details", 1)[1].split("## Sources", 1)[0]
+                    self.assertIn(f"Host management: {label} ({mode})", detail)
+                    self.assertIn(f"bm_management={mode}", detail)
+                    self.assertNotIn("Generic description", detail)
+                    if mode == "bmc":
+                        self.assertNotIn("OpenStack", detail)
+                        self.assertNotIn("openstack", detail)
+                        self.assertIn("Required agent inputs (BMC-managed hosts)", detail)
+                    else:
+                        self.assertNotIn("BMC-managed", detail)
+                        self.assertIn("not required", detail)
+                        self.assertIn("Agent input overrides", detail)
+                self.assertEqual(report, before)
+
+    def test_mixed_agent_management_is_identified_per_host(self) -> None:
+        check = {
+            **self.report["checks"][0],
+            "id": "workload.agent_labels_inputs",
+            "evidence": {"agent_label_hosts": [
+                {"host": "bmc-0", "bm_management": "bmc"},
+                {"host": "openstack-0", "bm_management": "openstack"},
+                {"host": "unrecorded-0", "bm_management": None},
+            ]},
+        }
+        report = {**self.report, "checks": [check]}
+        for rendered in (render_text(report, details=True), render_markdown(report)):
+            compact = " ".join(rendered.split())
+            self.assertIn("BMC-managed (bmc)", compact)
+            self.assertIn("OpenStack-managed (openstack)", compact)
+            self.assertIn("Not recorded", compact)
+            self.assertIn("Agent input requirements by host", compact)
+            self.assertIn("not required (OpenStack)", compact)
+        markdown = render_markdown(report)
+        self.assertIn("| `bmc-0.resource_class` | `present` |", markdown)
+        self.assertIn("| `openstack-0.resource_class` | `not required (OpenStack)` |", markdown)
+        self.assertIn("| `unrecorded-0.resource_class` | `present` |", markdown)
+
+    def test_feature_chart_and_overlay_findings_are_explicit(self) -> None:
+        overlay = "kustomize/pure-cosi/overlays/bu-ist-demo-workload0"
+        check = {
+            **self.report["checks"][0],
+            "id": "workload.feature_chart_values",
+            "check": "Workload feature chart values",
+            "state": "partial",
+            "severity": "blocking",
+            "scope": "workload",
+            "phase": 6,
+            "cluster": "fixture-env-workload0",
+            "reason": "Required chart values and an overlay are missing.",
+            "next_action": "Set missing chart values and add the required overlay.",
+            "evidence": {
+                "chart_count": 34,
+                "unmet_required_values": {
+                    "nfs-tls": ["image.repository", "image.digest"],
+                    "object-storage-proxy": ["backend.address", "network.cidr"],
+                },
+                "missing_overlays": [overlay],
+                "orphan_values_files": [],
+            },
+        }
+        report = {**self.report, "checks": [check]}
+        before = copy.deepcopy(report)
+        original_json = render_json(report)
+        text = render_text(report, details=True)
+        markdown = render_markdown(report)
+        self.assertIn("| Chart / item | Requirement | Finding |", markdown)
+        self.assertIn(
+            "| `nfs-tls` | `All required values supplied` | `Missing: image.repository, image.digest` |",
+            markdown,
+        )
+        self.assertIn(
+            f"| `kustomize overlays` | `All required overlays present` | `Missing overlays: {overlay}` |",
+            markdown,
+        )
+        self.assertRegex(text, r"Chart / item\s+Requirement\s+Finding")
+        self.assertRegex(
+            text,
+            r"nfs-tls\s+All required values supplied\s+Missing: image.repository, image.digest",
+        )
+        for rendered in (text, markdown):
+            compact = " ".join(rendered.split())
+            self.assertIn("Missing overlays: " + overlay, compact)
+            self.assertIn("No orphan values files", compact)
+            self.assertIn("nfs-tls: missing required values image.repository, image.digest", compact)
+            self.assertIn("Missing required kustomize overlays: " + overlay, compact)
+            self.assertNotIn("expected none", compact)
+        self.assertEqual(report, before)
+        self.assertEqual(render_json(report), original_json)
+
+    def test_feature_chart_findings_distinguish_clear_and_orphaned_values(self) -> None:
+        for orphans in ([], ["unused-chart"]):
+            with self.subTest(orphans=orphans):
+                check = {
+                    **self.report["checks"][0],
+                    "id": "workload.feature_chart_values",
+                    "evidence": {
+                        "chart_count": 3,
+                        "unmet_required_values": {},
+                        "missing_overlays": [],
+                        "orphan_values_files": orphans,
+                    },
+                }
+                report = {**self.report, "checks": [check]}
+                for rendered in (render_text(report, details=True), render_markdown(report)):
+                    compact = " ".join(rendered.split())
+                    self.assertIn("No missing required values", compact)
+                    self.assertIn("No missing overlays", compact)
+                    self.assertIn(
+                        "Orphan values files: unused-chart" if orphans else "No orphan values files",
+                        compact,
+                    )
+
+    def test_unevaluated_feature_charts_do_not_claim_no_missing_inputs(self) -> None:
+        check = {
+            **self.report["checks"][0],
+            "id": "workload.feature_chart_values",
+            "state": "unknown",
+            "evidence": {},
+        }
+        report = {**self.report, "checks": [check]}
+        for rendered in (render_text(report, details=True), render_markdown(report)):
+            self.assertIn("Not evaluated", rendered)
+            self.assertNotIn("No missing required values", rendered)
+            self.assertNotIn("No missing overlays", rendered)
+
     def test_not_checked_is_rendered_after_next_actions(self) -> None:
         for rendered in (render_text(self.report), render_markdown(self.report)):
             with self.subTest(renderer=rendered):
@@ -280,6 +521,7 @@ class ReportRenderingTest(unittest.TestCase):
                     {
                         "name": "control-0",
                         "node_name": "MOC-R4PAC10U31-S1A",
+                        "bm_management": "bmc",
                         "bmc_addr": "10.20.27.1",
                         "boot_image_url": "http://example.invalid/image.iso",
                     }
@@ -288,6 +530,8 @@ class ReportRenderingTest(unittest.TestCase):
         }
         rendered = render_markdown({**self.report, "checks": [check]})
         self.assertIn("**Observed hosts**", rendered)
+        self.assertIn("Management (bm_management)", rendered)
+        self.assertIn("BMC-managed (bmc)", rendered)
         self.assertIn("| Host | Node name | BMC address | Boot image URL |", rendered)
         self.assertIn("| `control-0` | `MOC-R4PAC10U31-S1A` |", rendered)
         self.assertIn(
@@ -436,6 +680,66 @@ class ReportRenderingTest(unittest.TestCase):
         )
         self.assertIn("[#237](https://github.com/CCI-MOC/oac-apps/pull/237)", rendered)
         self.assertIn("Fixture buildout", rendered)
+
+    def test_shared_file_pulls_have_the_same_details_in_open_and_closed_tables(self) -> None:
+        pulls = [
+            {
+                "repository": {"value": "CCI-MOC/moc-keycloak"},
+                "number": number,
+                "classification": {"value": classification},
+                "title": {"value": f"Shared configuration {number}"},
+                "head_ref": {"value": f"shared-config-{number}"},
+                "html_url": {"value": f"https://github.com/CCI-MOC/moc-keycloak/pull/{number}"},
+                "changed_files": ["main.tf", "modules/shared/variables.tf"],
+            }
+            for number, classification in enumerate(
+                ("open", "merged", "closed_unmerged"), start=1
+            )
+        ]
+        rendered = render_markdown({**self.report, "pull_requests": pulls})
+        self.assertIn(
+            "1 open pull request changes configuration relevant to this environment.",
+            rendered,
+        )
+        open_section, closed_section = rendered.split(
+            "<summary>Merged and closed without merging</summary>", 1
+        )
+        open_section = open_section.split("### Open", 1)[1]
+        headers = "| Repository | PR | Title | Head branch | Changed files |"
+        for number, section in ((1, open_section), (2, closed_section), (3, closed_section)):
+            with self.subTest(number=number):
+                url = f"https://github.com/CCI-MOC/moc-keycloak/pull/{number}"
+                self.assertIn(headers, section)
+                self.assertIn(
+                    f"| moc-keycloak | [#{number}]({url}) | `Shared configuration {number}` "
+                    f"| `shared-config-{number}` | [main.tf]({url}/files)<br>"
+                    f"[modules/shared/variables.tf]({url}/files) |",
+                    section,
+                )
+        self.assertNotIn("None.", open_section)
+        self.assertNotIn("[#2]", open_section)
+        self.assertNotIn("[#3]", open_section)
+        self.assertNotIn("[#1]", closed_section)
+
+    def test_open_pull_with_no_file_list_is_not_hidden(self) -> None:
+        pull = {
+            "repository": "CCI-MOC/oac-infra",
+            "number": 42,
+            "classification": "open",
+            "title": "Issue-linked infrastructure follow-up",
+            "head_ref": "infrastructure-follow-up",
+            "html_url": "https://github.com/CCI-MOC/oac-infra/pull/42",
+            "changed_files": [],
+        }
+        rendered = render_markdown({**self.report, "pull_requests": [pull, pull]})
+        open_section = rendered.split("### Open", 1)[1].split("<details>", 1)[0]
+        self.assertIn(
+            "1 open pull request changes configuration relevant to this environment.",
+            rendered,
+        )
+        self.assertEqual(open_section.count("[#42]"), 1)
+        self.assertIn("| `infrastructure-follow-up` | — |", open_section)
+        self.assertNotIn("None.", open_section)
 
 
 if __name__ == "__main__":

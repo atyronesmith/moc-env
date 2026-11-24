@@ -99,11 +99,13 @@ DETAILED CHECKS
 ----------------------------------------------------------------------------------------------------
   OK: bu-ist-demo-infra host inventory — The inventory contains a bu-ist-demo-infra group with 1 hosts.
   Source: CCI-MOC/oac-infra · infra/inventory/00hosts.yaml @ main (2222222)
+  Host management: Not recorded.
   Verifies: Parses CCI-MOC/oac-infra infra/inventory/00hosts.yaml as YAML and walks every
   Ansible group in every child group. The check passes when at least one group declares
   vars.cluster == `bu-ist-demo-infra`; the host count does not affect the state.
   Not verified: Host names, node_name values, MAC addresses, boot images and group nesting are
   not validated here, and a matching group with zero hosts still passes.
+  control-0: Not recorded
   Field          Expected                                        Observed
   cluster_group  a group with vars.cluster == bu-ist-demo-infra  bu-ist-demo-infra
   host_count     reported (not required)                         1
@@ -314,11 +316,13 @@ DETAILED CHECKS
   OK: bu-ist-demo-workload0 host inventory — The inventory contains a bu-ist-demo-workload0 group with 1
   hosts.
   Source: CCI-MOC/oac-infra · infra/inventory/00hosts.yaml @ main (2222222)
+  Host management: Other management (ipmi; treated as non-OpenStack).
   Verifies: Parses CCI-MOC/oac-infra infra/inventory/00hosts.yaml as YAML and walks every
   Ansible group in every child group. The check passes when at least one group declares
   vars.cluster == `bu-ist-demo-workload0`; the host count does not affect the state.
   Not verified: Host names, node_name values, MAC addresses, boot images and group nesting are
   not validated here, and a matching group with zero hosts still passes.
+  compute-0: Other management (ipmi; treated as non-OpenStack)
   Field          Expected                                            Observed
   cluster_group  a group with vars.cluster == bu-ist-demo-workload0  bu-ist-demo-workload0
   host_count     reported (not required)                             1
@@ -341,16 +345,24 @@ DETAILED CHECKS
   OK: bu-ist-demo-workload0 update-agents inputs — Every non-openstack host has the mac_addr and
   resource_class inputs required by infra/update-agents.yaml.
   Source: CCI-MOC/oac-infra · infra/update-agents.yaml @ main (2222222)
-  Verifies: Reads infra/inventory/00hosts.yaml and infra/update-agents.yaml in
-  CCI-MOC/oac-infra. Every `bu-ist-demo-workload0` host whose bm_management is not `openstack`
-  must declare both mac_addr and resource_class, and the check passes when none of those hosts
-  is missing either field. resource_class is also compared with the node table in
-  docs/hardware-and-network-configuration.md, and a mismatch only adds an advisory note.
-  Not verified: MAC address and resource-class formats are not validated, the update-agents
-  playbook is only checked for existence, and hosts using bm_management openstack are skipped.
-  Field                     Expected            Observed
-  compute-0.mac_addr        present             00:11:22:33:44:55
-  compute-0.resource_class  bu-ist-demo-worker  bu-ist-demo-worker
+  Host management: Other management (ipmi; treated as non-OpenStack).
+  Verifies: Applies input requirements per host using the observed bm_management value. Hosts
+  with bm_management=openstack obtain MAC addresses and resource classes from OpenStack; all
+  other hosts require mac_addr and resource_class inventory inputs. Hardware-documentation
+  differences are advisory only.
+  Not verified: Address and resource-class formats, management-system connectivity, and actual
+  agent labels or approval are not verified. The playbook is checked only for existence.
+
+  Agent input requirements by host
+  Field                     Expected  Observed
+  compute-0.mac_addr        present   00:11:22:33:44:55
+  compute-0.resource_class  present   bu-ist-demo-worker
+
+  Resource-class documentation comparison (advisory only)
+  Documented hardware classes are reference information, not defaults or required values. Agent
+  resource-class labels must match the NodePool selectors.
+  Host       Inventory resource_class  Documented hardware class  Comparison
+  compute-0  bu-ist-demo-worker        bu-ist-demo-worker         Matches documentation
   URL: https://github.com/CCI-MOC/oac-infra/blob/main/infra/update-agents.yaml
 ----------------------------------------------------------------------------------------------------
   FAIL: Workload hosted-cluster values — None of the 1 required file exist in main under

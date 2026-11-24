@@ -10,6 +10,9 @@ from moc_env.checks import list_environments
 from moc_env.model import Environment
 from moc_env.github import GitHubError, RateLimitError
 from moc_env.observed import (
+    ClusterInventoryObservation,
+    SourceValue,
+    flatten_host,
     read_environment_observation,
     read_infra_observation,
 )
@@ -19,6 +22,25 @@ from fakes import FakeGitHubClient
 
 
 class StatusCheckerTest(unittest.TestCase):
+    def test_host_summaries_retain_inherited_management_and_host_overrides(self) -> None:
+        hosts = flatten_host({
+            "vars": {"bm_management": "bmc"},
+            "hosts": {
+                "bmc-control-0": {"node_name": "node-0"},
+                "openstack-worker-0": {"bm_management": "openstack"},
+            },
+        })
+        observation = ClusterInventoryObservation(
+            cluster=SourceValue("fixture-infra", "CCI-MOC/oac-infra", "infra/inventory/00hosts.yaml"),
+            group_found=SourceValue(True, "CCI-MOC/oac-infra", "infra/inventory/00hosts.yaml"),
+            hosts=SourceValue(hosts, "CCI-MOC/oac-infra", "infra/inventory/00hosts.yaml"),
+        )
+        summaries = observation.host_summaries()
+        self.assertEqual(
+            {host["name"]: host["bm_management"] for host in summaries},
+            {"bmc-control-0": "bmc", "openstack-worker-0": "openstack"},
+        )
+
     def setUp(self) -> None:
         self.registry = EnvironmentRegistry.load()
         self.required_components = self.registry.required_components(
@@ -1070,9 +1092,15 @@ bu_ist_demo_infra:
         text_report = render_text(report, details=True)
         markdown_report = render_markdown(report)
         self.assertIn("PULL REQUESTS", text_report)
-        self.assertIn("open PRs touch this environment", text_report)
+        self.assertIn(
+            "open pull requests change configuration relevant to this environment",
+            text_report,
+        )
         self.assertIn("## Pull requests", markdown_report)
         self.assertIn("CCI-MOC/oac-infra", markdown_report)
+        open_section = markdown_report.split("### Open", 1)[1].split("<details>", 1)[0]
+        self.assertIn("[#7](https://github.com/CCI-MOC/moc-keycloak/pull/7)", open_section)
+        self.assertIn("[main.tf]", open_section)
 
     def test_status_checker_reports_declared_apps_paths(self) -> None:
         required_components = self.required_components

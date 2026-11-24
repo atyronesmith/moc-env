@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Regenerate deterministic text/Markdown status test fixtures, without IO to GitHub."""
+"""Regenerate deterministic status test fixtures, without IO to GitHub."""
 
+import os
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path[:0] = [str(ROOT / "src"), str(ROOT / "tests")]
@@ -16,6 +18,12 @@ def main():
     case = CliDispatchTest()
     case.setUp()
     try:
+        with patch.dict(os.environ, {"GITHUB_TOKEN": ""}):
+            code, output, _ = case.run_cli(
+                ["status", "bu-ist-demo", "--format", "json"], clock=FIXED_CLOCK,
+            )
+        assert code == 0
+        (ROOT / "tests/fixtures/status-report.json").write_text(output)
         for output_format, extension in (("text", "txt"), ("markdown", "md")):
             for name, environment, client, flags in (
                 ("environment-gaps", "bu-ist-demo", FakeGitHubClient, []),

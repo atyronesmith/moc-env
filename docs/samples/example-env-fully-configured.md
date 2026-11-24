@@ -51,6 +51,8 @@ Nothing to do in the repositories this tool reads.
 
 Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml) @ main (2222222)
 
+Host management: Not recorded.
+
 Verifies: Parses CCI-MOC/oac-infra infra/inventory/00hosts.yaml as YAML and walks every Ansible group in every child group. The check passes when at least one group declares vars.cluster == `example-env-infra`; the host count does not affect the state.
 Not verified: Host names, node_name values, MAC addresses, boot images and group nesting are not validated here, and a matching group with zero hosts still passes.
 
@@ -61,9 +63,9 @@ Not verified: Host names, node_name values, MAC addresses, boot images and group
 
 **Observed hosts**
 
-| Host | Node name | BMC address | Boot image URL |
-|---|---|---|---|
-| `control-0` | `MOC-R4PAC10U31-S1A` | — | `http://10.2.0.82/boot/example-env-infra-agent-discovery.iso` |
+| Host | Node name | BMC address | Boot image URL | Management (bm_management) |
+|---|---|---|---|---|
+| `control-0` | `MOC-R4PAC10U31-S1A` | — | `http://10.2.0.82/boot/example-env-infra-agent-discovery.iso` | `Not recorded` |
 
 </details>
 
@@ -303,6 +305,8 @@ Not verified: The rest of the hub block and the AWS-side secret store are not in
 
 Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml) @ main (2222222)
 
+Host management: Other management (ipmi; treated as non-OpenStack).
+
 Verifies: Parses CCI-MOC/oac-infra infra/inventory/00hosts.yaml as YAML and walks every Ansible group in every child group. The check passes when at least one group declares vars.cluster == `example-env-workload0`; the host count does not affect the state.
 Not verified: Host names, node_name values, MAC addresses, boot images and group nesting are not validated here, and a matching group with zero hosts still passes.
 
@@ -313,9 +317,9 @@ Not verified: Host names, node_name values, MAC addresses, boot images and group
 
 **Observed hosts**
 
-| Host | Node name | BMC address | Boot image URL |
-|---|---|---|---|
-| `compute-0` | `MOC-R4PAC10U31-S1B` | — | `http://10.2.0.82/boot/example-env-infra-agent-discovery.iso` |
+| Host | Node name | BMC address | Boot image URL | Management (bm_management) |
+|---|---|---|---|---|
+| `compute-0` | `MOC-R4PAC10U31-S1B` | — | `http://10.2.0.82/boot/example-env-infra-agent-discovery.iso` | `Other management (ipmi; treated as non-OpenStack)` |
 
 </details>
 
@@ -340,19 +344,31 @@ Status rule: The workload boot-image filename may contain the workload name `exa
 
 Source: CCI-MOC/oac-infra · [`infra/update-agents.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/update-agents.yaml) @ main (2222222)
 
-Verifies: Reads infra/inventory/00hosts.yaml and infra/update-agents.yaml in CCI-MOC/oac-infra. Every `example-env-workload0` host whose bm_management is not `openstack` must declare both mac_addr and resource_class, and the check passes when none of those hosts is missing either field. resource_class is also compared with the node table in docs/hardware-and-network-configuration.md, and a mismatch only adds an advisory note.
-Not verified: MAC address and resource-class formats are not validated, the update-agents playbook is only checked for existence, and hosts using bm_management openstack are skipped.
+Host management: Other management (ipmi; treated as non-OpenStack).
+
+Verifies: Applies input requirements per host using the observed bm_management value. Hosts with bm_management=openstack obtain MAC addresses and resource classes from OpenStack; all other hosts require mac_addr and resource_class inventory inputs. Hardware-documentation differences are advisory only.
+Not verified: Address and resource-class formats, management-system connectivity, and actual agent labels or approval are not verified. The playbook is checked only for existence.
+
+**Agent input requirements by host**
 
 | Field | Expected | Observed |
 |---|---|---|
 | `compute-0.mac_addr` | `present` | `00:11:22:33:44:55` |
-| `compute-0.resource_class` | `example-env-worker` | `example-env-worker` |
+| `compute-0.resource_class` | `present` | `example-env-worker` |
+
+**Resource-class documentation comparison (advisory only)**
+
+Documented hardware classes are reference information, not defaults or required values. Agent resource-class labels must match the NodePool selectors.
+
+| Host | Inventory resource_class | Documented hardware class | Comparison |
+|---|---|---|---|
+| `compute-0` | `example-env-worker` | `example-env-worker` | `Matches documentation` |
 
 **Agent label inputs**
 
-| Host | bm_management | mac_addr | resource_class |
-|---|---|---|---|
-| `compute-0` | `ipmi` | `00:11:22:33:44:55` | `example-env-worker` |
+| Host | bm_management | mac_addr | resource_class | Management |
+|---|---|---|---|---|
+| `compute-0` | `ipmi` | `00:11:22:33:44:55` | `example-env-worker` | `Other management (ipmi; treated as non-OpenStack)` |
 
 </details>
 
@@ -480,12 +496,12 @@ Source: CCI-MOC/oac-apps · [`values/example-env-infra/example-env-workload0`](h
 Verifies: Resolves the workload's feature labels through this hub's placements and the managed ApplicationSet templates, then lists the charts each matched placement deploys. Required .Values calls outside if, with, and range blocks must resolve to a non-empty value in the layered chart, hub, and per-cluster values files; kustomize overlays must exist and per-cluster values files must name received charts.
 Not verified: Required calls inside if/with/range blocks and inside range-scoped variables are not evaluated; charts are not rendered; the live Argo CD Applications are not read.
 
-| Field | Expected | Observed |
+| Chart / item | Requirement | Finding |
 |---|---|---|
-| `charts received` | `every chart selected by a matched placement` | `1` |
-| `unmet required values` | `none` | `—` |
-| `missing kustomize overlays` | `none` | `—` |
-| `orphan values files` | `none` | `—` |
+| `charts received` | `Every chart selected by a matched placement` | `1` |
+| `chart values` | `All required values supplied` | `No missing required values` |
+| `kustomize overlays` | `All required overlays present` | `No missing overlays` |
+| `values files` | `Each values file belongs to a received chart` | `No orphan values files` |
 
 **Received charts**
 

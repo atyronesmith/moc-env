@@ -149,7 +149,7 @@ class FeatureChartValuesNextTest(unittest.TestCase):
         self.assertIn(
             "bu-ist-demo-workload0: Set the missing required chart values in "
             "values/bu-ist-demo-infra/bu-ist-demo-workload0/gamma.yaml. "
-            "unmet required values is gamma backend.address; expected none.",
+            "gamma: missing required values backend.address.",
             section,
         )
         self.assertNotIn("charts received", section)
@@ -168,8 +168,7 @@ class FeatureChartValuesNextTest(unittest.TestCase):
         section = self.next_section(text)
         self.assertIn(
             "bu-ist-demo-workload0: Remove the values files for charts the cluster "
-            "does not receive. (advisory) orphan values files is epsilon; "
-            "expected none.",
+            "does not receive. (advisory) Orphan values files: epsilon.",
             section,
         )
         self.assertNotIn("Set the missing", section)
@@ -188,8 +187,8 @@ class FeatureChartValuesNextTest(unittest.TestCase):
             "bu-ist-demo-workload0: Set the missing required chart values in "
             "values/bu-ist-demo-infra/bu-ist-demo-workload0/gamma.yaml and "
             "remove the values files for charts the cluster does not receive. "
-            "unmet required values is gamma backend.address; expected none. "
-            "orphan values files is epsilon; expected none.",
+            "gamma: missing required values backend.address. "
+            "Orphan values files: epsilon.",
             self.next_section(text),
         )
 
@@ -205,9 +204,9 @@ class FeatureChartValuesNextTest(unittest.TestCase):
         self.assertIn(
             "bu-ist-demo-workload0: Set the missing required chart values in "
             "values/bu-ist-demo-infra/bu-ist-demo-workload0/gamma.yaml and add "
-            "the kustomize overlay. unmet required values is gamma "
-            "backend.address; expected none. missing kustomize overlays is "
-            "kustomize/pure-cosi/overlays/bu-ist-demo-workload0; expected none.",
+            "the kustomize overlay. gamma: missing required values backend.address. "
+            "Missing required kustomize overlays: "
+            "kustomize/pure-cosi/overlays/bu-ist-demo-workload0.",
             self.next_section(text),
         )
 

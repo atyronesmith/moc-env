@@ -148,7 +148,9 @@ class CheckDescriptionCoverageTest(unittest.TestCase):
         self.assertEqual(markdown.count("Verifies:"), checks)
         self.assertEqual(markdown.count("Not verified:"), checks)
         self.assertEqual(
-            markdown.count("| Field | Expected | Observed |"), checks
+            markdown.count("| Field | Expected | Observed |")
+            + markdown.count("| Chart / item | Requirement | Finding |"),
+            checks,
         )
         for block in _passing_detail_blocks(markdown):
             for expected in _expected_cells(block):

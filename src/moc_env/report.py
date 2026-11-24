@@ -118,13 +118,14 @@ def _host_table(check: dict[str, Any], evidence: dict[str, Any]) -> list[str]:
             host.get("node_name"),
             host.get("bmc_addr"),
             host.get("boot_image_url"),
+            _management_label(host.get("bm_management")),
         ]
         for host in hosts
     ]
     return [
         "**Observed hosts**",
         "",
-        *_markdown_table(["Host", "Node name", "BMC address", "Boot image URL"], rows),
+        *_markdown_table(["Host", "Node name", "BMC address", "Boot image URL", "Management (bm_management)"], rows),
     ]
 
 
@@ -879,6 +880,32 @@ def _deferred_text_lines(report: dict[str, Any]) -> list[str]:
 
 
 def _action_evidence(check: dict[str, Any], report: dict[str, Any]) -> str:
+    if check.get("id") == "workload.feature_chart_values":
+        evidence = check.get("evidence") or {}
+        findings = [
+            f"{chart}: missing required values {plain(missing)}."
+            for chart, missing in (evidence.get("unmet_required_values") or {}).items()
+            if missing
+        ]
+        if evidence.get("missing_overlays"):
+            findings.append(f"Missing required kustomize overlays: {plain(evidence['missing_overlays'])}.")
+        if evidence.get("orphan_values_files"):
+            findings.append(f"Orphan values files: {plain(evidence['orphan_values_files'])}.")
+        return " ".join(findings)
+    if check.get("id") == "workload.agent_labels_inputs":
+        evidence = check.get("evidence") or {}
+        required = [
+            f"{host}.{name} is not found; this input is required."
+            for host, names in (evidence.get("missing_variables") or {}).items()
+            for name in names
+        ]
+        advisory = [
+            f"Advisory documentation difference for {item['host']}.resource_class: "
+            f"inventory has {item['inventory_resource_class']}; hardware documentation "
+            f"lists {item['documented_resource_class']} (not a blocking requirement or default)."
+            for item in evidence.get("resource_class_mismatches") or []
+        ]
+        return " ".join([*required, *advisory])
     if check.get("id") == "workload.address_uniqueness":
         duplicates = (check.get("missing") or {}).get("duplicates") or check.get("actual") or {}
         addresses = ", ".join(duplicates)
@@ -893,6 +920,13 @@ def _action_evidence(check: dict[str, Any], report: dict[str, Any]) -> str:
 
 def _action_description(check: dict[str, Any], report: dict[str, Any]) -> str:
     action = _substitute_action(check.get("next_action") or f"Resolve {check['check']}.", check, report)
+    missing_inputs = (check.get("evidence") or {}).get("missing_variables") or {}
+    if check.get("id") == "workload.agent_labels_inputs" and missing_inputs:
+        action = (
+            "Provide the missing inputs in infra/inventory/00hosts.yaml for "
+            f"{', '.join(sorted(missing_inputs))}. "
+            "resource_class must match the value the NodePool selects on."
+        )
     cluster = check.get("cluster")
     if check.get("scope") == "workload" and cluster and (
         cluster not in action
@@ -1113,10 +1147,193 @@ def _check_symbol(check: dict[str, Any]) -> str:
     return _symbol(check["state"])
 
 
+def _management_label(value: Any) -> str:
+    if value == "bmc":
+        return "BMC-managed (bmc)"
+    if value == "openstack":
+        return "OpenStack-managed (openstack)"
+    if value is None:
+        return "Not recorded"
+    return f"Other management ({value}; treated as non-OpenStack)"
+
+
+def _management_hosts(check: dict[str, Any]) -> list[dict[str, Any]]:
+    evidence = check.get("evidence") or {}
+    return evidence.get("agent_label_hosts") or evidence.get("hosts") or []
+
+
+def _management_summary(check: dict[str, Any]) -> str | None:
+    hosts = _management_hosts(check)
+    if not hosts:
+        return None
+    modes = sorted({_management_label(host.get("bm_management")) for host in hosts})
+    return "Host management: " + "; ".join(modes) + "."
+
+
+def _agent_input_descriptions(check: dict[str, Any]) -> tuple[str, str, str]:
+    verifies = check.get("verifies") or ""
+    not_verified = check.get("not_verified") or ""
+    heading = "Required agent inputs (non-OpenStack hosts)"
+    if check.get("id") != "workload.agent_labels_inputs":
+        return verifies, not_verified, heading
+    modes = {host.get("bm_management") for host in _management_hosts(check)}
+    if modes == {"bmc"}:
+        verifies = (
+            "Reads infra/inventory/00hosts.yaml and checks for infra/update-agents.yaml. "
+            "These hosts are BMC-managed (bm_management=bmc). Each host must have "
+            "mac_addr and resource_class inventory inputs. A hardware-documentation "
+            "resource-class difference is advisory only, not a missing-input failure."
+        )
+        not_verified = (
+            "MAC address and resource-class formats, live BMC connectivity, and actual "
+            "agent labels or approval are not verified. The playbook is checked only for existence."
+        )
+        heading = "Required agent inputs (BMC-managed hosts)"
+    elif modes == {"openstack"}:
+        verifies = (
+            "These hosts are OpenStack-managed (bm_management=openstack). "
+            "infra/update-agents.yaml obtains MAC addresses and resource classes from "
+            "OpenStack; inventory mac_addr and resource_class inputs are not required "
+            "by this check. The playbook is checked for existence."
+        )
+        not_verified = (
+            "OpenStack API responses, connectivity, and actual agent labels or approval "
+            "are not verified."
+        )
+        heading = "Agent input overrides (not required for OpenStack-managed hosts)"
+    elif modes:
+        verifies = (
+            "Applies input requirements per host using the observed bm_management value. "
+            "Hosts with bm_management=openstack obtain MAC addresses and resource classes "
+            "from OpenStack; all other hosts require mac_addr and resource_class inventory "
+            "inputs. Hardware-documentation differences are advisory only."
+        )
+        not_verified = (
+            "Address and resource-class formats, management-system connectivity, and actual "
+            "agent labels or approval are not verified. The playbook is checked only for existence."
+        )
+        heading = "Agent input requirements by host"
+    return verifies, not_verified, heading
+
+
+def _rendered_check_reason(check: dict[str, Any]) -> str:
+    reason = check["reason"]
+    if check.get("id") == "workload.agent_labels_inputs" and {
+        host.get("bm_management") for host in _management_hosts(check)
+    } == {"bmc"}:
+        return reason.replace("non-openstack", "BMC-managed")
+    return reason
+
+
+def _rendered_field_rows(check: dict[str, Any]) -> list[list[Any]]:
+    """Present requirements and findings without changing shared check evidence."""
+
+    if check.get("id") == "workload.feature_chart_values":
+        evidence = check.get("evidence") or {}
+        rows: list[list[Any]] = [[
+            "charts received",
+            "Every chart selected by a matched placement",
+            evidence.get("chart_count", 0),
+        ]]
+        unmet = evidence.get("unmet_required_values") or {}
+        rows.extend(
+            [chart, "All required values supplied", f"Missing: {plain(missing)}"]
+            for chart, missing in unmet.items()
+            if missing
+        )
+        if not any(unmet.values()):
+            rows.append([
+                "chart values",
+                "All required values supplied",
+                "No missing required values" if "unmet_required_values" in evidence else "Not evaluated",
+            ])
+        for label, requirement, key, missing_label, empty_label in (
+            (
+                "kustomize overlays", "All required overlays present", "missing_overlays",
+                "Missing overlays", "No missing overlays",
+            ),
+            (
+                "values files", "Each values file belongs to a received chart", "orphan_values_files",
+                "Orphan values files", "No orphan values files",
+            ),
+        ):
+            missing = evidence.get(key)
+            finding = (
+                f"{missing_label}: {plain(missing)}"
+                if missing
+                else empty_label if key in evidence else "Not evaluated"
+            )
+            rows.append([label, requirement, finding])
+        return rows
+    if check.get("id") == "workload.agent_labels_inputs":
+        return [
+            [
+                f"{host.get('host')}.{key}",
+                "not required (OpenStack)" if host.get("bm_management") == "openstack" else "present",
+                host.get(key),
+            ]
+            for host in (check.get("evidence") or {}).get("agent_label_hosts") or []
+            for key in ("mac_addr", "resource_class")
+        ]
+    return field_rows(check)
+
+
+def _resource_class_documentation_rows(check: dict[str, Any]) -> list[list[Any]]:
+    if check.get("id") != "workload.agent_labels_inputs":
+        return []
+    rows = []
+    for host in (check.get("evidence") or {}).get("agent_label_hosts") or []:
+        documented = host.get("documented_resource_class")
+        if host.get("bm_management") == "openstack" or documented is None:
+            continue
+        observed = host.get("resource_class")
+        comparison = (
+            "Not compared: input missing"
+            if observed is None
+            else "Matches documentation"
+            if observed == documented
+            else "Advisory difference only"
+        )
+        rows.append([host.get("host"), observed, documented, comparison])
+    return rows
+
+
+def _resource_class_documentation_lines(check: dict[str, Any], *, markdown: bool) -> list[str]:
+    rows = _resource_class_documentation_rows(check)
+    if not rows:
+        return []
+    title = "Resource-class documentation comparison (advisory only)"
+    note = (
+        "Documented hardware classes are reference information, not defaults or required "
+        "values. Agent resource-class labels must match the NodePool selectors."
+    )
+    headers = ["Host", "Inventory resource_class", "Documented hardware class", "Comparison"]
+    if markdown:
+        return [f"**{title}**", "", note, "", *_markdown_table(headers, rows)]
+    rendered = [[plain(value) for value in row] for row in [headers, *rows]]
+    widths = [max(len(row[column]) for row in rendered) for column in range(len(headers))]
+    return [
+        "",
+        f"  {title}",
+        *_wrap(note, 2),
+        *[
+            "  " + "  ".join(f"{value:<{width}}" for value, width in zip(row, widths)).rstrip()
+            for row in rendered
+        ],
+    ]
+
+
+def _detail_table_headers(check: dict[str, Any]) -> list[str]:
+    if check.get("id") == "workload.feature_chart_values":
+        return ["Chart / item", "Requirement", "Finding"]
+    return ["Field", "Expected", "Observed"]
+
+
 def _detail_section(check: dict[str, Any]) -> list[str]:
-    rows = field_rows(check)
-    field_width = max([len("Field")] + [len(plain(row[0])) for row in rows])
-    expected_width = max([len("Expected")] + [len(plain(row[1])) for row in rows])
+    rows = _rendered_field_rows(check)
+    headers = _detail_table_headers(check)
+    field_width = max([len(headers[0])] + [len(plain(row[0])) for row in rows])
+    expected_width = max([len(headers[1])] + [len(plain(row[1])) for row in rows])
     source: dict[str, Any] = next(
         (
             item for item in check.get("_sources", [])
@@ -1129,18 +1346,29 @@ def _detail_section(check: dict[str, Any]) -> list[str]:
         "-" * 100,
         *_wrap(
             f"{_check_symbol(check)}: "
-            f"{check['check']} — {check['reason']}",
+            f"{check['check']} — {_rendered_check_reason(check)}",
             2,
             width=104,
         ),
         f"  Source: {check['repository']} · {check['path']} @ {check['ref']} ({short_sha})",
     ]
-    if check.get("verifies"):
-        lines.extend(_wrap(f"Verifies: {check['verifies']}", 2))
-    if check.get("not_verified"):
-        lines.extend(_wrap(f"Not verified: {check['not_verified']}", 2))
+    management = _management_summary(check)
+    if management:
+        lines.extend(_wrap(management, 2))
+    verifies, not_verified, input_heading = _agent_input_descriptions(check)
+    if verifies:
+        lines.extend(_wrap(f"Verifies: {verifies}", 2))
+    if not_verified:
+        lines.extend(_wrap(f"Not verified: {not_verified}", 2))
+    if check.get("id") == "workload.agent_labels_inputs":
+        lines.extend(["", f"  {input_heading}"])
+    if check.get("id", "").endswith(".inventory"):
+        lines.extend(
+            f"  {host.get('name')}: {_management_label(host.get('bm_management'))}"
+            for host in _management_hosts(check)
+        )
     lines.append(
-        f"  {'Field':<{field_width}}  {'Expected':<{expected_width}}  Observed"
+        f"  {headers[0]:<{field_width}}  {headers[1]:<{expected_width}}  {headers[2]}"
     )
     if check.get("id") == "pull_requests":
         pulls = (check.get("evidence") or {}).get("pull_requests", [])
@@ -1158,6 +1386,7 @@ def _detail_section(check: dict[str, Any]) -> list[str]:
             lines.append(f"    {repository}: {count}")
     for name, expected_value, observed_value in rows:
         lines.append(f"  {plain(name):<{field_width}}  {plain(expected_value):<{expected_width}}  {plain(observed_value)}")
+    lines.extend(_resource_class_documentation_lines(check, markdown=False))
     lines.extend(_feature_chart_text_table(check))
     url = _detail_url(check)
     if url:
@@ -1339,7 +1568,7 @@ def render_text(
         lines.extend([
             "",
             "PULL REQUESTS",
-            f"{len(open_pulls)} open {'PR' if len(open_pulls) == 1 else 'PRs'} touch this environment.",
+            _pull_requests_headline(len(open_pulls)),
             *pr_lines,
         ])
 
@@ -1392,6 +1621,7 @@ def _agent_label_markdown_table(check: dict[str, Any]) -> list[str] | None:
             row.get("bm_management"),
             row.get("mac_addr"),
             row.get("resource_class"),
+            _management_label(row.get("bm_management")),
         ]
         for row in rows
         if isinstance(row, dict)
@@ -1402,7 +1632,7 @@ def _agent_label_markdown_table(check: dict[str, Any]) -> list[str] | None:
         "**Agent label inputs**",
         "",
         *_markdown_table(
-            ["Host", "bm_management", "mac_addr", "resource_class"], table_rows
+            ["Host", "bm_management", "mac_addr", "resource_class", "Management"], table_rows
         ),
     ]
 
@@ -1492,7 +1722,7 @@ def _detail_field_rows(check: dict[str, Any], report: dict[str, Any]) -> list[li
             for path in expected_paths
         ]
 
-    return field_rows(check)
+    return _rendered_field_rows(check)
 
 
 def _expanded_field_rows(rows: list[list[Any]]) -> list[list[Any]]:
@@ -1551,16 +1781,20 @@ def _check_markdown_details(
     }
     lines = [
         f"<details{' open' if open_state else ''}>",
-        f"<summary>{_check_symbol(check)}: {check['check']} — {check['reason']}</summary>",
+        f"<summary>{_check_symbol(check)}: {check['check']} — {_rendered_check_reason(check)}</summary>",
         "",
         f"Source: {check['repository']} · {path_text} @ {check['ref']} ({short_sha})",
         "",
     ]
-    if check.get("verifies"):
-        lines.append(f"Verifies: {check['verifies']}")
-    if check.get("not_verified"):
-        lines.append(f"Not verified: {check['not_verified']}")
-    if check.get("verifies") or check.get("not_verified"):
+    management = _management_summary(check)
+    if management:
+        lines.extend([management, ""])
+    verifies, not_verified, input_heading = _agent_input_descriptions(check)
+    if verifies:
+        lines.append(f"Verifies: {verifies}")
+    if not_verified:
+        lines.append(f"Not verified: {not_verified}")
+    if verifies or not_verified:
         lines.append("")
     if check_rule:
         lines.extend([f"Status rule: {check_rule}", ""])
@@ -1573,7 +1807,10 @@ def _check_markdown_details(
         ]
         for field, expected, observed in field_rows
     ]
-    lines.extend(_markdown_table(["Field", "Expected", "Observed"], rows))
+    if check.get("id") == "workload.agent_labels_inputs":
+        lines.extend([f"**{input_heading}**", ""])
+    lines.extend(_markdown_table(_detail_table_headers(check), rows))
+    lines.extend(_resource_class_documentation_lines(check, markdown=True))
     if check.get("id") == "hub.local_cluster_values":
         required = set(evidence.get("expected_paths") or [])
         found = set(evidence.get("paths") or [])
@@ -1888,6 +2125,11 @@ def _pull_field(pull: dict[str, Any], field: str) -> Any:
     return value.get("value") if isinstance(value, dict) else value
 
 
+def _pull_requests_headline(count: int) -> str:
+    noun, verb = ("pull request", "changes") if count == 1 else ("pull requests", "change")
+    return f"{count} open {noun} {verb} configuration relevant to this environment."
+
+
 def _markdown_pull_requests(report: dict[str, Any]) -> list[str]:
     status = _pull_status_line(report)
     if status:
@@ -1905,30 +2147,13 @@ def _markdown_pull_requests(report: dict[str, Any]) -> list[str]:
         _pull_field(pull, "classification") == "open"
         for pull in pulls.values()
     )
-    lines.append(
-        f"**{open_count} open {'PR' if open_count == 1 else 'PRs'} touch this environment.**"
-    )
+    lines.append(f"**{_pull_requests_headline(open_count)}**")
     lines.append("")
     if not pulls:
         lines.extend(["None.", ""])
         return lines
 
-    environment = report["environment"]
-    environment_parts = [
-        environment["name"],
-        environment["infra_cluster"],
-        *environment.get("workload_clusters", []),
-    ]
-
-    def changed_files(pull: dict[str, Any]) -> list[str]:
-        files = _pull_field(pull, "changed_files") or []
-        relevant = [
-            path
-            for path in files
-            if any(part in path for part in environment_parts)
-        ]
-        return relevant
-
+    # Relevance is established when collecting PRs, including shared-file changes.
     def pull_rows(classifications: set[str]) -> list[list[Any]]:
         rows = []
         for pull in sorted(
@@ -1940,13 +2165,12 @@ def _markdown_pull_requests(report: dict[str, Any]) -> list[str]:
         ):
             if _pull_field(pull, "classification") not in classifications:
                 continue
-            if not changed_files(pull):
-                continue
             repository = _pull_field(pull, "repository")
             number = _pull_field(pull, "number")
             url = _pull_field(pull, "html_url")
             files = [
-                f"[{path}]({url}/files)" for path in changed_files(pull)
+                f"[{path}]({url}/files)"
+                for path in (_pull_field(pull, "changed_files") or [])
             ]
             rows.append(
                 [
@@ -1954,7 +2178,7 @@ def _markdown_pull_requests(report: dict[str, Any]) -> list[str]:
                     MarkdownCell(f"[#{number}]({url})"),
                     _pull_field(pull, "title"),
                     _pull_field(pull, "head_ref"),
-                    MarkdownCell("<br>".join(files)),
+                    MarkdownCell("<br>".join(files) or "—"),
                 ]
             )
         return rows

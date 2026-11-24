@@ -11,6 +11,7 @@
       "evidence": {
         "hosts": [
           {
+            "bm_management": null,
             "bmc_addr": null,
             "boot_image_url": "http://10.2.0.82/boot/discovery.iso",
             "name": "control-0",
@@ -901,6 +902,7 @@
       "evidence": {
         "hosts": [
           {
+            "bm_management": "ipmi",
             "bmc_addr": null,
             "boot_image_url": "http://10.2.0.82/boot/discovery.iso",
             "name": "compute-0",

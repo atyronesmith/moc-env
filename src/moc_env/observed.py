@@ -143,6 +143,7 @@ class ClusterInventoryObservation:
             {
                 "name": host.get("name"),
                 "node_name": host.get("node_name"),
+                "bm_management": host.get("bm_management"),
                 "bmc_addr": host.get("bmc_addr"),
                 "boot_image_url": host.get("boot_image_url"),
             }

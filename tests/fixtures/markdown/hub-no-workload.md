@@ -56,6 +56,8 @@ Generated 2026-11-16 12:34 UTC · MOC issue: not set — pass `--issue N`
 
 Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml) @ main (2222222)
 
+Host management: Not recorded.
+
 Verifies: Parses CCI-MOC/oac-infra infra/inventory/00hosts.yaml as YAML and walks every Ansible group in every child group. The check passes when at least one group declares vars.cluster == `dizzy-infra`; the host count does not affect the state.
 Not verified: Host names, node_name values, MAC addresses, boot images and group nesting are not validated here, and a matching group with zero hosts still passes.
 
@@ -66,9 +68,9 @@ Not verified: Host names, node_name values, MAC addresses, boot images and group
 
 **Observed hosts**
 
-| Host | Node name | BMC address | Boot image URL |
-|---|---|---|---|
-| `control-0` | `MOC-R4PAC10U31-S1D` | — | — |
+| Host | Node name | BMC address | Boot image URL | Management (bm_management) |
+|---|---|---|---|---|
+| `control-0` | `MOC-R4PAC10U31-S1D` | — | — | `Not recorded` |
 
 </details>
 

@@ -610,10 +610,13 @@ points to the numbered action that must be completed before dependent checks
 can run; blocked checks are not unknown and are not counted as gaps.
 
 Pull requests are context, not a check. They do not affect pass/gap counts,
-severity, or next actions; the pull-request section states how many open PRs
-touch the environment and lists them separately. If lookup is skipped or
-unavailable, only the corresponding `Pull requests: ...` line is printed, not
-an unverified `0 open PRs` count.
+severity, or next actions; the pull-request section states how many open pull
+requests change configuration relevant to the environment and lists them
+separately. The Open and merged/closed tables both show the repository, linked
+PR number, title, head branch, and changed files. Shared files remain visible
+even when their paths do not contain the environment name. If lookup is skipped
+or unavailable, only the corresponding `Pull requests: ...` line is printed,
+not an unverified zero-open-PR count.
 
 When PR inspection is enabled, changed-file overlap only selects a PR as a
 candidate. For each candidate, `moc-env` replays the relevant check at
@@ -666,7 +669,29 @@ Use `--details` when you need one row per field with separate expected and
 observed columns, source paths, and reasons. Source lines include the commit
 SHA and actual ref read; URLs use that ref, including `--ref` overrides.
 
+Inventory host details show each host's observed `bm_management` value and
+identify BMC-managed or OpenStack-managed hosts. Group-inherited values are
+included; a value that was not recorded is shown as such, not guessed from
+the presence of a BMC address. JSON inventory-host evidence includes the same
+management value.
+
+For update-agents inputs, descriptions are tailored to the management modes
+present. BMC-only groups show only BMC input requirements. OpenStack-only groups
+explain that the playbook obtains the values from OpenStack; mixed groups show
+the applicable requirement per host. The required-input table checks that
+non-OpenStack hosts have `mac_addr` and `resource_class` values. Missing inputs
+cause a blocking failure. A separate advisory table compares resource classes with
+the hardware documentation; a documented class such as `fc430` is reference
+information, not an automatic default or a required value. The effective agent
+label must match the NodePool selector.
+
 ### Workload value checks
+
+Feature chart values use `Chart / item`, `Requirement`, and `Finding` columns.
+`Missing: image.repository, image.digest` lists missing setting names, not their
+configured values. Required overlays are reported explicitly as `Missing
+overlays: <path>` or `No missing overlays`; an unevaluated check says
+`Not evaluated` rather than claiming that nothing is missing.
 
 `workload.dns_base_domain` checks every explicit `dns.records` hostname against
 `baseDomain` or `hcpExternalDomain` from
@@ -786,7 +811,8 @@ Open the generated files and review:
 - non-OpenStack host `mac_addr` and `resource_class` inputs used by
   `infra/update-agents.yaml`;
 - `resource_class` values against `docs/hardware-and-network-configuration.md`
-  when the host's node name appears in that document's resource-class table;
+  as an advisory comparison when the host's node name appears in that document's
+  resource-class table, not as a required value or default;
 - domain and machine network;
 - chart variables;
 - component and application paths;
