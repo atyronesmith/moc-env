@@ -867,6 +867,10 @@ def main(argv: list[str] | None = None, clock: Clock | None = None) -> int:
                 ),
                 file=sys.stderr,
             )
+            fetched = sum(c.pr_files_fetched for c in clients)
+            reused = sum(c.pr_files_reused for c in clients)
+            if fetched or reused:
+                print(f"PR file lists: {fetched} fetched, {reused} reused", file=sys.stderr)
 
 
 def _main(argv: list[str] | None = None, clock: Clock | None = None) -> int:

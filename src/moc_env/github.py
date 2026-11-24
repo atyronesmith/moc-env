@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 import time
 from contextvars import ContextVar
 from collections.abc import Iterator
@@ -51,6 +52,8 @@ class GitHubClient:
         self.counted_endpoints: list[str] = []
         self.requests_made = 0
         self.cache_hits = 0
+        self.pr_files_fetched = 0
+        self.pr_files_reused = 0
         clients = run_clients.get()
         if clients is not None:
             clients.append(self)
@@ -61,6 +64,7 @@ class GitHubClient:
         self._raw_responses: dict[str, str] = {}
         self._unrevalidated_sources: dict[str, str] = {}
         self._trees: dict[tuple[str, str], dict[str, dict[str, Any]]] = {}
+        self._pull_heads: dict[tuple[str, int], str | None] = {}
 
     @property
     def authenticated(self) -> bool:
@@ -268,9 +272,18 @@ class GitHubClient:
                 if not 500 <= exc.code < 600 or attempt == 3:
                     raise
                 exc.close()
-            except (OSError, URLError, HTTPException):
+                reason = f"HTTP {exc.code}"
+            except (OSError, URLError, HTTPException) as exc:
                 if attempt == 3:
                     raise
+                cause = exc.reason if isinstance(exc, URLError) else exc
+                reason = "timeout" if isinstance(cause, TimeoutError) else "connection error"
+            print(
+                f"moc-env: retry {urlsplit(request.full_url).path}: "
+                f"{reason}; attempt {attempt + 1} of 3",
+                file=sys.stderr,
+                flush=True,
+            )
             time.sleep(0.5 * (2 ** attempt))
         raise AssertionError("unreachable retry state")
 
@@ -515,12 +528,57 @@ class GitHubClient:
             raise GitHubError(f"GitHub raw download failed for {url}: {exc}") from exc
 
     def pulls(self, repository: str, state: str = "all") -> Iterator[dict[str, Any]]:
-        yield from self.list(
+        for pull in self.list(
             f"/repos/{repository}/pulls", {"state": state, "per_page": "100"}
-        )
+        ):
+            if isinstance(pull, dict) and type(pull.get("number")) is int:
+                head = pull.get("head")
+                self._pull_heads[(repository, pull["number"])] = (
+                    head.get("sha") if isinstance(head, dict) else None
+                )
+            yield pull
 
     def pr_files(self, repository: str, number: int) -> Iterator[dict[str, Any]]:
-        yield from self.list(f"/repos/{repository}/pulls/{number}/files", {"per_page": "100"})
+        """Reuse a complete PR file list only for the head seen in the pulls list."""
+
+        head_sha = self._pull_heads.get((repository, number))
+        key = (
+            f"pr-files:{repository}:{number}:{head_sha}"
+            if isinstance(head_sha, str) and head_sha else None
+        )
+        cached = self.response_cache.read(key) if key and not self.refresh else None
+        if cached is not None:
+            try:
+                files = json.loads(cached["body"])
+            except json.JSONDecodeError:
+                files = None
+            if isinstance(files, list) and all(
+                isinstance(file, dict)
+                and isinstance(file.get("filename"), str)
+                and file["filename"]
+                for file in files
+            ):
+                self.cache_hits += 1
+                self.pr_files_reused += 1
+                yield from files
+                return
+        if key and self.offline:
+            raise GitHubError(
+                f"No cached PR file list is available for {repository}#{number} "
+                f"at {head_sha}; run without --offline to populate the cache"
+            )
+        files = list(self.list(
+            f"/repos/{repository}/pulls/{number}/files", {"per_page": "100"}
+        ))
+        self.pr_files_fetched += 1
+        if key and all(
+            isinstance(file, dict)
+            and isinstance(file.get("filename"), str)
+            and file["filename"]
+            for file in files
+        ):
+            self._store_response(key, "", json.dumps(files))
+        yield from files
 
 
 def github_url(repository: str, path: str, ref: str = "main") -> str:
