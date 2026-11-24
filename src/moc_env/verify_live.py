@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Callable
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from time import monotonic
@@ -400,6 +401,16 @@ def verify_live(client: GitHubClient, environment: str, workload: str, directory
             reported_pods.setdefault(node, []).append({
                 "namespace": metadata.get("namespace", ""), "name": metadata["name"],
                 "ready": ready, "restarts": restarts,
+                "phase": status.get("phase"),
+                **({"init": _ready_total(status["initContainerStatuses"])}
+                    if status.get("initContainerStatuses") else {}),
+                "containers": _ready_total(status["containerStatuses"]) if "containerStatuses" in status else None,
+                "reason": next((state["reason"]
+                    for field in ("initContainerStatuses", "containerStatuses", "ephemeralContainerStatuses")
+                    for container in status.get(field, [])
+                    for key in ("waiting", "terminated")
+                    if (state := (container.get("state") or {}).get(key) or {}).get("reason")), None),
+                "age_seconds": _age_seconds(snapshot.manifest.get("timestamp"), metadata.get("creationTimestamp")),
             })
     if pod_error:
         sections["Health"].append({**_row("pods", "unverifiable", "Ready", None, pod_error), "pods": []})
@@ -424,6 +435,40 @@ def verify_live(client: GitHubClient, environment: str, workload: str, directory
             "sources": {APPS: inventory.sha, INFRA: client.resolve_commit(INFRA)},
             "sections": sections,
             "summary": {verdict: sum(row["verdict"] == verdict for rows in sections.values() for row in rows) for verdict in VERDICTS}}
+
+
+def _ready_total(containers: list[dict[str, Any]]) -> str:
+    return f"{sum(bool(container.get('ready')) for container in containers)}/{len(containers)}"
+
+
+def _age_seconds(timestamp: str | None, created: str | None) -> int | None:
+    if not timestamp or not created:
+        return None
+    try:
+        return int((datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+            - datetime.fromisoformat(created.replace("Z", "+00:00"))).total_seconds())
+    except (ValueError, TypeError):
+        return None
+
+
+def _pod_health_text(pod: dict[str, Any]) -> str:
+    parts = ["Ready" if pod["ready"] else "not Ready"]
+    if pod.get("phase"):
+        parts.append(pod["phase"])
+    for field in ("init", "containers"):
+        if pod.get(field) is not None:
+            parts.append(f"{field} {pod[field]}")
+    if pod.get("reason"):
+        parts.append(pod["reason"])
+    age = pod.get("age_seconds")
+    if age is not None:
+        minutes = age // 60
+        hours = minutes // 60
+        parts.append(f"{hours // 24}d{hours % 24}h" if hours >= 24 else
+            f"{hours}h{minutes % 60}m" if hours >= 1 else f"{minutes}m")
+    if pod.get("restarts") is not None:
+        parts.append(f"{pod['restarts']} restarts")
+    return " · ".join(parts)
 
 
 def _display(value: Any) -> str:
@@ -479,7 +524,7 @@ def render_live_report(report: dict[str, Any], format: str = "text") -> str:
             if section == "Health":
                 pod_names = [f"{pod['namespace']}/{pod['name']}" for pod in row.get("pods", [])]
                 width = max(map(len, pod_names), default=0)
-                pod_lines = [f"{name:<{width}}  {'Ready' if pod['ready'] else 'not Ready'}, {pod['restarts']} restarts"
+                pod_lines = [f"{name:<{width}}  {_pod_health_text(pod)}"
                     for name, pod in zip(pod_names, row.get("pods", []))]
             rendered_rows.append((row, evidence, pod_lines))
         if format == "markdown":

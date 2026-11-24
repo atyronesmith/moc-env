@@ -155,12 +155,21 @@ def reduce_object(obj: dict[str, Any]) -> dict[str, Any]:
         result["status"] = {"conditions": [{key: condition[key] for key in ("type", "status") if key in condition}
                                         for condition in status.get("conditions", [])]}
     if kind == "Pod":
+        if "creationTimestamp" in original_metadata:
+            result["metadata"]["creationTimestamp"] = original_metadata["creationTimestamp"]
         result["spec"] = {"nodeName": spec.get("nodeName")}
         result["status"]["phase"] = status.get("phase")
         for field in ("containerStatuses", "initContainerStatuses", "ephemeralContainerStatuses"):
             if field in status:
-                result["status"][field] = [{key: container[key] for key in ("name", "ready", "restartCount") if key in container}
-                                        for container in status[field]]
+                result["status"][field] = []
+                for container in status[field]:
+                    reduced = {key: container[key] for key in ("name", "ready", "restartCount") if key in container}
+                    state = container.get("state") or {}
+                    reasons = {key: {"reason": state[key]["reason"]} for key in ("waiting", "terminated")
+                            if "reason" in (state.get(key) or {})}
+                    if reasons:
+                        reduced["state"] = reasons
+                    result["status"][field].append(reduced)
     elif kind == "ResourceQuota":
         result["spec"] = {"hard": spec.get("hard", {})}
     elif kind == "DataScienceCluster":

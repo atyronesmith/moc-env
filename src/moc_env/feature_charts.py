@@ -76,6 +76,7 @@ class ApplicationSet:
     kustomize_path: str | None = None
     value_files: tuple[str, ...] = ()
     manifest_path: str = ""
+    gate_path: str | None = None
 
 
 def parse_placements(text: str) -> list[Placement]:
@@ -217,6 +218,7 @@ def parse_application_set(
         kustomize_path=kustomize_path,
         value_files=parse_value_files(text),
         manifest_path=manifest_path,
+        gate_path=hub_gate_path(text),
     )
 
 
@@ -525,6 +527,8 @@ def workload_chart_rows(
     rows: list[dict[str, Any]] = []
     seen: set[str] = set()
     for application_set in application_sets:
+        if application_set.gate_path is not None and gated_path_for_hub(application_set.gate_path, hub) not in tree:
+            continue
         if application_set.placement not in matched:
             continue
         placement = by_name.get(application_set.placement or "")
