@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -14,7 +15,7 @@ from unittest.mock import patch
 from moc_env import cli
 from moc_env.capture_live import capture_live
 from moc_env.checks import list_environments
-from moc_env.verify_live import LocalRepositories
+from moc_env.verify_live import LocalRepositories, render_live_report, verify_live
 
 
 FIXTURES = Path(__file__).parent / "fixtures/live"
@@ -259,6 +260,107 @@ class LiveFixesTest(unittest.TestCase):
         self.assertEqual((code, stderr), (0, ""))
         self.assertIs(self.manifest()["identity_verified"], False)
         self.assertEqual(self.manifest()["identity_reason"], "skipped with --skip-identity-check")
+
+
+class UndeclaredHardwareProfilesTest(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.directory = Path(temporary.name)
+        self.snapshot = self.directory / "snapshot"
+        self.repositories = self.directory / "repos"
+        shutil.copytree(FIXTURES / "workload0", self.snapshot)
+        shutil.copytree(REPOS, self.repositories)
+        self.client = LocalRepositories(self.repositories)
+        self.values = self.repositories / "oac-apps/values/test-env-infra/test-env-workload0/rhoai.yaml"
+        self.values.write_text(json.dumps({
+            "hardwareProfiles": [{"name": "gpu-a"}, {"name": "gpu-b"}],
+            "enabledHardwareProfiles": [],
+        }))
+        nodes = json.loads((self.snapshot / "nodes.json").read_text())
+        nodes["items"].append({"kind": "Node", "metadata": {"name": "node-a10"}})
+        (self.snapshot / "nodes.json").write_text(json.dumps(nodes))
+        manifest_path = self.snapshot / "manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        manifest["forbidden"] = []
+        manifest["resources"]["dnses.operator.openshift.io"]["status"] = "captured"
+        manifest_path.write_text(json.dumps(manifest))
+        (self.snapshot / "dnses.operator.openshift.io.json").write_text(json.dumps({"items": [{
+            "apiVersion": "operator.openshift.io/v1", "kind": "DNS",
+            "metadata": {"name": "default", "annotations": {
+                "argocd.argoproj.io/tracking-id": "test-env-workload0-dns-operator-config:operator.openshift.io/DNS:/default",
+            }},
+        }]}))
+
+    def set_profiles(self, *names):
+        path = self.snapshot / "hardwareprofiles.infrastructure.opendatahub.io.json"
+        path.write_text(json.dumps({"items": [{
+            "kind": "HardwareProfile", "metadata": {
+                "name": name, "namespace": "ai-applications",
+                "annotations": {"opendatahub.io/disabled": "false"},
+            }, "spec": {},
+        } for name in names]}))
+
+    def report(self):
+        return verify_live(self.client, "test-env", "test-env-workload0", self.snapshot)
+
+    def invoke(self, format):
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            code = cli.main([
+                "verify-live", "test-env", "--workload", "workload0", "--snapshot", str(self.snapshot),
+                "--repository-root", str(self.repositories), "--format", format,
+            ])
+        self.assertEqual(stderr.getvalue(), "")
+        return code, stdout.getvalue()
+
+    def test_undeclared_live_profile_is_a_note_not_a_verdict(self):
+        expected_note = {"section": "OpenShift AI", "name": "hardwareprofile/site-default",
+            "detail": "live, not defined by the rhoai chart"}
+        text_note = "  note            hardwareprofile/site-default | live, not defined by the rhoai chart"
+        markdown_note = "note: `hardwareprofile/site-default` | live, not defined by the rhoai chart"
+        for live_gpu, expected_exit in ((True, 1), (False, 0)):
+            with self.subTest(live_gpu=live_gpu):
+                self.set_profiles("site-default", *(("gpu-a",) if live_gpu else ()))
+                report = self.report()
+                rows = {row["name"]: row["verdict"] for row in report["sections"]["OpenShift AI"]
+                    if row["name"].startswith("hardwareprofile/")}
+                self.assertEqual(rows, {
+                    "hardwareprofile/gpu-a": "drift" if live_gpu else "expected-absent",
+                    "hardwareprofile/gpu-b": "expected-absent",
+                })
+                self.assertEqual(report["undeclared"], [expected_note])
+                self.assertEqual(report["summary"]["drift"], expected_exit)
+                for format, note in (("text", text_note), ("markdown", markdown_note), ("json", None)):
+                    with self.subTest(format=format):
+                        code, output = self.invoke(format)
+                        self.assertEqual(code, expected_exit)
+                        if format == "json":
+                            self.assertEqual(json.loads(output)["undeclared"], [expected_note])
+                        else:
+                            self.assertIn(note, output.splitlines())
+                            self.assertLess(output.index("hardwareprofile/gpu-b"), output.index(note))
+                            self.assertLess(output.index(note), output.index("Health\n"))
+                            self.assertEqual(output.count("hardwareprofile/site-default"), 1)
+
+    def test_enabled_undefined_profile_is_still_drift(self):
+        self.values.write_text(json.dumps({"hardwareProfiles": [], "enabledHardwareProfiles": ["unknown-gpu"]}))
+        for present in (False, True):
+            with self.subTest(present=present):
+                self.set_profiles(*(("unknown-gpu",) if present else ()))
+                report = self.report()
+                row = next(row for row in report["sections"]["OpenShift AI"]
+                    if row["name"] == "hardwareprofile/unknown-gpu")
+                self.assertEqual(row["verdict"], "drift")
+                self.assertEqual(report["undeclared"], [])
+                self.assertEqual(self.invoke("text")[0], 1)
+
+    def test_undeclared_list_is_present_and_empty_without_extra_profiles(self):
+        self.set_profiles()
+        report = self.report()
+        self.assertEqual(report["undeclared"], [])
+        self.assertEqual(json.loads(render_live_report(report, "json"))["undeclared"], [])
+        self.assertNotIn("  note            hardwareprofile/", render_live_report(report))
 
 
 if __name__ == "__main__":

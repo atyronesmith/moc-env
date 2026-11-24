@@ -255,6 +255,7 @@ def verify_live(client: GitHubClient, environment: str, workload: str, directory
         raise ValueError("; ".join(errors))
     by_appset = {item.name: item for item in appsets}
     sections: dict[str, list[dict[str, Any]]] = {name: [] for name in ("Charts", "Nodes", "Quotas", "OpenShift AI", "Health")}
+    undeclared: list[dict[str, str]] = []
     resolved: dict[str, tuple[dict[str, Any], dict[str, str]]] = {}
     for position, declared in enumerate(sorted(cluster.rows, key=lambda item: item["chart"]), 1):
         chart = declared["chart"]
@@ -357,8 +358,13 @@ def verify_live(client: GitHubClient, environment: str, workload: str, directory
         actual_profiles = {obj["metadata"]["name"]: obj for obj in profiles or []
                         if obj.get("metadata", {}).get("namespace") == rhoai.get("applicationsNamespace", "redhat-ods-applications")}
         expected_profiles = {item["name"]: item for item in rhoai.get("hardwareProfiles", [])}
-        enabled_profiles = set(rhoai.get("enabledHardwareProfiles", [])) if rhoai.get("enabled") is not False else set()
-        for name in sorted(set(expected_profiles) | set(actual_profiles) | enabled_profiles):
+        configured_profiles = set(rhoai.get("enabledHardwareProfiles", []))
+        enabled_profiles = configured_profiles if rhoai.get("enabled") is not False else set()
+        for name in sorted(set(expected_profiles) | set(actual_profiles) | configured_profiles):
+            if name not in expected_profiles and name not in configured_profiles:
+                undeclared.append({"section": "OpenShift AI", "name": f"hardwareprofile/{name}",
+                    "detail": "live, not defined by the rhoai chart"})
+                continue
             expected_profile = expected_profiles.get(name, {})
             obj = actual_profiles.get(name)
             wanted_profile = {key: expected_profile[key] for key in ("identifiers", "scheduling") if key in expected_profile}
@@ -366,18 +372,22 @@ def verify_live(client: GitHubClient, environment: str, workload: str, directory
             disabled = name not in enabled_profiles
             if profile_error:
                 verdict = "unverifiable"
+            elif name not in expected_profiles:
+                verdict = "drift"
             elif disabled:
                 verdict = "drift" if obj else "expected-absent"
             else:
                 annotations = obj.get("metadata", {}).get("annotations", {}) if obj else {}
                 verdict = "match" if obj and actual_profile is not None and all(actual_profile.get(key) == value for key, value in wanted_profile.items()) and annotations.get("opendatahub.io/disabled") == "false" else "drift"
             detail = profile_error
-            if verdict == "drift" and disabled:
+            if verdict == "drift" and name not in expected_profiles:
+                detail = "enabled, not defined by the rhoai chart"
+            elif verdict == "drift" and disabled:
                 detail = "presence: declared absent, live present"
             if verdict == "expected-absent":
                 key = "enabled" if rhoai.get("enabled") is False else "enabledHardwareProfiles"
                 detail = f"{sources.get(key, 'unknown source')} {name} not enabled"
-            if verdict == "drift" and obj and not disabled:
+            if verdict == "drift" and obj and not disabled and name in expected_profiles:
                 detail = _field_differences(wanted_profile, actual_profile)
                 annotation = (obj.get("metadata", {}).get("annotations") or {}).get("opendatahub.io/disabled")
                 if annotation != "false":
@@ -433,7 +443,7 @@ def verify_live(client: GitHubClient, environment: str, workload: str, directory
             sections["Health"].append({**_row("pods", "match", "Ready", f"{len(pods or [])} pods checked"), "pods": []})
     return {"environment": environment, "workload": workload, "snapshot": snapshot.manifest,
             "sources": {APPS: inventory.sha, INFRA: client.resolve_commit(INFRA)},
-            "sections": sections,
+            "sections": sections, "undeclared": undeclared,
             "summary": {verdict: sum(row["verdict"] == verdict for rows in sections.values() for row in rows) for verdict in VERDICTS}}
 
 
@@ -539,6 +549,11 @@ def render_live_report(report: dict[str, Any], format: str = "text") -> str:
                 lines.extend(f"{'':20}{pod_line}" for pod_line in pod_lines)
             if not rows:
                 lines.append("  No declared rows.")
+        notes = [note for note in report.get("undeclared", []) if note["section"] == section]
+        for note in notes:
+            lines.append(f"note: `{note['name']}` | {note['detail']}" if format == "markdown" else
+                f"  {'note':<15} {note['name']} | {note['detail']}")
+        if format != "markdown" or notes:
             lines.append("")
     lines.extend(["Sources: " + "  ".join(f"{repo}@{sha}" for repo, sha in report["sources"].items()),
                 "Snapshot evidence only; chart matches indicate tracked-object presence, not full manifest equality."])
