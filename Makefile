@@ -87,14 +87,14 @@ cli: ## Run the CLI: make cli ARGS="charts --view page"
 
 sample-live: ## Generate live charts and status samples into $(SAMPLE_DIR)
 	@mkdir -p "$(SAMPLE_DIR)"
-	$(UV) run --locked moc-env charts --output "$(SAMPLE_DIR)/charts-summary.txt"
+	$(UV) run --locked moc-env charts --output "$(SAMPLE_DIR)/charts-summary.md"
 	$(UV) run --locked moc-env charts --view page --output "$(SAMPLE_DIR)/charts-page.md"
-	$(UV) run --locked moc-env status oac-prod --output "$(SAMPLE_DIR)/status-oac-prod.txt"
-	$(UV) run --locked moc-env status compliant-dev --output "$(SAMPLE_DIR)/status-compliant-dev.txt"
+	$(UV) run --locked moc-env status oac-prod --output "$(SAMPLE_DIR)/status-oac-prod.md"
+	$(UV) run --locked moc-env status compliant-dev --output "$(SAMPLE_DIR)/status-compliant-dev.md"
 
 update-samples: ## Copy generated samples into $(EXAMPLE_DIR)
 	@set -eu; \
-	samples="charts-summary.txt charts-page.md status-oac-prod.txt status-compliant-dev.txt"; \
+	samples="charts-summary.md charts-page.md status-oac-prod.md status-compliant-dev.md"; \
 	for sample in $$samples; do \
 	  if [ ! -f "$(SAMPLE_DIR)/$$sample" ]; then \
 	    printf 'Missing sample in SAMPLE_DIR=%s: %s. Run make sample-live first.\n' "$(SAMPLE_DIR)" "$$sample" >&2; \

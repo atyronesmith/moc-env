@@ -1021,8 +1021,8 @@ validation, comparison, plan, and chart-values samples under `docs/samples/`
 with synthetic fixtures and a fixed clock. It does not call GitHub.
 
 `make sample-live` instead reads real repository configuration and produces
-four files: `charts-summary.txt`, `charts-page.md`, `status-oac-prod.txt`, and
-`status-compliant-dev.txt`. `SAMPLE_DIR` defaults to `reports/samples`, which
+four files: `charts-summary.md`, `charts-page.md`, `status-oac-prod.md`, and
+`status-compliant-dev.md`. `SAMPLE_DIR` defaults to `reports/samples`, which
 is ignored by Git. Real output is refreshed by hand and is not kept current.
 It must never replace the fixture samples under `docs/samples/`.
 

@@ -12,8 +12,8 @@ make sample-live
 make update-samples
 ```
 
-`sample-live` writes `charts-summary.txt`, `charts-page.md`,
-`status-oac-prod.txt`, and `status-compliant-dev.txt` into `SAMPLE_DIR`
+`sample-live` writes `charts-summary.md`, `charts-page.md`,
+`status-oac-prod.md`, and `status-compliant-dev.md` into `SAMPLE_DIR`
 (default `reports/samples`, ignored by Git). `update-samples` checks that all
 four files exist, then copies them into `EXAMPLE_DIR` (default
 `docs/examples`). Both directories can be overridden on the command line.

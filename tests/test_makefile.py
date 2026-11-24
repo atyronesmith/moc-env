@@ -18,7 +18,7 @@ TARGETS = {
     "sample-live", "update-samples",
 }
 SAMPLES = (
-    "charts-summary.txt", "charts-page.md", "status-oac-prod.txt", "status-compliant-dev.txt",
+    "charts-summary.md", "charts-page.md", "status-oac-prod.md", "status-compliant-dev.md",
 )
 OFFLINE_UV = "synthetic-uv-must-not-execute"
 
