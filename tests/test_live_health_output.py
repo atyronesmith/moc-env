@@ -51,16 +51,16 @@ class LiveHealthOutputTest(unittest.TestCase):
         self.assertEqual(row["detail"], "note: 1 Ready pod over 50 restarts")
         text = render_live_report(report).splitlines()
         self.assertIn("  match           node-a02 | note: 1 Ready pod over 50 restarts", text)
-        self.assertIn("                    fixture/proxy-a02  Ready · containers 0/1 · 60 restarts", text)
+        self.assertIn("                    fixture/proxy-a02  Ready · 60 restarts", text)
         document = json.loads(render_live_report(report, "json"))
         self.assertEqual(self.health(document, "node-a02")["pods"], [{
             "namespace": "fixture", "name": "proxy-a02", "ready": True, "restarts": 60,
-            "phase": None, "containers": "0/1", "reason": None, "age_seconds": None,
+            "phase": None, "containers": None, "reason": None, "age_seconds": None,
         }])
         markdown = render_live_report(report, "markdown")
         self.assertIn(
             "| `node-a02` | `match` | `note: 1 Ready pod over 50 restarts`"
-            "<br>`fixture/proxy-a02  Ready · containers 0/1 · 60 restarts` |", markdown,
+            "<br>`fixture/proxy-a02  Ready · 60 restarts` |", markdown,
         )
 
     def test_mixed_node_lists_each_pod_once_with_not_ready_first(self):
@@ -77,8 +77,8 @@ class LiveHealthOutputTest(unittest.TestCase):
             self.assertEqual(output.count("fixture/importer-1"), 1)
             self.assertEqual(output.count("fixture/proxy-a07"), 1)
             self.assertLess(output.index("fixture/importer-1"), output.index("fixture/proxy-a07"))
-            self.assertIn("not Ready · containers 0/1 · 0 restarts", output)
-            self.assertIn("Ready · containers 0/1 · 60 restarts", output)
+            self.assertIn("not Ready · 0 restarts", output)
+            self.assertIn("Ready · 60 restarts", output)
         markdown_row = next(line for line in render_live_report(report, "markdown").splitlines()
             if line.startswith("| `node-a07`"))
         self.assertEqual(markdown_row.count("<br>"), 2)
@@ -93,9 +93,9 @@ class LiveHealthOutputTest(unittest.TestCase):
         text = render_live_report(report)
         self.assertIn(
             "  drift           node-a07 | 2 pods not Ready\n"
-            "                    fixture/storage-agent  not Ready · containers 0/1 · 19019 restarts\n"
-            "                    fixture/importer-1     not Ready · containers 0/1 · 0 restarts\n"
-            "                    fixture/proxy-a07      Ready · containers 0/1 · 60 restarts\n", text,
+            "                    fixture/storage-agent  not Ready · 19019 restarts\n"
+            "                    fixture/importer-1     not Ready · 0 restarts\n"
+            "                    fixture/proxy-a07      Ready · 60 restarts\n", text,
         )
         self.assertIn("  match           node-a03\n", text)
         self.assertEqual(self.health(report, "node-a03")["pods"], [])
@@ -146,7 +146,36 @@ class LiveHealthOutputTest(unittest.TestCase):
         self.assertIsNone(pod["reason"])
         self.assertNotIn("init", pod)
         line = next(line for line in render_live_report(report).splitlines() if "fixture/old-pod" in line)
-        self.assertEqual(line, "                    fixture/old-pod  not Ready · containers 0/1 · 0 restarts")
+        self.assertEqual(line, "                    fixture/old-pod  not Ready · 0 restarts")
+
+    def test_missing_or_non_boolean_readiness_omits_container_and_init_counts(self):
+        for incomplete in ({}, {"ready": None}, {"ready": "true"}, {"ready": 0}, {"ready": 1}):
+            with self.subTest(incomplete=incomplete):
+                statuses = [{"ready": True, "restartCount": 60}, incomplete]
+                self.set_pods(self.pod("unknown-readiness", "node-a07", True, 60,
+                    containerStatuses=statuses, initContainerStatuses=[{"ready": True}, incomplete]))
+                report = self.report()
+                pod = self.health(report, "node-a07")["pods"][0]
+                self.assertIsNone(pod["containers"])
+                self.assertIsNone(pod["init"])
+                for format in ("text", "markdown"):
+                    line = next(line for line in render_live_report(report, format).splitlines()
+                        if "fixture/unknown-readiness" in line)
+                    self.assertIn("fixture/unknown-readiness  Ready · 60 restarts", line)
+                    self.assertNotIn("containers", line)
+                    self.assertNotIn("init ", line)
+
+    def test_boolean_readiness_counts_ready_containers_and_init(self):
+        self.set_pods(self.pod("known-readiness", "node-a07", False, 60, phase="Running",
+            containerStatuses=[{"ready": True, "restartCount": 60}, {"ready": False}],
+            initContainerStatuses=[{"ready": True}]))
+        report = self.report()
+        pod = self.health(report, "node-a07")["pods"][0]
+        self.assertEqual(pod["containers"], "1/2")
+        self.assertEqual(pod["init"], "1/1")
+        for format in ("text", "markdown"):
+            self.assertIn("not Ready · Running · init 1/1 · containers 1/2 · 60 restarts",
+                render_live_report(report, format))
 
     def test_age_formats_and_unavailable_details(self):
         path = self.snapshot / "manifest.json"

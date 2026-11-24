@@ -437,8 +437,10 @@ def verify_live(client: GitHubClient, environment: str, workload: str, directory
             "summary": {verdict: sum(row["verdict"] == verdict for rows in sections.values() for row in rows) for verdict in VERDICTS}}
 
 
-def _ready_total(containers: list[dict[str, Any]]) -> str:
-    return f"{sum(bool(container.get('ready')) for container in containers)}/{len(containers)}"
+def _ready_total(containers: list[dict[str, Any]]) -> str | None:
+    if any(not isinstance(container.get("ready"), bool) for container in containers):
+        return None
+    return f"{sum(container['ready'] for container in containers)}/{len(containers)}"
 
 
 def _age_seconds(timestamp: str | None, created: str | None) -> int | None:
