@@ -211,7 +211,7 @@ class ChartValueDiscoveryTest(unittest.TestCase):
         )
         rendered = render_discovery_markdown(report)
 
-        self.assertIn("# 🔍 Chart Values Discovery Report", rendered)
+        self.assertIn("# Chart Values Discovery Report", rendered)
         self.assertIn("## New variables needing definitions", rendered)
         self.assertIn("`newVariable`", rendered)
         self.assertIn("## Manual variables without current occurrences", rendered)

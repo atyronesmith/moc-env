@@ -175,11 +175,11 @@ class MultiWorkloadReportIdentityTest(unittest.TestCase):
         workload1 = _workload_checks(checks, "oac-dev-workload1")
         self.assertEqual(len(workload0), 1)
         self.assertEqual(len(workload1), 1)
-        self.assertTrue(_phase_cell(workload0, ascii_mode=True).startswith("[fail]"))
-        self.assertTrue(_phase_cell(workload1, ascii_mode=True).startswith("[ok]"))
+        self.assertTrue(_phase_cell(workload0).startswith("FAIL"))
+        self.assertTrue(_phase_cell(workload1).startswith("OK"))
         self.assertIn(
             "0/1 checks",
-            _phase_cell(workload0, ascii_mode=True),
+            _phase_cell(workload0),
         )
 
     def test_workload_check_clusters_partition_every_workload_check(self) -> None:

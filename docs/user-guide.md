@@ -508,21 +508,21 @@ Pull requests: skipped (--no-prs)
 
 HUB PHASES
 PHASE                        HUB example-env-infra
-1 Host inventory entry       ✅ 1/1 checks
-2 Hub image inventory and…   ✅ 3/3 checks
-3 Discovery image reference  🟡 0/1 checks
-4 Keycloak OIDC client       ✅ 1/1 checks
-5 GitOps values and apps     ❌ 4/8 checks
+1 Host inventory entry       OK      1/1 checks
+2 Hub image inventory and…   OK      3/3 checks
+3 Discovery image reference  WARNING 0/1 checks
+4 Keycloak OIDC client       OK      1/1 checks
+5 GitOps values and apps     FAIL    4/8 checks
 
 WORKLOAD PHASES
 PHASE                        WORKLOAD example-env-workload0
-1 Host inventory entry       ✅ 1/1 checks
-2 Hub agent discovery ISO    🟡 0/1 checks
+1 Host inventory entry       OK      1/1 checks
+2 Hub agent discovery ISO    WARNING 0/1 checks
 3 Agent ISO boot             verify by hand
 4 Agent visibility           verify by hand
-5 Agent labels and approval  ✅ 1/1 checks
-6 oac-apps values            ❌ 0/7 checks, 5 blocked
-7 Shared-service…            ✅ 3/3 checks
+5 Agent labels and approval  OK      1/1 checks
+6 oac-apps values            FAIL    0/7 checks, 5 blocked
+7 Shared-service…            OK      3/3 checks
 
 NEXT
   1. [oac-infra] Generate and publish a hub-specific discovery ISO, then replace the generic
@@ -644,7 +644,8 @@ do not present the pinned 9/2 result as the current live result.
 Hub and workload phases are rendered as separate tables so each scope keeps its
 own numbering and titles. Each cell counts every check in that phase as
 `passing/total checks`; unknown and blocked counts are shown separately. The
-worst known state sets the symbol, but unknown checks never hide the passes.
+worst known severity sets the word (`OK`, `FAIL`, `WARNING`, or `UNKNOWN`),
+but unknown checks never hide the passes.
 `verify by hand` identifies a phase whose steps cannot be verified from the
 repositories.
 

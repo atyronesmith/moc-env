@@ -6,21 +6,21 @@ Pull requests: skipped (--no-prs)
 
 HUB PHASES
 PHASE                        HUB bu-ist-demo-infra
-1 Host inventory entry       ✅ 1/1 checks
-2 Hub image inventory and…   ✅ 3/3 checks
-3 Discovery image reference  ✅ 1/1 checks
-4 Keycloak OIDC client       ✅ 1/1 checks
-5 GitOps values and apps     ✅ 8/8 checks
+1 Host inventory entry       OK      1/1 checks
+2 Hub image inventory and…   OK      3/3 checks
+3 Discovery image reference  OK      1/1 checks
+4 Keycloak OIDC client       OK      1/1 checks
+5 GitOps values and apps     OK      8/8 checks
 
 WORKLOAD PHASES
 PHASE                        WORKLOAD bu-ist-demo-workload0
-1 Host inventory entry       ✅ 1/1 checks
-2 Hub agent discovery ISO    ✅ 1/1 checks
+1 Host inventory entry       OK      1/1 checks
+2 Hub agent discovery ISO    OK      1/1 checks
 3 Agent ISO boot             verify by hand
 4 Agent visibility           verify by hand
-5 Agent labels and approval  ✅ 1/1 checks
-6 oac-apps values            ✅ 11/11 checks
-7 Shared-service…            ✅ 5/5 checks
+5 Agent labels and approval  OK      1/1 checks
+6 oac-apps values            OK      11/11 checks
+7 Shared-service…            OK      5/5 checks
 
 NEXT
 Nothing to do in the repositories this tool reads.

@@ -189,7 +189,7 @@ class OutputFormatInferenceTest(unittest.TestCase):
         self.assertEqual(stdout, "")
         self.assertTrue(
             output.read_text(encoding="utf-8").startswith(
-                "# 🧪 Desired-State Validation"
+                "# Desired-State Validation"
             )
         )
         self.assertIn("wrote markdown validation report", stderr)

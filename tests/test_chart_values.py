@@ -156,7 +156,7 @@ class ChartValuesTest(unittest.TestCase):
     def test_render_chart_values_markdown_is_general_and_human_readable(self) -> None:
         rendered = render_chart_values_markdown(self.observation)
 
-        self.assertIn("# 📘 Chart Configuration Reference", rendered)
+        self.assertIn("# Chart Configuration Reference", rendered)
         self.assertIn("Generated documentation", rendered)
         self.assertIn("do not edit the generated Markdown directly", rendered)
         self.assertIn("## Deployment model", rendered)
@@ -177,7 +177,7 @@ class ChartValuesTest(unittest.TestCase):
         self.assertIn("`release.channel`", rendered)
         self.assertIn("`nodePools[].replicas`", rendered)
         self.assertIn("OpenShift release channel used to select cluster updates", rendered)
-        self.assertIn("⚠️ Secret-like name", rendered)
+        self.assertIn("Warning: Secret-like name", rendered)
         self.assertIn("## Sources", rendered)
         self.assertIn("`DNS-1`", rendered)
         self.assertIn("[DNS-1](#sources)", rendered)
@@ -197,7 +197,7 @@ class ChartValuesTest(unittest.TestCase):
             exit_code = cli.main(["document-values"])
 
         self.assertEqual(exit_code, 0)
-        self.assertIn("# 📘 Chart Configuration Reference", stdout.getvalue())
+        self.assertIn("# Chart Configuration Reference", stdout.getvalue())
         self.assertEqual(stderr.getvalue(), "GitHub API: 0 requests, 0 counted against quota, 0 from cache\n")
 
     def test_cli_document_values_output_file(self) -> None:
@@ -216,7 +216,7 @@ class ChartValuesTest(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             self.assertEqual(stdout.getvalue(), "")
             self.assertIn("wrote chart-values reference to", stderr.getvalue())
-            self.assertIn("# 📘 Chart Configuration Reference", output.read_text())
+            self.assertIn("# Chart Configuration Reference", output.read_text())
 
 
 if __name__ == "__main__":

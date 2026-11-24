@@ -691,7 +691,7 @@ def _status_handler(
     elif args.format == "markdown":
         rendered = render_markdown(report_dict)
     else:
-        rendered = render_text(report_dict, details=args.details, ascii_mode=args.ascii)
+        rendered = render_text(report_dict, details=args.details)
     exit_code = write_output(args, rendered, f"{args.format} report")
     if exit_code:
         return exit_code

@@ -10,23 +10,23 @@ Generated 2026-11-16 12:34 UTC · MOC issue: [#666](https://github.com/CCI-MOC/M
 
 | Phase | HUB bu-ist-demo-infra |
 |---|---:|
-| 1 Host inventory entry | ✅ 1/1 checks |
-| 2 Hub image inventory and vars | ✅ 3/3 checks |
-| 3 Discovery image reference | ❌ 0/1 checks |
-| 4 Keycloak OIDC client | ✅ 1/1 checks |
-| 5 GitOps values and apps | ❌ 4/8 checks |
+| 1 Host inventory entry | OK 1/1 checks |
+| 2 Hub image inventory and vars | OK 3/3 checks |
+| 3 Discovery image reference | FAIL 0/1 checks |
+| 4 Keycloak OIDC client | OK 1/1 checks |
+| 5 GitOps values and apps | FAIL 4/8 checks |
 
 ### Workload phases
 
 | Phase | WORKLOAD bu-ist-demo-workload0 |
 |---|---:|
-| 1 Host inventory entry | ✅ 1/1 checks |
-| 2 Hub agent discovery ISO | ❌ 0/1 checks |
+| 1 Host inventory entry | OK 1/1 checks |
+| 2 Hub agent discovery ISO | FAIL 0/1 checks |
 | 3 Agent ISO boot | verify by hand |
 | 4 Agent visibility | verify by hand |
-| 5 Agent labels and approval | ✅ 1/1 checks |
-| 6 oac-apps values | ❌ 1/9 checks, 6 blocked |
-| 7 Shared-service prerequisites | ✅ 3/3 checks |
+| 5 Agent labels and approval | OK 1/1 checks |
+| 6 oac-apps values | FAIL 1/9 checks, 6 blocked |
+| 7 Shared-service prerequisites | OK 3/3 checks |
 
 ## Next actions
 
@@ -49,18 +49,18 @@ Generated 2026-11-16 12:34 UTC · MOC issue: [#666](https://github.com/CCI-MOC/M
 
 ## Not checked — verify by hand
 
-- [ ] **Configure cluster and storage networks and firewalls for bu-ist-demo-infra** (phase 1) — The repositories read by this tool do not describe the switch, network, or firewall state required for bu-ist-demo-infra. Documented at [docs/infra-cluster-deployment.md → Infrastructure Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#infrastructure-configuration).
-- [ ] **Store the bu-ist-demo-infra SSH key and kubeadmin credentials in AWS Secrets Manager** (phase 2) — Secrets Manager is outside the public repositories read by this tool, so it cannot verify cluster/bu-ist-demo-infra/sshkey or cluster/bu-ist-demo-infra/kubeadmin. Documented at [docs/infra-cluster-deployment.md → Cluster Deployment](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-deployment).
-- [ ] **Place the pull secret and SSH key under hub-images/credentials/bu-ist-demo-infra** (phase 2) — The documented credential directory is intentionally not committed, so repository state cannot prove that its files exist for bu-ist-demo-infra. Documented at [docs/infra-cluster-deployment.md → Cluster Deployment](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-deployment).
-- [ ] **Run create_agent_install_media and copy the bu-ist-demo-infra ISO to the bastion host** (phase 3) — Running the playbook and copying the generated discovery ISO leave no trace that this tool can verify in the repositories it reads. Documented at [docs/infra-cluster-deployment.md → Cluster Deployment](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-deployment).
-- [ ] **Bootstrap Argo CD for bu-ist-demo-infra** (phase 5) — Running setup-gitops.sh and applying the bootstrap Helm template changes live cluster state, which this repository-only report cannot verify. Documented at [docs/infra-cluster-deployment.md → Cluster Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-configuration).
-- [ ] **Agents visible in hardware-inventory** (phase 4) — Agent visibility in the hub's hardware-inventory namespace requires live cluster state that repository configuration cannot prove. Documented at [docs/workload-cluster-deployment.md → Infrastructure Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/workload-cluster-deployment.md#infrastructure-configuration).
-- [ ] **Agents labelled and approved** (phase 5) — Labelling and approving agents with update-agents.yaml changes live hub cluster state that repository configuration cannot prove. Documented at [docs/workload-cluster-deployment.md → Infrastructure Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/workload-cluster-deployment.md#infrastructure-configuration).
+- **Configure cluster and storage networks and firewalls for bu-ist-demo-infra** (phase 1) — The repositories read by this tool do not describe the switch, network, or firewall state required for bu-ist-demo-infra. Documented at [docs/infra-cluster-deployment.md → Infrastructure Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#infrastructure-configuration).
+- **Store the bu-ist-demo-infra SSH key and kubeadmin credentials in AWS Secrets Manager** (phase 2) — Secrets Manager is outside the public repositories read by this tool, so it cannot verify cluster/bu-ist-demo-infra/sshkey or cluster/bu-ist-demo-infra/kubeadmin. Documented at [docs/infra-cluster-deployment.md → Cluster Deployment](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-deployment).
+- **Place the pull secret and SSH key under hub-images/credentials/bu-ist-demo-infra** (phase 2) — The documented credential directory is intentionally not committed, so repository state cannot prove that its files exist for bu-ist-demo-infra. Documented at [docs/infra-cluster-deployment.md → Cluster Deployment](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-deployment).
+- **Run create_agent_install_media and copy the bu-ist-demo-infra ISO to the bastion host** (phase 3) — Running the playbook and copying the generated discovery ISO leave no trace that this tool can verify in the repositories it reads. Documented at [docs/infra-cluster-deployment.md → Cluster Deployment](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-deployment).
+- **Bootstrap Argo CD for bu-ist-demo-infra** (phase 5) — Running setup-gitops.sh and applying the bootstrap Helm template changes live cluster state, which this repository-only report cannot verify. Documented at [docs/infra-cluster-deployment.md → Cluster Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-configuration).
+- **Agents visible in hardware-inventory** (phase 4) — Agent visibility in the hub's hardware-inventory namespace requires live cluster state that repository configuration cannot prove. Documented at [docs/workload-cluster-deployment.md → Infrastructure Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/workload-cluster-deployment.md#infrastructure-configuration).
+- **Agents labelled and approved** (phase 5) — Labelling and approving agents with update-agents.yaml changes live hub cluster state that repository configuration cannot prove. Documented at [docs/workload-cluster-deployment.md → Infrastructure Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/workload-cluster-deployment.md#infrastructure-configuration).
 
 ## Details
 
 <details>
-<summary>✅ bu-ist-demo-infra host inventory — The inventory contains a bu-ist-demo-infra group with 1 hosts.</summary>
+<summary>OK: bu-ist-demo-infra host inventory — The inventory contains a bu-ist-demo-infra group with 1 hosts.</summary>
 
 Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml) @ main (2222222)
 
@@ -81,7 +81,7 @@ Not verified: Host names, node_name values, MAC addresses, boot images and group
 </details>
 
 <details>
-<summary>✅ Hub image inventory — The hub-image inventory contains the all.children.bu-ist-demo-infra key.</summary>
+<summary>OK: Hub image inventory — The hub-image inventory contains the all.children.bu-ist-demo-infra key.</summary>
 
 Source: CCI-MOC/oac-infra · [`hub-images/inventory.yml`](https://github.com/CCI-MOC/oac-infra/blob/main/hub-images/inventory.yml) @ main (2222222)
 
@@ -95,7 +95,7 @@ Not verified: The hosts, images and variables under the key are not inspected, s
 </details>
 
 <details>
-<summary>✅ Hub image variables — All six required hub-image variables are present in main; their values are not validated.</summary>
+<summary>OK: Hub image variables — All six required hub-image variables are present in main; their values are not validated.</summary>
 
 Source: CCI-MOC/oac-infra · [`hub-images/group_vars/bu-ist-demo-infra/vars.yml`](https://github.com/CCI-MOC/oac-infra/blob/main/hub-images/group_vars/bu-ist-demo-infra/vars.yml) @ main (2222222)
 
@@ -114,7 +114,7 @@ Not verified: The six values are not validated, so the addresses need not be par
 </details>
 
 <details>
-<summary>✅ Hub moc-dns records — All required hub DNS records in zonefiles/int.massopen.cloud.zone match the hub-image variables.</summary>
+<summary>OK: Hub moc-dns records — All required hub DNS records in zonefiles/int.massopen.cloud.zone match the hub-image variables.</summary>
 
 Source: CCI-MOC/moc-dns · [`zonefiles/int.massopen.cloud.zone`](https://github.com/CCI-MOC/moc-dns/blob/main/zonefiles/int.massopen.cloud.zone) @ main (7777777)
 
@@ -130,7 +130,7 @@ Not verified: Only A records in that one zonefile are compared; CNAMEs, TTLs, de
 </details>
 
 <details open>
-<summary>❌ bu-ist-demo-infra boot image — A boot image URL is present, but it points to the generic discovery.iso rather than a cluster-specific image.</summary>
+<summary>FAIL: bu-ist-demo-infra boot image — A boot image URL is present, but it points to the generic discovery.iso rather than a cluster-specific image.</summary>
 
 Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml) @ main (2222222)
 
@@ -146,7 +146,7 @@ Status rule: The boot-image filename must contain the full cluster name `bu-ist-
 </details>
 
 <details>
-<summary>✅ Hub OIDC client — All expected Keycloak OIDC client fields match.</summary>
+<summary>OK: Hub OIDC client — All expected Keycloak OIDC client fields match.</summary>
 
 Source: CCI-MOC/moc-keycloak · [`main.tf`](https://github.com/CCI-MOC/moc-keycloak/blob/main/main.tf) @ main (4444444)
 
@@ -162,7 +162,7 @@ Not verified: Only those three string attributes are compared; the HCL is never 
 </details>
 
 <details open>
-<summary>❌ Hub hosted-cluster defaults — None of the 1 required file exist in main under hosted-clusters/bu-ist-demo-infra. Missing: hosted-clusters/bu-ist-demo-infra/values.yaml. File contents are not read.</summary>
+<summary>FAIL: Hub hosted-cluster defaults — None of the 1 required file exist in main under hosted-clusters/bu-ist-demo-infra. Missing: hosted-clusters/bu-ist-demo-infra/values.yaml. File contents are not read.</summary>
 
 Source: CCI-MOC/oac-apps · [`hosted-clusters/bu-ist-demo-infra/values.yaml`](https://github.com/CCI-MOC/oac-apps/tree/main) @ main (3333333)
 
@@ -176,7 +176,7 @@ Not verified: Only path existence is tested; the file contents are not read, so 
 </details>
 
 <details open>
-<summary>❌ Hub-wide component values — None of the 1 required file exist in main under values/bu-ist-demo-infra. Missing: values/bu-ist-demo-infra/hcp-config.yaml. File contents are not read.</summary>
+<summary>FAIL: Hub-wide component values — None of the 1 required file exist in main under values/bu-ist-demo-infra. Missing: values/bu-ist-demo-infra/hcp-config.yaml. File contents are not read.</summary>
 
 Source: CCI-MOC/oac-apps · [`values/bu-ist-demo-infra`](https://github.com/CCI-MOC/oac-apps/tree/main) @ main (3333333)
 
@@ -190,7 +190,7 @@ Not verified: Only path existence is tested; the file contents are not read, so 
 </details>
 
 <details open>
-<summary>❌ Hub local-cluster values — None of the 13 required files exist in main under values/bu-ist-demo-infra/local-cluster. Missing: values/bu-ist-demo-infra/local-cluster/acm.yaml, values/bu-ist-demo-infra/local-cluster/acm-placements.yaml, values/bu-ist-demo-infra/local-cluster/cert-manager.yaml, values/bu-ist-demo-infra/local-cluster/cluster-certificates.yaml, values/bu-ist-demo-infra/local-cluster/cluster-version.yaml, values/bu-ist-demo-infra/local-cluster/external-dns-operator.yaml, values/bu-ist-demo-infra/local-cluster/external-secrets.yaml, values/bu-ist-demo-infra/local-cluster/hcp-config.yaml, values/bu-ist-demo-infra/local-cluster/keycloak-oauth.yaml, values/bu-ist-demo-infra/local-cluster/metallb.yaml, values/bu-ist-demo-infra/local-cluster/openshift-gitops.yaml, values/bu-ist-demo-infra/local-cluster/portworx.yaml, values/bu-ist-demo-infra/local-cluster/user-workload-monitoring.yaml. File contents are not read.</summary>
+<summary>FAIL: Hub local-cluster values — None of the 13 required files exist in main under values/bu-ist-demo-infra/local-cluster. Missing: values/bu-ist-demo-infra/local-cluster/acm.yaml, values/bu-ist-demo-infra/local-cluster/acm-placements.yaml, values/bu-ist-demo-infra/local-cluster/cert-manager.yaml, values/bu-ist-demo-infra/local-cluster/cluster-certificates.yaml, values/bu-ist-demo-infra/local-cluster/cluster-version.yaml, values/bu-ist-demo-infra/local-cluster/external-dns-operator.yaml, values/bu-ist-demo-infra/local-cluster/external-secrets.yaml, values/bu-ist-demo-infra/local-cluster/hcp-config.yaml, values/bu-ist-demo-infra/local-cluster/keycloak-oauth.yaml, values/bu-ist-demo-infra/local-cluster/metallb.yaml, values/bu-ist-demo-infra/local-cluster/openshift-gitops.yaml, values/bu-ist-demo-infra/local-cluster/portworx.yaml, values/bu-ist-demo-infra/local-cluster/user-workload-monitoring.yaml. File contents are not read.</summary>
 
 Source: CCI-MOC/oac-apps · [`values/bu-ist-demo-infra/local-cluster`](https://github.com/CCI-MOC/oac-apps/tree/main) @ main (3333333)
 
@@ -238,7 +238,7 @@ None.
 </details>
 
 <details open>
-<summary>❌ Hub ArgoCD applications — None of the 1 required file exist in main under apps/bu-ist-demo-infra. Missing: apps/bu-ist-demo-infra/keycloak-oauth.yaml. File contents are not read.</summary>
+<summary>FAIL: Hub ArgoCD applications — None of the 1 required file exist in main under apps/bu-ist-demo-infra. Missing: apps/bu-ist-demo-infra/keycloak-oauth.yaml. File contents are not read.</summary>
 
 Source: CCI-MOC/oac-apps · [`apps/bu-ist-demo-infra`](https://github.com/CCI-MOC/oac-apps/tree/main) @ main (3333333)
 
@@ -252,7 +252,7 @@ Not verified: Only path existence is tested; the file contents are not read, so 
 </details>
 
 <details>
-<summary>✅ Hub Pure storage realm — The bu-ist-demo-infra Pure storage realm reports subnet_vlan, subnet_prefix and s3_endpoint.</summary>
+<summary>OK: Hub Pure storage realm — The bu-ist-demo-infra Pure storage realm reports subnet_vlan, subnet_prefix and s3_endpoint.</summary>
 
 Source: CCI-MOC/everpure-moc · [`ansible/group_vars/all/realms.yaml`](https://github.com/CCI-MOC/everpure-moc/blob/main/ansible/group_vars/all/realms.yaml) @ main (5555555)
 
@@ -269,7 +269,7 @@ Not verified: The three values are not validated against the hub machine network
 </details>
 
 <details>
-<summary>✅ Hub moc-aws OIDC cluster — The moc-aws OIDC cluster entry for bu-ist-demo-infra is present.</summary>
+<summary>OK: Hub moc-aws OIDC cluster — The moc-aws OIDC cluster entry for bu-ist-demo-infra is present.</summary>
 
 Source: CCI-MOC/moc-aws · [`main.tf`](https://github.com/CCI-MOC/moc-aws/blob/main/main.tf) @ main (6666666)
 
@@ -284,7 +284,7 @@ Not verified: The block's other attributes are not inspected, and the OIDC provi
 </details>
 
 <details>
-<summary>✅ Hub moc-aws cert-manager policy — The cert-manager policy entry cert_manager_policies names bu-ist-demo-infra in policy_name or cluster_subdomain.</summary>
+<summary>OK: Hub moc-aws cert-manager policy — The cert-manager policy entry cert_manager_policies names bu-ist-demo-infra in policy_name or cluster_subdomain.</summary>
 
 Source: CCI-MOC/moc-aws · [`cert-manager-policies.tf`](https://github.com/CCI-MOC/moc-aws/blob/main/cert-manager-policies.tf) @ main (6666666)
 
@@ -298,7 +298,7 @@ Not verified: The match is textual, so the certificate zone, DNS records and AWS
 </details>
 
 <details>
-<summary>✅ Hub hosted-cluster secret prefix — The hub can write hosted-cluster secrets at cluster/bu-ist-demo-infra/hostedcluster/.</summary>
+<summary>OK: Hub hosted-cluster secret prefix — The hub can write hosted-cluster secrets at cluster/bu-ist-demo-infra/hostedcluster/.</summary>
 
 Source: CCI-MOC/moc-aws · [`main.tf`](https://github.com/CCI-MOC/moc-aws/blob/main/main.tf) @ main (6666666)
 
@@ -312,7 +312,7 @@ Not verified: The rest of the hub block and the AWS-side secret store are not in
 </details>
 
 <details>
-<summary>✅ bu-ist-demo-workload0 host inventory — The inventory contains a bu-ist-demo-workload0 group with 1 hosts.</summary>
+<summary>OK: bu-ist-demo-workload0 host inventory — The inventory contains a bu-ist-demo-workload0 group with 1 hosts.</summary>
 
 Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml) @ main (2222222)
 
@@ -333,7 +333,7 @@ Not verified: Host names, node_name values, MAC addresses, boot images and group
 </details>
 
 <details open>
-<summary>❌ bu-ist-demo-workload0 boot image — A boot image URL is present, but the workload is still on the generic discovery.iso rather than the expected `bu-ist-demo-infra-agent-discovery.iso`.</summary>
+<summary>FAIL: bu-ist-demo-workload0 boot image — A boot image URL is present, but the workload is still on the generic discovery.iso rather than the expected `bu-ist-demo-infra-agent-discovery.iso`.</summary>
 
 Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml) @ main (2222222)
 
@@ -349,7 +349,7 @@ Status rule: The workload boot-image filename may contain the workload name `bu-
 </details>
 
 <details>
-<summary>✅ bu-ist-demo-workload0 update-agents inputs — Every non-openstack host has the mac_addr and resource_class inputs required by infra/update-agents.yaml.</summary>
+<summary>OK: bu-ist-demo-workload0 update-agents inputs — Every non-openstack host has the mac_addr and resource_class inputs required by infra/update-agents.yaml.</summary>
 
 Source: CCI-MOC/oac-infra · [`infra/update-agents.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/update-agents.yaml) @ main (2222222)
 
@@ -370,7 +370,7 @@ Not verified: MAC address and resource-class formats are not validated, the upda
 </details>
 
 <details open>
-<summary>❌ Workload hosted-cluster values — None of the 1 required file exist in main under hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0. Missing: hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml. File contents are not read.</summary>
+<summary>FAIL: Workload hosted-cluster values — None of the 1 required file exist in main under hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0. Missing: hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml. File contents are not read.</summary>
 
 Source: CCI-MOC/oac-apps · [`hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/tree/main) @ main (3333333)
 
@@ -384,7 +384,7 @@ Not verified: Only path existence is tested; the file contents are not read, so 
 </details>
 
 <details open>
-<summary>❌ Workload component values — No files exist in main under values/bu-ist-demo-infra/bu-ist-demo-workload0; at least 1 is required. File contents are not read.</summary>
+<summary>FAIL: Workload component values — No files exist in main under values/bu-ist-demo-infra/bu-ist-demo-workload0; at least 1 is required. File contents are not read.</summary>
 
 Source: CCI-MOC/oac-apps · [`values/bu-ist-demo-infra/bu-ist-demo-workload0`](https://github.com/CCI-MOC/oac-apps/tree/main) @ main (3333333)
 
@@ -398,7 +398,7 @@ Not verified: Only path existence is tested; the file contents are not read, so 
 </details>
 
 <details open>
-<summary>• Workload API address network — Blocked until Workload hosted-cluster values is complete.</summary>
+<summary>BLOCKED: Workload API address network — Blocked until Workload hosted-cluster values is complete.</summary>
 
 Source: CCI-MOC/oac-apps · [`hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml) @ main (3333333)
 
@@ -412,7 +412,7 @@ Not verified: The address is not checked against other clusters here (see worklo
 </details>
 
 <details open>
-<summary>• Workload ingress address network — Blocked until Workload hosted-cluster values is complete.</summary>
+<summary>BLOCKED: Workload ingress address network — Blocked until Workload hosted-cluster values is complete.</summary>
 
 Source: CCI-MOC/oac-apps · [`hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml) @ main (3333333)
 
@@ -426,7 +426,7 @@ Not verified: Address availability, MetalLB runtime allocation and the switch co
 </details>
 
 <details open>
-<summary>• Workload DNS base domain — Blocked until Workload hosted-cluster values is complete.</summary>
+<summary>BLOCKED: Workload DNS base domain — Blocked until Workload hosted-cluster values is complete.</summary>
 
 Source: CCI-MOC/oac-apps · [`hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml) @ main (3333333)
 
@@ -440,7 +440,7 @@ Not verified: Only the suffix is compared; the records are not looked up in moc-
 </details>
 
 <details open>
-<summary>• Workload node-pool host capacity — Blocked until Workload hosted-cluster values is complete.</summary>
+<summary>BLOCKED: Workload node-pool host capacity — Blocked until Workload hosted-cluster values is complete.</summary>
 
 Source: CCI-MOC/oac-apps · [`hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml) @ main (3333333)
 
@@ -450,7 +450,7 @@ Not verified: Host readiness, scheduling and non-string selector operators are n
 </details>
 
 <details open>
-<summary>• Workload GPU feature support — Blocked until Workload hosted-cluster values is complete.</summary>
+<summary>BLOCKED: Workload GPU feature support — Blocked until Workload hosted-cluster values is complete.</summary>
 
 Source: CCI-MOC/oac-apps · [`hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml) @ main (3333333)
 
@@ -465,7 +465,7 @@ Not verified: GPU model, count and allocatable resources are not inspected, and 
 </details>
 
 <details>
-<summary>✅ Workload address uniqueness — No workload address is used by another cluster.</summary>
+<summary>OK: Workload address uniqueness — No workload address is used by another cluster.</summary>
 
 Source: CCI-MOC/oac-apps · [`hosted-clusters/`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/) @ main (3333333)
 
@@ -475,7 +475,7 @@ Not verified: Addresses are compared as strings, so equivalent CIDR and bare-IP 
 </details>
 
 <details open>
-<summary>• Workload internal address duplicates — Blocked until Workload hosted-cluster values is complete.</summary>
+<summary>BLOCKED: Workload internal address duplicates — Blocked until Workload hosted-cluster values is complete.</summary>
 
 Source: CCI-MOC/oac-apps · [`hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml) @ main (3333333)
 
@@ -485,7 +485,7 @@ Not verified: The report does not prove whether sharing an address is intentiona
 </details>
 
 <details>
-<summary>✅ Workload Pure storage realm — The bu-ist-demo-workload0 Pure storage realm reports subnet_vlan, subnet_prefix and s3_endpoint.</summary>
+<summary>OK: Workload Pure storage realm — The bu-ist-demo-workload0 Pure storage realm reports subnet_vlan, subnet_prefix and s3_endpoint.</summary>
 
 Source: CCI-MOC/everpure-moc · [`ansible/group_vars/all/realms.yaml`](https://github.com/CCI-MOC/everpure-moc/blob/main/ansible/group_vars/all/realms.yaml) @ main (5555555)
 
@@ -502,7 +502,7 @@ Not verified: The three values are not validated against the workload VLAN or DN
 </details>
 
 <details>
-<summary>✅ Workload moc-aws OIDC cluster — The moc-aws OIDC cluster entry for bu-ist-demo-workload0 is present.</summary>
+<summary>OK: Workload moc-aws OIDC cluster — The moc-aws OIDC cluster entry for bu-ist-demo-workload0 is present.</summary>
 
 Source: CCI-MOC/moc-aws · [`main.tf`](https://github.com/CCI-MOC/moc-aws/blob/main/main.tf) @ main (6666666)
 
@@ -517,7 +517,7 @@ Not verified: The block's other attributes are not inspected, and the OIDC provi
 </details>
 
 <details>
-<summary>✅ Workload moc-aws cert-manager policy — The cert-manager policy entry cert_manager_policy_bu_ist_demo_workload0 names bu-ist-demo-workload0 in policy_name or cluster_subdomain.</summary>
+<summary>OK: Workload moc-aws cert-manager policy — The cert-manager policy entry cert_manager_policy_bu_ist_demo_workload0 names bu-ist-demo-workload0 in policy_name or cluster_subdomain.</summary>
 
 Source: CCI-MOC/moc-aws · [`cert-manager-policies.tf`](https://github.com/CCI-MOC/moc-aws/blob/main/cert-manager-policies.tf) @ main (6666666)
 
@@ -531,7 +531,7 @@ Not verified: The match is textual, so the certificate zone, DNS records and AWS
 </details>
 
 <details>
-<summary>📝 MOC issue — Issue #666 is open and records the environment request.</summary>
+<summary>REQUESTED: MOC issue — Issue #666 is open and records the environment request.</summary>
 
 Source: CCI-MOC/MOC-issues · [`issues/666`](https://github.com/CCI-MOC/MOC-issues/issues/666) @ main (1111111)
 
@@ -562,9 +562,9 @@ Pull requests: skipped (--no-prs)
 
 ## Legend
 
-- 📝 `requested` — The MOC issue records the request.
-- ✅ `declared_in_main` — Desired configuration is present on merged main.
-- 🟡 `partial` — Some required configuration is present.
-- ❌ `missing` — Required configuration was not found.
+- FAIL: A blocking check failed.
+- REQUESTED: `requested` — The MOC issue records the request.
+- OK: `declared_in_main` — Desired configuration is present on merged main.
+- BLOCKED: `blocked` — Cannot be checked until an earlier check passes.
 
 Repository-state disclaimer: this report describes repository configuration only. It does not prove live cluster synchronization, node readiness, or application health.

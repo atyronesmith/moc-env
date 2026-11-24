@@ -140,7 +140,6 @@ def configure_status(parser: argparse.ArgumentParser) -> None:
         default="never",
         help="Exit 1 when a status report has this severity or higher (default: never)",
     )
-    parser.add_argument("--ascii", action="store_true", help="Replace emoji with ASCII markers such as [ok] and [fail]")
     parser.add_argument("--verbose", action="store_true", help="Show progress on stderr even when stderr is not a terminal")
     add_credential_arguments(parser)
     add_output(

@@ -7,11 +7,11 @@ Pull requests: skipped (--no-prs)
 
 HUB PHASES
 PHASE                        HUB dizzy-infra
-1 Host inventory entry       ✅ 1/1 checks
-2 Hub image inventory and…   ❌ 1/3 checks, 1…
-3 Discovery image reference  ❌ 0/1 checks
-4 Keycloak OIDC client       ❌ 0/1 checks
-5 GitOps values and apps     ❌ 0/7 checks
+1 Host inventory entry       OK      1/1 checks
+2 Hub image inventory and…   FAIL    1/3 checks, 1 blocked
+3 Discovery image reference  FAIL    0/1 checks
+4 Keycloak OIDC client       FAIL    0/1 checks
+5 GitOps values and apps     FAIL    0/7 checks
 
 NEXT
   1. [oac-infra] Edit CCI-MOC/oac-infra at hub-images/group_vars/dizzy-infra/vars.yml and

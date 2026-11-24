@@ -375,11 +375,6 @@ class CliDispatchTest(unittest.TestCase):
                 FakeGitHubClient,
                 "details.txt",
             ),
-            (
-                ["status", "bu-ist-demo", "--format", "text", "--no-prs", "--ascii"],
-                FakeGitHubClient,
-                "ascii.txt",
-            ),
         )
         for arguments, client_class, filename in cases:
             with self.subTest(filename=filename):
@@ -426,11 +421,6 @@ class CliDispatchTest(unittest.TestCase):
                 ["status", "bu-ist-demo", "--format", "markdown", "--no-prs", "--details"],
                 FakeGitHubClient,
                 "details.md",
-            ),
-            (
-                ["status", "bu-ist-demo", "--format", "markdown", "--no-prs", "--ascii"],
-                FakeGitHubClient,
-                "ascii.md",
             ),
         )
         for arguments, client_class, filename in cases:

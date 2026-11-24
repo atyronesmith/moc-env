@@ -50,20 +50,20 @@ class ReportRenderingTest(unittest.TestCase):
         ]
 
         self.assertEqual(
-            _phase_cell(checks, ascii_mode=False),
-            "❌ 2/4 checks, 1 unknown",
+            _phase_cell(checks),
+            "FAIL 2/4 checks, 1 unknown",
         )
         self.assertEqual(
-            _phase_cell(checks[:3], ascii_mode=True),
-            "[ok] 2/3 checks, 1 unknown",
+            _phase_cell(checks[:3]),
+            "OK 2/3 checks, 1 unknown",
         )
 
     def test_mismatch_severity_controls_result_markers_and_detail_labels(self) -> None:
         """Blocking mismatches fail; advisory mismatches remain warnings."""
 
         for severity, marker, summary in (
-            ("blocking", "[fail]", "1 blocking gaps"),
-            ("advisory", "[warn]", "1 advisories"),
+            ("blocking", "FAIL", "1 blocking gaps"),
+            ("advisory", "WARNING", "1 advisories"),
         ):
             with self.subTest(severity=severity):
                 check = {
@@ -76,9 +76,9 @@ class ReportRenderingTest(unittest.TestCase):
                     "next_action": "Correct the declaration.",
                 }
                 report = {**self.report, "checks": [check]}
-                text = render_text(report, details=True, ascii_mode=True)
+                text = render_text(report, details=True)
                 self.assertIn(summary, text)
-                self.assertIn(marker + " Fixture mismatch", text)
+                self.assertIn(marker + ": Fixture mismatch", text)
                 self.assertIn("Observed value differs from the declaration.", text)
 
                 markdown = render_markdown(report)
@@ -86,8 +86,7 @@ class ReportRenderingTest(unittest.TestCase):
                 self.assertIn("Fixture mismatch", markdown)
 
     def test_unchecked_phase_is_explicitly_manual(self) -> None:
-        self.assertEqual(_phase_cell([], ascii_mode=False), "verify by hand")
-        self.assertEqual(_phase_cell([], ascii_mode=True), "verify by hand")
+        self.assertEqual(_phase_cell([]), "verify by hand")
         for rendered in (render_text(self.report), render_markdown(self.report)):
             self.assertRegex(rendered, r"3 Agent ISO boot[^\n]*verify by hand")
 
@@ -179,11 +178,54 @@ class ReportRenderingTest(unittest.TestCase):
         self.assertIn("## Legend", rendered)
         self.assertIn("<details open>", rendered)
         self.assertIn("| Field | Expected | Observed |", rendered)
-        self.assertIn("- [ ]", rendered)
+        first_by_hand_title = self.report["not_checked"][0]["title"]
+        self.assertIn(f"- **{first_by_hand_title}**", rendered)
+        self.assertNotIn("- [ ]", rendered)
         self.assertIn("Generate and publish a hub-specific discovery ISO", rendered)
         self.assertNotIn("```mermaid", rendered)
         self.assertNotIn("## Raw report data", rendered)
         self.assertNotIn("```json", rendered)
+
+    def test_markdown_legend_uses_failure_mark_not_unprinted_state_word(self) -> None:
+        check = {
+            **self.report["checks"][0],
+            "state": "missing",
+            "severity": "blocking",
+        }
+        rendered = render_markdown({**self.report, "checks": [check]})
+        legend = rendered.split("## Legend", 1)[1]
+
+        self.assertIn("- FAIL: A blocking check failed.", legend)
+        self.assertNotIn("MISSING", legend)
+
+    def test_requested_check_renders_its_state_word(self) -> None:
+        check = {**self.report["checks"][0], "state": "requested"}
+        report = {**self.report, "checks": [check]}
+
+        for rendered in (render_text(report, details=True), render_markdown(report)):
+            self.assertIn(f"REQUESTED: {check['check']}", rendered)
+
+    def test_merged_check_renders_its_state_word(self) -> None:
+        check = {**self.report["checks"][0], "state": "pr_merged"}
+        report = {**self.report, "checks": [check]}
+
+        for rendered in (render_text(report, details=True), render_markdown(report)):
+            self.assertIn(f"MERGED: {check['check']}", rendered)
+
+    def test_blocked_check_renders_its_state_word_and_legend(self) -> None:
+        check = {**self.report["checks"][0], "state": "blocked"}
+        report = {**self.report, "checks": [check]}
+        markdown = render_markdown(report)
+
+        for rendered in (render_text(report, details=True), markdown):
+            self.assertIn(f"BLOCKED: {check['check']}", rendered)
+
+        legend = markdown.split("## Legend", 1)[1]
+        self.assertIn(
+            "- BLOCKED: `blocked` — Cannot be checked until an earlier check passes.",
+            legend,
+        )
+        self.assertNotIn("- UNKNOWN:", legend)
 
     def test_not_checked_is_rendered_after_next_actions(self) -> None:
         for rendered in (render_text(self.report), render_markdown(self.report)):

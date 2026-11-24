@@ -11,25 +11,15 @@ from .report_fields import field_rows, failing_field_rows, plain
 
 
 STATE_SYMBOLS = {
-    "requested": "📝",
-    "declared_in_main": "✅",
-    "pr_merged": "🔀",
-    "pr_open": "🚧",
-    "partial": "🟡",
-    "missing": "❌",
-    "unknown": "⚪",
-    "value_mismatch": "⚠️",
-}
-
-ASCII_STATE_SYMBOLS = {
-    "requested": "[req]",
-    "declared_in_main": "[ok]",
-    "pr_merged": "[merged]",
-    "pr_open": "[pr]",
-    "partial": "[warn]",
-    "missing": "[fail]",
-    "unknown": "[??]",
-    "value_mismatch": "[warn]",
+    "declared_in_main": "OK",
+    "missing": "MISSING",
+    "partial": "PARTIAL",
+    "value_mismatch": "MISMATCH",
+    "unknown": "UNKNOWN",
+    "blocked": "BLOCKED",
+    "pr_open": "PR OPEN",
+    "pr_merged": "MERGED",
+    "requested": "REQUESTED",
 }
 
 
@@ -288,7 +278,7 @@ def _scalar_text(value: Any) -> str:
 
 
 def _state(state: str) -> str:
-    return f"{STATE_SYMBOLS.get(state, '•')} {state}"
+    return f"{_symbol(state)} {state}"
 
 
 def _path_checklist(check: dict[str, Any]) -> list[str] | None:
@@ -304,7 +294,7 @@ def _path_checklist(check: dict[str, Any]) -> list[str] | None:
     for path in expected_paths:
         present = path in found_paths
         present_count += int(present)
-        symbol = "✅" if present else "❌"
+        symbol = "OK" if present else "MISSING"
         lines.append(f"    {path:<{width}} {symbol}")
     lines.append(
         f"  Result:       {present_count} of {len(expected_paths)} expected paths present"
@@ -643,10 +633,8 @@ def _metadata_header_lines(report: dict[str, Any]) -> list[str]:
     return lines
 
 
-def _symbol(state: str, ascii_mode: bool = False) -> str:
-    if ascii_mode:
-        return ASCII_STATE_SYMBOLS.get(state, "[?]")
-    return STATE_SYMBOLS.get(state, "•")
+def _symbol(state: str) -> str:
+    return STATE_SYMBOLS.get(state, "UNKNOWN")
 
 
 def _wrap(text: str, indent: int = 0, width: int = 96) -> list[str]:
@@ -996,7 +984,7 @@ def _workload_phase_rows(report: dict[str, Any]) -> list[tuple[int, str]]:
     return sorted((phase["phase"], phase["title"]) for phase in definitions)
 
 
-def _phase_cell(checks: list[dict[str, Any]], ascii_mode: bool) -> str:
+def _phase_cell(checks: list[dict[str, Any]]) -> str:
     if not checks:
         return "verify by hand"
     pass_states = {"declared_in_main", "requested", "pr_merged"}
@@ -1005,13 +993,13 @@ def _phase_cell(checks: list[dict[str, Any]], ascii_mode: bool) -> str:
     blocked = sum(check["state"] == "blocked" for check in checks)
     failures = [check for check in checks if check["state"] not in pass_states | {"unknown"}]
     if not failures and (not unknown or passing):
-        symbol = "[ok]" if ascii_mode else "✅"
+        symbol = "OK"
     elif not failures:
-        symbol = "[??]" if ascii_mode else "⚪"
+        symbol = "UNKNOWN"
     elif any(check.get("severity") == "blocking" for check in failures):
-        symbol = "[fail]" if ascii_mode else "❌"
+        symbol = "FAIL"
     else:
-        symbol = "[warn]" if ascii_mode else "🟡"
+        symbol = "WARNING"
     detail = f"{passing}/{len(checks)} checks"
     if unknown:
         detail += f", {unknown} unknown"
@@ -1117,15 +1105,15 @@ def _plain_value(value: Any) -> str:
     return str(value)
 
 
-def _check_symbol(check: dict[str, Any], ascii_mode: bool = False) -> str:
+def _check_symbol(check: dict[str, Any]) -> str:
     if check.get("state") not in {"declared_in_main", "requested", "pr_merged", "unknown", "blocked"}:
         if check.get("severity") == "blocking":
-            return "[fail]" if ascii_mode else "❌"
-        return "[warn]" if ascii_mode else "🟡"
-    return _symbol(check["state"], ascii_mode)
+            return "FAIL"
+        return "WARNING"
+    return _symbol(check["state"])
 
 
-def _detail_section(check: dict[str, Any], ascii_mode: bool) -> list[str]:
+def _detail_section(check: dict[str, Any]) -> list[str]:
     rows = field_rows(check)
     field_width = max([len("Field")] + [len(plain(row[0])) for row in rows])
     expected_width = max([len("Expected")] + [len(plain(row[1])) for row in rows])
@@ -1140,9 +1128,10 @@ def _detail_section(check: dict[str, Any], ascii_mode: bool) -> list[str]:
     lines = [
         "-" * 100,
         *_wrap(
-            f"{_check_symbol(check, ascii_mode)} "
+            f"{_check_symbol(check)}: "
             f"{check['check']} — {check['reason']}",
             2,
+            width=104,
         ),
         f"  Source: {check['repository']} · {check['path']} @ {check['ref']} ({short_sha})",
     ]
@@ -1179,7 +1168,6 @@ def _detail_section(check: dict[str, Any], ascii_mode: bool) -> list[str]:
 def render_text(
     report: dict[str, Any],
     details: bool = False,
-    ascii_mode: bool = False,
 ) -> str:
     environment = report["environment"]
     scope = report.get("scope", "environment")
@@ -1251,15 +1239,25 @@ def render_text(
         lines.extend(["", title])
         labels = [f"{phase} {phase_title}" for phase, phase_title in phase_rows]
         phase_width = min(max([len("PHASE")] + [len(label) for label in labels]) + 2, 29)
-        cell_width = min(max([len(header) for header, _ in columns] + [14]) + 2, 32)
+        cell_width = max(
+            [len(header) for header, _ in columns]
+            + [
+                len(_phase_cell([check for check in scope_checks if check.get("phase") == phase])) + 7
+                for _header, scope_checks in columns
+                for phase, _title in phase_rows
+            ]
+        ) + 2
         lines.append(f"{'PHASE':<{phase_width}}" + "".join(f"{header:<{cell_width}}" for header, _ in columns))
         for phase, phase_title in phase_rows:
             label = textwrap.shorten(f"{phase} {phase_title}", width=phase_width, placeholder="…")
             cells = []
             for _header, scope_checks in columns:
                 phase_checks = [check for check in scope_checks if check.get("phase") == phase]
-                cell = _phase_cell(phase_checks, ascii_mode)
-                cells.append(textwrap.shorten(cell, width=cell_width, placeholder="…"))
+                cell = _phase_cell(phase_checks)
+                if phase_checks:
+                    word, detail = cell.split(" ", 1)
+                    cell = f"{word:<7} {detail}"
+                cells.append(cell)
             lines.append(f"{label:<{phase_width}}" + "".join(f"{cell:<{cell_width}}" for cell in cells))
 
     if scope in {"environment", "hub"}:
@@ -1358,7 +1356,7 @@ def render_text(
     if details:
         lines.extend(["", "DETAILED CHECKS", ""])
         for check in checks:
-            lines.extend(_detail_section({**check, "_sources": (report.get("metadata") or {}).get("sources", [])}, ascii_mode))
+            lines.extend(_detail_section({**check, "_sources": (report.get("metadata") or {}).get("sources", [])}))
     return "\n".join(line.rstrip() for line in lines).rstrip() + "\n"
 
 
@@ -1553,7 +1551,7 @@ def _check_markdown_details(
     }
     lines = [
         f"<details{' open' if open_state else ''}>",
-        f"<summary>{_check_symbol(check)} {check['check']} — {check['reason']}</summary>",
+        f"<summary>{_check_symbol(check)}: {check['check']} — {check['reason']}</summary>",
         "",
         f"Source: {check['repository']} · {path_text} @ {check['ref']} ({short_sha})",
         "",
@@ -1709,7 +1707,6 @@ def _markdown_phase_table(report: dict[str, Any]) -> list[str]:
                         if check.get("phase") == phase
                         and not check.get("deferred")
                     ],
-                    False,
                 )
                 for _header, scope_checks in columns
             ]
@@ -1847,7 +1844,7 @@ def _markdown_manual_checks(report: dict[str, Any]) -> list[str]:
             f"https://github.com/CCI-MOC/oac-apps/blob/main/{where['document']}"
         )
         lines.append(
-            f"- [ ] **{entry['title']}** (phase {entry['phase']}) — {entry['why']} "
+            f"- **{entry['title']}** (phase {entry['phase']}) — {entry['why']} "
             f"Documented at [{where['document']} → {where['heading']}]({guide_url}#{where['heading'].lower().replace(' ', '-')})."
         )
     lines.append("")
@@ -1989,16 +1986,19 @@ def _markdown_legend(report: dict[str, Any]) -> list[str]:
         "partial": "Some required configuration is present.",
         "missing": "Required configuration was not found.",
         "unknown": "The source could not be read or parsed.",
+        "blocked": "Cannot be checked until an earlier check passes.",
         "value_mismatch": "Observed values do not match the expected values.",
     }
-    states = {
-        check["state"] for check in report.get("checks", [])
-    }
     lines = ["## Legend", ""]
+    marks = {_check_symbol(check) for check in report.get("checks", [])}
+    if "FAIL" in marks:
+        lines.append("- FAIL: A blocking check failed.")
+    if "WARNING" in marks:
+        lines.append("- WARNING: A non-blocking check failed.")
     for state, meaning in meanings.items():
-        if state in states:
-            symbol = STATE_SYMBOLS.get(state, "•")
-            lines.append(f"- {symbol} `{state}` — {meaning}")
+        symbol = _symbol(state)
+        if symbol in marks:
+            lines.append(f"- {symbol}: `{state}` — {meaning}")
     lines.extend(
         [
             "",

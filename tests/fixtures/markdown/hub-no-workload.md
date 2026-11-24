@@ -10,11 +10,11 @@ Generated 2026-11-16 12:34 UTC · MOC issue: not set — pass `--issue N`
 
 | Phase | HUB dizzy-infra |
 |---|---:|
-| 1 Host inventory entry | ✅ 1/1 checks |
-| 2 Hub image inventory and vars | ❌ 1/3 checks, 1 blocked |
-| 3 Discovery image reference | ❌ 0/1 checks |
-| 4 Keycloak OIDC client | ❌ 0/1 checks |
-| 5 GitOps values and apps | ❌ 0/7 checks |
+| 1 Host inventory entry | OK 1/1 checks |
+| 2 Hub image inventory and vars | FAIL 1/3 checks, 1 blocked |
+| 3 Discovery image reference | FAIL 0/1 checks |
+| 4 Keycloak OIDC client | FAIL 0/1 checks |
+| 5 GitOps values and apps | FAIL 0/7 checks |
 
 ## Next actions
 
@@ -41,18 +41,18 @@ Generated 2026-11-16 12:34 UTC · MOC issue: not set — pass `--issue N`
 
 ## Not checked — verify by hand
 
-- [ ] **Configure cluster and storage networks and firewalls for dizzy-infra** (phase 1) — The repositories read by this tool do not describe the switch, network, or firewall state required for dizzy-infra. Documented at [docs/infra-cluster-deployment.md → Infrastructure Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#infrastructure-configuration).
-- [ ] **Store the dizzy-infra SSH key and kubeadmin credentials in AWS Secrets Manager** (phase 2) — Secrets Manager is outside the public repositories read by this tool, so it cannot verify cluster/dizzy-infra/sshkey or cluster/dizzy-infra/kubeadmin. Documented at [docs/infra-cluster-deployment.md → Cluster Deployment](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-deployment).
-- [ ] **Place the pull secret and SSH key under hub-images/credentials/dizzy-infra** (phase 2) — The documented credential directory is intentionally not committed, so repository state cannot prove that its files exist for dizzy-infra. Documented at [docs/infra-cluster-deployment.md → Cluster Deployment](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-deployment).
-- [ ] **Run create_agent_install_media and copy the dizzy-infra ISO to the bastion host** (phase 3) — Running the playbook and copying the generated discovery ISO leave no trace that this tool can verify in the repositories it reads. Documented at [docs/infra-cluster-deployment.md → Cluster Deployment](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-deployment).
-- [ ] **Bootstrap Argo CD for dizzy-infra** (phase 5) — Running setup-gitops.sh and applying the bootstrap Helm template changes live cluster state, which this repository-only report cannot verify. Documented at [docs/infra-cluster-deployment.md → Cluster Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-configuration).
-- [ ] **Agents visible in hardware-inventory** (phase 4) — Agent visibility in the hub's hardware-inventory namespace requires live cluster state that repository configuration cannot prove. Documented at [docs/workload-cluster-deployment.md → Infrastructure Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/workload-cluster-deployment.md#infrastructure-configuration).
-- [ ] **Agents labelled and approved** (phase 5) — Labelling and approving agents with update-agents.yaml changes live hub cluster state that repository configuration cannot prove. Documented at [docs/workload-cluster-deployment.md → Infrastructure Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/workload-cluster-deployment.md#infrastructure-configuration).
+- **Configure cluster and storage networks and firewalls for dizzy-infra** (phase 1) — The repositories read by this tool do not describe the switch, network, or firewall state required for dizzy-infra. Documented at [docs/infra-cluster-deployment.md → Infrastructure Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#infrastructure-configuration).
+- **Store the dizzy-infra SSH key and kubeadmin credentials in AWS Secrets Manager** (phase 2) — Secrets Manager is outside the public repositories read by this tool, so it cannot verify cluster/dizzy-infra/sshkey or cluster/dizzy-infra/kubeadmin. Documented at [docs/infra-cluster-deployment.md → Cluster Deployment](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-deployment).
+- **Place the pull secret and SSH key under hub-images/credentials/dizzy-infra** (phase 2) — The documented credential directory is intentionally not committed, so repository state cannot prove that its files exist for dizzy-infra. Documented at [docs/infra-cluster-deployment.md → Cluster Deployment](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-deployment).
+- **Run create_agent_install_media and copy the dizzy-infra ISO to the bastion host** (phase 3) — Running the playbook and copying the generated discovery ISO leave no trace that this tool can verify in the repositories it reads. Documented at [docs/infra-cluster-deployment.md → Cluster Deployment](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-deployment).
+- **Bootstrap Argo CD for dizzy-infra** (phase 5) — Running setup-gitops.sh and applying the bootstrap Helm template changes live cluster state, which this repository-only report cannot verify. Documented at [docs/infra-cluster-deployment.md → Cluster Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-configuration).
+- **Agents visible in hardware-inventory** (phase 4) — Agent visibility in the hub's hardware-inventory namespace requires live cluster state that repository configuration cannot prove. Documented at [docs/workload-cluster-deployment.md → Infrastructure Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/workload-cluster-deployment.md#infrastructure-configuration).
+- **Agents labelled and approved** (phase 5) — Labelling and approving agents with update-agents.yaml changes live hub cluster state that repository configuration cannot prove. Documented at [docs/workload-cluster-deployment.md → Infrastructure Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/workload-cluster-deployment.md#infrastructure-configuration).
 
 ## Details
 
 <details>
-<summary>✅ dizzy-infra host inventory — The inventory contains a dizzy-infra group with 1 hosts.</summary>
+<summary>OK: dizzy-infra host inventory — The inventory contains a dizzy-infra group with 1 hosts.</summary>
 
 Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml) @ main (2222222)
 
@@ -73,7 +73,7 @@ Not verified: Host names, node_name values, MAC addresses, boot images and group
 </details>
 
 <details>
-<summary>✅ Hub image inventory — The hub-image inventory contains the all.children.dizzy-infra key.</summary>
+<summary>OK: Hub image inventory — The hub-image inventory contains the all.children.dizzy-infra key.</summary>
 
 Source: CCI-MOC/oac-infra · [`hub-images/inventory.yml`](https://github.com/CCI-MOC/oac-infra/blob/main/hub-images/inventory.yml) @ main (2222222)
 
@@ -87,7 +87,7 @@ Not verified: The hosts, images and variables under the key are not inspected, s
 </details>
 
 <details open>
-<summary>❌ Hub image variables — The hub-image variable file is absent from main.</summary>
+<summary>FAIL: Hub image variables — The hub-image variable file is absent from main.</summary>
 
 Source: CCI-MOC/oac-infra · [`hub-images/group_vars/dizzy-infra/vars.yml`](https://github.com/CCI-MOC/oac-infra/tree/main) @ main (2222222)
 
@@ -106,7 +106,7 @@ Not verified: The six values are not validated, so the addresses need not be par
 </details>
 
 <details open>
-<summary>• Hub moc-dns records — Blocked until Hub image variables is complete.</summary>
+<summary>BLOCKED: Hub moc-dns records — Blocked until Hub image variables is complete.</summary>
 
 Source: CCI-MOC/moc-dns · [`zonefiles/`](https://github.com/CCI-MOC/moc-dns/blob/main/zonefiles/) @ main (—)
 
@@ -122,7 +122,7 @@ Not verified: Only A records in that one zonefile are compared; CNAMEs, TTLs, de
 </details>
 
 <details open>
-<summary>❌ dizzy-infra boot image — No boot image URL is inherited by the cluster host group.</summary>
+<summary>FAIL: dizzy-infra boot image — No boot image URL is inherited by the cluster host group.</summary>
 
 Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/tree/main) @ main (2222222)
 
@@ -138,7 +138,7 @@ Status rule: The boot-image filename must contain the full cluster name `dizzy-i
 </details>
 
 <details open>
-<summary>❌ Hub OIDC client — No Keycloak OIDC client block exists for this hub.</summary>
+<summary>FAIL: Hub OIDC client — No Keycloak OIDC client block exists for this hub.</summary>
 
 Source: CCI-MOC/moc-keycloak · [`main.tf`](https://github.com/CCI-MOC/moc-keycloak/blob/main/main.tf) @ main (4444444)
 
@@ -154,7 +154,7 @@ Not verified: Only those three string attributes are compared; the HCL is never 
 </details>
 
 <details open>
-<summary>❌ Hub hosted-cluster defaults — None of the 1 required file exist in main under hosted-clusters/dizzy-infra. Missing: hosted-clusters/dizzy-infra/values.yaml. File contents are not read.</summary>
+<summary>FAIL: Hub hosted-cluster defaults — None of the 1 required file exist in main under hosted-clusters/dizzy-infra. Missing: hosted-clusters/dizzy-infra/values.yaml. File contents are not read.</summary>
 
 Source: CCI-MOC/oac-apps · [`hosted-clusters/dizzy-infra/values.yaml`](https://github.com/CCI-MOC/oac-apps/tree/main) @ main (3333333)
 
@@ -168,7 +168,7 @@ Not verified: Only path existence is tested; the file contents are not read, so 
 </details>
 
 <details open>
-<summary>❌ Hub-wide component values — None of the 1 required file exist in main under values/dizzy-infra. Missing: values/dizzy-infra/hcp-config.yaml. File contents are not read.</summary>
+<summary>FAIL: Hub-wide component values — None of the 1 required file exist in main under values/dizzy-infra. Missing: values/dizzy-infra/hcp-config.yaml. File contents are not read.</summary>
 
 Source: CCI-MOC/oac-apps · [`values/dizzy-infra`](https://github.com/CCI-MOC/oac-apps/tree/main) @ main (3333333)
 
@@ -182,7 +182,7 @@ Not verified: Only path existence is tested; the file contents are not read, so 
 </details>
 
 <details open>
-<summary>❌ Hub local-cluster values — None of the 13 required files exist in main under values/dizzy-infra/local-cluster. Missing: values/dizzy-infra/local-cluster/acm.yaml, values/dizzy-infra/local-cluster/acm-placements.yaml, values/dizzy-infra/local-cluster/cert-manager.yaml, values/dizzy-infra/local-cluster/cluster-certificates.yaml, values/dizzy-infra/local-cluster/cluster-version.yaml, values/dizzy-infra/local-cluster/external-dns-operator.yaml, values/dizzy-infra/local-cluster/external-secrets.yaml, values/dizzy-infra/local-cluster/hcp-config.yaml, values/dizzy-infra/local-cluster/keycloak-oauth.yaml, values/dizzy-infra/local-cluster/metallb.yaml, values/dizzy-infra/local-cluster/openshift-gitops.yaml, values/dizzy-infra/local-cluster/portworx.yaml, values/dizzy-infra/local-cluster/user-workload-monitoring.yaml. File contents are not read.</summary>
+<summary>FAIL: Hub local-cluster values — None of the 13 required files exist in main under values/dizzy-infra/local-cluster. Missing: values/dizzy-infra/local-cluster/acm.yaml, values/dizzy-infra/local-cluster/acm-placements.yaml, values/dizzy-infra/local-cluster/cert-manager.yaml, values/dizzy-infra/local-cluster/cluster-certificates.yaml, values/dizzy-infra/local-cluster/cluster-version.yaml, values/dizzy-infra/local-cluster/external-dns-operator.yaml, values/dizzy-infra/local-cluster/external-secrets.yaml, values/dizzy-infra/local-cluster/hcp-config.yaml, values/dizzy-infra/local-cluster/keycloak-oauth.yaml, values/dizzy-infra/local-cluster/metallb.yaml, values/dizzy-infra/local-cluster/openshift-gitops.yaml, values/dizzy-infra/local-cluster/portworx.yaml, values/dizzy-infra/local-cluster/user-workload-monitoring.yaml. File contents are not read.</summary>
 
 Source: CCI-MOC/oac-apps · [`values/dizzy-infra/local-cluster`](https://github.com/CCI-MOC/oac-apps/tree/main) @ main (3333333)
 
@@ -230,7 +230,7 @@ None.
 </details>
 
 <details open>
-<summary>❌ Hub ArgoCD applications — None of the 1 required file exist in main under apps/dizzy-infra. Missing: apps/dizzy-infra/keycloak-oauth.yaml. File contents are not read.</summary>
+<summary>FAIL: Hub ArgoCD applications — None of the 1 required file exist in main under apps/dizzy-infra. Missing: apps/dizzy-infra/keycloak-oauth.yaml. File contents are not read.</summary>
 
 Source: CCI-MOC/oac-apps · [`apps/dizzy-infra`](https://github.com/CCI-MOC/oac-apps/tree/main) @ main (3333333)
 
@@ -244,7 +244,7 @@ Not verified: Only path existence is tested; the file contents are not read, so 
 </details>
 
 <details open>
-<summary>❌ Hub Pure storage realm — No Pure storage realm named dizzy-infra was found.</summary>
+<summary>FAIL: Hub Pure storage realm — No Pure storage realm named dizzy-infra was found.</summary>
 
 Source: CCI-MOC/everpure-moc · [`ansible/group_vars/all/realms.yaml`](https://github.com/CCI-MOC/everpure-moc/tree/main) @ main (5555555)
 
@@ -261,7 +261,7 @@ Not verified: The three values are not validated against the hub machine network
 </details>
 
 <details open>
-<summary>❌ Hub moc-aws OIDC cluster — No moc-aws OIDC cluster entry has cluster_name dizzy-infra.</summary>
+<summary>FAIL: Hub moc-aws OIDC cluster — No moc-aws OIDC cluster entry has cluster_name dizzy-infra.</summary>
 
 Source: CCI-MOC/moc-aws · [`main.tf`](https://github.com/CCI-MOC/moc-aws/blob/main/main.tf) @ main (6666666)
 
@@ -276,7 +276,7 @@ Not verified: The block's other attributes are not inspected, and the OIDC provi
 </details>
 
 <details open>
-<summary>❌ Hub moc-aws cert-manager policy — No cert-manager policy entry names dizzy-infra.</summary>
+<summary>FAIL: Hub moc-aws cert-manager policy — No cert-manager policy entry names dizzy-infra.</summary>
 
 Source: CCI-MOC/moc-aws · [`cert-manager-policies.tf`](https://github.com/CCI-MOC/moc-aws/blob/main/cert-manager-policies.tf) @ main (6666666)
 
@@ -290,7 +290,7 @@ Not verified: The match is textual, so the certificate zone, DNS records and AWS
 </details>
 
 <details>
-<summary>✅ Workload address uniqueness — No workload address is used by another cluster.</summary>
+<summary>OK: Workload address uniqueness — No workload address is used by another cluster.</summary>
 
 Source: CCI-MOC/oac-apps · [`hosted-clusters/`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/) @ main (3333333)
 
@@ -315,7 +315,8 @@ Pull requests: skipped (--no-prs)
 
 ## Legend
 
-- ✅ `declared_in_main` — Desired configuration is present on merged main.
-- ❌ `missing` — Required configuration was not found.
+- FAIL: A blocking check failed.
+- OK: `declared_in_main` — Desired configuration is present on merged main.
+- BLOCKED: `blocked` — Cannot be checked until an earlier check passes.
 
 Repository-state disclaimer: this report describes repository configuration only. It does not prove live cluster synchronization, node readiness, or application health.

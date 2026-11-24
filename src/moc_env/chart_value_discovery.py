@@ -284,7 +284,7 @@ def render_discovery_markdown(report: DiscoveryReport) -> str:
     """Render a human-readable discovery report."""
 
     lines = [
-        "# 🔍 Chart Values Discovery Report",
+        "# Chart Values Discovery Report",
         "",
         "This report reconciles manual variable definitions with variables found in the local `oac-apps` clone. It does not modify manual documentation.",
         "",

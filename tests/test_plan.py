@@ -167,7 +167,7 @@ class InfraChangePlanTest(unittest.TestCase):
         plan = build_infra_change_plan(document, self.report(document))
         rendered = render_change_plan_markdown(plan)
 
-        self.assertIn("# 🗺️ Infra Change Plan", rendered)
+        self.assertIn("# Infra Change Plan", rendered)
         self.assertIn("This plan is read-only", rendered)
         self.assertIn("`update`", rendered)
         self.assertIn("`moc-env/bu-ist-demo-infra-oac-infra`", rendered)
@@ -241,5 +241,5 @@ class InfraChangePlanTest(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertEqual(stdout, "")
         self.assertIn(f"wrote markdown change plan to {output_path}", stderr)
-        self.assertIn("# 🗺️ Infra Change Plan", rendered)
+        self.assertIn("# Infra Change Plan", rendered)
         self.assertIn("`update`", rendered)

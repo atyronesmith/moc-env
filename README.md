@@ -94,13 +94,13 @@ RESULT: 8 blocking gaps (workload 3) · 0 advisories · 16 of 29 checks pass
 UNKNOWN: Workload API address network: hosted-clusters/bu-ist-demo-infra/bu-ist-demo-…
 
 PHASE                        HUB bu-ist-demo-infra           WORKLOAD bu-ist-demo-workload0
-1 Host inventory entry in…   ✅ 1 hosts                       ✅ 1 hosts
-2 Hub-image inventory entry… ✅ 6/6 variables                 🟡 partial
-3 Cluster discovery image…   🟡 partial                       –
-4 Keycloak OIDC client /…    ✅ 1/1 checks                    –
-5 GitOps values and…         ❌ none                          ✅ 1/2 variables
-6 oac-apps values            –                               ⚪ unknown
-7 Shared-service…            –                               ✅ 3/3 checks
+1 Host inventory entry in…   OK      1 hosts                 OK      1 hosts
+2 Hub-image inventory entry… OK      6/6 variables           WARNING partial
+3 Cluster discovery image…   WARNING partial                 –
+4 Keycloak OIDC client /…    OK      1/1 checks              –
+5 GitOps values and…         FAIL    none                    OK      1/2 variables
+6 oac-apps values            –                               UNKNOWN unknown
+7 Shared-service…            –                               OK      3/3 checks
 
 NEXT
   1. [oac-infra] Generate and publish the parent hub's agent discovery ISO, then replace the

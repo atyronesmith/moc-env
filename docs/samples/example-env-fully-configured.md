@@ -12,23 +12,23 @@ Generated 2026-11-16 12:34 UTC · MOC issue: not set — pass `--issue N`
 
 | Phase | HUB example-env-infra |
 |---|---:|
-| 1 Host inventory entry | ✅ 1/1 checks |
-| 2 Hub image inventory and vars | ✅ 3/3 checks |
-| 3 Discovery image reference | ✅ 1/1 checks |
-| 4 Keycloak OIDC client | ✅ 1/1 checks |
-| 5 GitOps values and apps | ✅ 8/8 checks |
+| 1 Host inventory entry | OK 1/1 checks |
+| 2 Hub image inventory and vars | OK 3/3 checks |
+| 3 Discovery image reference | OK 1/1 checks |
+| 4 Keycloak OIDC client | OK 1/1 checks |
+| 5 GitOps values and apps | OK 8/8 checks |
 
 ### Workload phases
 
 | Phase | WORKLOAD example-env-workload0 |
 |---|---:|
-| 1 Host inventory entry | ✅ 1/1 checks |
-| 2 Hub agent discovery ISO | ✅ 1/1 checks |
+| 1 Host inventory entry | OK 1/1 checks |
+| 2 Hub agent discovery ISO | OK 1/1 checks |
 | 3 Agent ISO boot | verify by hand |
 | 4 Agent visibility | verify by hand |
-| 5 Agent labels and approval | ✅ 1/1 checks |
-| 6 oac-apps values | ✅ 10/11 checks, 1 unknown |
-| 7 Shared-service prerequisites | ✅ 5/5 checks |
+| 5 Agent labels and approval | OK 1/1 checks |
+| 6 oac-apps values | OK 10/11 checks, 1 unknown |
+| 7 Shared-service prerequisites | OK 5/5 checks |
 
 ## Next actions
 
@@ -36,18 +36,18 @@ Nothing to do in the repositories this tool reads.
 
 ## Not checked — verify by hand
 
-- [ ] **Configure cluster and storage networks and firewalls for example-env-infra** (phase 1) — The repositories read by this tool do not describe the switch, network, or firewall state required for example-env-infra. Documented at [docs/infra-cluster-deployment.md → Infrastructure Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#infrastructure-configuration).
-- [ ] **Store the example-env-infra SSH key and kubeadmin credentials in AWS Secrets Manager** (phase 2) — Secrets Manager is outside the public repositories read by this tool, so it cannot verify cluster/example-env-infra/sshkey or cluster/example-env-infra/kubeadmin. Documented at [docs/infra-cluster-deployment.md → Cluster Deployment](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-deployment).
-- [ ] **Place the pull secret and SSH key under hub-images/credentials/example-env-infra** (phase 2) — The documented credential directory is intentionally not committed, so repository state cannot prove that its files exist for example-env-infra. Documented at [docs/infra-cluster-deployment.md → Cluster Deployment](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-deployment).
-- [ ] **Run create_agent_install_media and copy the example-env-infra ISO to the bastion host** (phase 3) — Running the playbook and copying the generated discovery ISO leave no trace that this tool can verify in the repositories it reads. Documented at [docs/infra-cluster-deployment.md → Cluster Deployment](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-deployment).
-- [ ] **Bootstrap Argo CD for example-env-infra** (phase 5) — Running setup-gitops.sh and applying the bootstrap Helm template changes live cluster state, which this repository-only report cannot verify. Documented at [docs/infra-cluster-deployment.md → Cluster Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-configuration).
-- [ ] **Agents visible in hardware-inventory** (phase 4) — Agent visibility in the hub's hardware-inventory namespace requires live cluster state that repository configuration cannot prove. Documented at [docs/workload-cluster-deployment.md → Infrastructure Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/workload-cluster-deployment.md#infrastructure-configuration).
-- [ ] **Agents labelled and approved** (phase 5) — Labelling and approving agents with update-agents.yaml changes live hub cluster state that repository configuration cannot prove. Documented at [docs/workload-cluster-deployment.md → Infrastructure Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/workload-cluster-deployment.md#infrastructure-configuration).
+- **Configure cluster and storage networks and firewalls for example-env-infra** (phase 1) — The repositories read by this tool do not describe the switch, network, or firewall state required for example-env-infra. Documented at [docs/infra-cluster-deployment.md → Infrastructure Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#infrastructure-configuration).
+- **Store the example-env-infra SSH key and kubeadmin credentials in AWS Secrets Manager** (phase 2) — Secrets Manager is outside the public repositories read by this tool, so it cannot verify cluster/example-env-infra/sshkey or cluster/example-env-infra/kubeadmin. Documented at [docs/infra-cluster-deployment.md → Cluster Deployment](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-deployment).
+- **Place the pull secret and SSH key under hub-images/credentials/example-env-infra** (phase 2) — The documented credential directory is intentionally not committed, so repository state cannot prove that its files exist for example-env-infra. Documented at [docs/infra-cluster-deployment.md → Cluster Deployment](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-deployment).
+- **Run create_agent_install_media and copy the example-env-infra ISO to the bastion host** (phase 3) — Running the playbook and copying the generated discovery ISO leave no trace that this tool can verify in the repositories it reads. Documented at [docs/infra-cluster-deployment.md → Cluster Deployment](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-deployment).
+- **Bootstrap Argo CD for example-env-infra** (phase 5) — Running setup-gitops.sh and applying the bootstrap Helm template changes live cluster state, which this repository-only report cannot verify. Documented at [docs/infra-cluster-deployment.md → Cluster Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/infra-cluster-deployment.md#cluster-configuration).
+- **Agents visible in hardware-inventory** (phase 4) — Agent visibility in the hub's hardware-inventory namespace requires live cluster state that repository configuration cannot prove. Documented at [docs/workload-cluster-deployment.md → Infrastructure Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/workload-cluster-deployment.md#infrastructure-configuration).
+- **Agents labelled and approved** (phase 5) — Labelling and approving agents with update-agents.yaml changes live hub cluster state that repository configuration cannot prove. Documented at [docs/workload-cluster-deployment.md → Infrastructure Configuration](https://github.com/CCI-MOC/oac-apps/blob/main/docs/workload-cluster-deployment.md#infrastructure-configuration).
 
 ## Details
 
 <details>
-<summary>✅ example-env-infra host inventory — The inventory contains a example-env-infra group with 1 hosts.</summary>
+<summary>OK: example-env-infra host inventory — The inventory contains a example-env-infra group with 1 hosts.</summary>
 
 Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml) @ main (2222222)
 
@@ -68,7 +68,7 @@ Not verified: Host names, node_name values, MAC addresses, boot images and group
 </details>
 
 <details>
-<summary>✅ Hub image inventory — The hub-image inventory contains the all.children.example-env-infra key.</summary>
+<summary>OK: Hub image inventory — The hub-image inventory contains the all.children.example-env-infra key.</summary>
 
 Source: CCI-MOC/oac-infra · [`hub-images/inventory.yml`](https://github.com/CCI-MOC/oac-infra/blob/main/hub-images/inventory.yml) @ main (2222222)
 
@@ -82,7 +82,7 @@ Not verified: The hosts, images and variables under the key are not inspected, s
 </details>
 
 <details>
-<summary>✅ Hub image variables — All six required hub-image variables are present in main; their values are not validated.</summary>
+<summary>OK: Hub image variables — All six required hub-image variables are present in main; their values are not validated.</summary>
 
 Source: CCI-MOC/oac-infra · [`hub-images/group_vars/example-env-infra/vars.yml`](https://github.com/CCI-MOC/oac-infra/blob/main/hub-images/group_vars/example-env-infra/vars.yml) @ main (2222222)
 
@@ -101,7 +101,7 @@ Not verified: The six values are not validated, so the addresses need not be par
 </details>
 
 <details>
-<summary>✅ Hub moc-dns records — All required hub DNS records in zonefiles/int.massopen.cloud.zone match the hub-image variables.</summary>
+<summary>OK: Hub moc-dns records — All required hub DNS records in zonefiles/int.massopen.cloud.zone match the hub-image variables.</summary>
 
 Source: CCI-MOC/moc-dns · [`zonefiles/int.massopen.cloud.zone`](https://github.com/CCI-MOC/moc-dns/blob/main/zonefiles/int.massopen.cloud.zone) @ main (7777777)
 
@@ -117,7 +117,7 @@ Not verified: Only A records in that one zonefile are compared; CNAMEs, TTLs, de
 </details>
 
 <details>
-<summary>✅ example-env-infra boot image — The boot image URL is specific to example-env-infra.</summary>
+<summary>OK: example-env-infra boot image — The boot image URL is specific to example-env-infra.</summary>
 
 Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml) @ main (2222222)
 
@@ -133,7 +133,7 @@ Status rule: The boot-image filename must contain the full cluster name `example
 </details>
 
 <details>
-<summary>✅ Hub OIDC client — All expected Keycloak OIDC client fields match.</summary>
+<summary>OK: Hub OIDC client — All expected Keycloak OIDC client fields match.</summary>
 
 Source: CCI-MOC/moc-keycloak · [`main.tf`](https://github.com/CCI-MOC/moc-keycloak/blob/main/main.tf) @ main (4444444)
 
@@ -149,7 +149,7 @@ Not verified: Only those three string attributes are compared; the HCL is never 
 </details>
 
 <details>
-<summary>✅ Hub hosted-cluster defaults — 1 of 1 required file exists in main under hosted-clusters/example-env-infra (values.yaml). File contents are not read.</summary>
+<summary>OK: Hub hosted-cluster defaults — 1 of 1 required file exists in main under hosted-clusters/example-env-infra (values.yaml). File contents are not read.</summary>
 
 Source: CCI-MOC/oac-apps · [`hosted-clusters/example-env-infra/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/example-env-infra/values.yaml) @ main (3333333)
 
@@ -163,7 +163,7 @@ Not verified: Only path existence is tested; the file contents are not read, so 
 </details>
 
 <details>
-<summary>✅ Hub-wide component values — 1 of 1 required file exists in main under values/example-env-infra (hcp-config.yaml). File contents are not read.</summary>
+<summary>OK: Hub-wide component values — 1 of 1 required file exists in main under values/example-env-infra (hcp-config.yaml). File contents are not read.</summary>
 
 Source: CCI-MOC/oac-apps · [`values/example-env-infra`](https://github.com/CCI-MOC/oac-apps/blob/main/values/example-env-infra) @ main (3333333)
 
@@ -177,7 +177,7 @@ Not verified: Only path existence is tested; the file contents are not read, so 
 </details>
 
 <details>
-<summary>✅ Hub local-cluster values — 13 of 13 required files exist in main under values/example-env-infra/local-cluster (acm.yaml, acm-placements.yaml, cert-manager.yaml, cluster-certificates.yaml, cluster-version.yaml, external-dns-operator.yaml, external-secrets.yaml, hcp-config.yaml, keycloak-oauth.yaml, metallb.yaml, openshift-gitops.yaml, portworx.yaml, user-workload-monitoring.yaml). File contents are not read.</summary>
+<summary>OK: Hub local-cluster values — 13 of 13 required files exist in main under values/example-env-infra/local-cluster (acm.yaml, acm-placements.yaml, cert-manager.yaml, cluster-certificates.yaml, cluster-version.yaml, external-dns-operator.yaml, external-secrets.yaml, hcp-config.yaml, keycloak-oauth.yaml, metallb.yaml, openshift-gitops.yaml, portworx.yaml, user-workload-monitoring.yaml). File contents are not read.</summary>
 
 Source: CCI-MOC/oac-apps · [`values/example-env-infra/local-cluster`](https://github.com/CCI-MOC/oac-apps/blob/main/values/example-env-infra/local-cluster) @ main (3333333)
 
@@ -225,7 +225,7 @@ None.
 </details>
 
 <details>
-<summary>✅ Hub ArgoCD applications — 1 of 1 required file exists in main under apps/example-env-infra (keycloak-oauth.yaml). File contents are not read.</summary>
+<summary>OK: Hub ArgoCD applications — 1 of 1 required file exists in main under apps/example-env-infra (keycloak-oauth.yaml). File contents are not read.</summary>
 
 Source: CCI-MOC/oac-apps · [`apps/example-env-infra`](https://github.com/CCI-MOC/oac-apps/blob/main/apps/example-env-infra) @ main (3333333)
 
@@ -239,7 +239,7 @@ Not verified: Only path existence is tested; the file contents are not read, so 
 </details>
 
 <details>
-<summary>✅ Hub Pure storage realm — The example-env-infra Pure storage realm reports subnet_vlan, subnet_prefix and s3_endpoint.</summary>
+<summary>OK: Hub Pure storage realm — The example-env-infra Pure storage realm reports subnet_vlan, subnet_prefix and s3_endpoint.</summary>
 
 Source: CCI-MOC/everpure-moc · [`ansible/group_vars/all/realms.yaml`](https://github.com/CCI-MOC/everpure-moc/blob/main/ansible/group_vars/all/realms.yaml) @ main (5555555)
 
@@ -256,7 +256,7 @@ Not verified: The three values are not validated against the hub machine network
 </details>
 
 <details>
-<summary>✅ Hub moc-aws OIDC cluster — The moc-aws OIDC cluster entry for example-env-infra is present.</summary>
+<summary>OK: Hub moc-aws OIDC cluster — The moc-aws OIDC cluster entry for example-env-infra is present.</summary>
 
 Source: CCI-MOC/moc-aws · [`main.tf`](https://github.com/CCI-MOC/moc-aws/blob/main/main.tf) @ main (6666666)
 
@@ -271,7 +271,7 @@ Not verified: The block's other attributes are not inspected, and the OIDC provi
 </details>
 
 <details>
-<summary>✅ Hub moc-aws cert-manager policy — The cert-manager policy entry cert_manager_policies names example-env-infra in policy_name or cluster_subdomain.</summary>
+<summary>OK: Hub moc-aws cert-manager policy — The cert-manager policy entry cert_manager_policies names example-env-infra in policy_name or cluster_subdomain.</summary>
 
 Source: CCI-MOC/moc-aws · [`cert-manager-policies.tf`](https://github.com/CCI-MOC/moc-aws/blob/main/cert-manager-policies.tf) @ main (6666666)
 
@@ -285,7 +285,7 @@ Not verified: The match is textual, so the certificate zone, DNS records and AWS
 </details>
 
 <details>
-<summary>✅ Hub hosted-cluster secret prefix — The hub can write hosted-cluster secrets at cluster/example-env-infra/hostedcluster/.</summary>
+<summary>OK: Hub hosted-cluster secret prefix — The hub can write hosted-cluster secrets at cluster/example-env-infra/hostedcluster/.</summary>
 
 Source: CCI-MOC/moc-aws · [`main.tf`](https://github.com/CCI-MOC/moc-aws/blob/main/main.tf) @ main (6666666)
 
@@ -299,7 +299,7 @@ Not verified: The rest of the hub block and the AWS-side secret store are not in
 </details>
 
 <details>
-<summary>✅ example-env-workload0 host inventory — The inventory contains a example-env-workload0 group with 1 hosts.</summary>
+<summary>OK: example-env-workload0 host inventory — The inventory contains a example-env-workload0 group with 1 hosts.</summary>
 
 Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml) @ main (2222222)
 
@@ -320,7 +320,7 @@ Not verified: Host names, node_name values, MAC addresses, boot images and group
 </details>
 
 <details>
-<summary>✅ example-env-workload0 boot image — The boot image URL identifies the workload or its parent hub example-env-infra.</summary>
+<summary>OK: example-env-workload0 boot image — The boot image URL identifies the workload or its parent hub example-env-infra.</summary>
 
 Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml) @ main (2222222)
 
@@ -336,7 +336,7 @@ Status rule: The workload boot-image filename may contain the workload name `exa
 </details>
 
 <details>
-<summary>✅ example-env-workload0 update-agents inputs — Every non-openstack host has the mac_addr and resource_class inputs required by infra/update-agents.yaml.</summary>
+<summary>OK: example-env-workload0 update-agents inputs — Every non-openstack host has the mac_addr and resource_class inputs required by infra/update-agents.yaml.</summary>
 
 Source: CCI-MOC/oac-infra · [`infra/update-agents.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/update-agents.yaml) @ main (2222222)
 
@@ -357,7 +357,7 @@ Not verified: MAC address and resource-class formats are not validated, the upda
 </details>
 
 <details>
-<summary>✅ Workload hosted-cluster values — 1 of 1 required file exists in main under hosted-clusters/example-env-infra/example-env-workload0 (values.yaml). File contents are not read.</summary>
+<summary>OK: Workload hosted-cluster values — 1 of 1 required file exists in main under hosted-clusters/example-env-infra/example-env-workload0 (values.yaml). File contents are not read.</summary>
 
 Source: CCI-MOC/oac-apps · [`hosted-clusters/example-env-infra/example-env-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/example-env-infra/example-env-workload0/values.yaml) @ main (3333333)
 
@@ -371,7 +371,7 @@ Not verified: Only path existence is tested; the file contents are not read, so 
 </details>
 
 <details>
-<summary>✅ Workload component values — 1 file exists in main under values/example-env-infra/example-env-workload0; at least 1 is required. File contents are not read.</summary>
+<summary>OK: Workload component values — 1 file exists in main under values/example-env-infra/example-env-workload0; at least 1 is required. File contents are not read.</summary>
 
 Source: CCI-MOC/oac-apps · [`values/example-env-infra/example-env-workload0`](https://github.com/CCI-MOC/oac-apps/blob/main/values/example-env-infra/example-env-workload0) @ main (3333333)
 
@@ -386,7 +386,7 @@ Not verified: Only path existence is tested; the file contents are not read, so 
 </details>
 
 <details>
-<summary>✅ Workload API address network — The API address is inside the hub machine network.</summary>
+<summary>OK: Workload API address network — The API address is inside the hub machine network.</summary>
 
 Source: CCI-MOC/oac-apps · [`hosted-clusters/example-env-infra/example-env-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/example-env-infra/example-env-workload0/values.yaml) @ main (3333333)
 
@@ -400,7 +400,7 @@ Not verified: The address is not checked against other clusters here (see worklo
 </details>
 
 <details open>
-<summary>⚪ Workload ingress address network — No VLAN matched example-env-workload0, so ingress pool address membership could not be checked.</summary>
+<summary>UNKNOWN: Workload ingress address network — No VLAN matched example-env-workload0, so ingress pool address membership could not be checked.</summary>
 
 Source: CCI-MOC/oac-apps · [`hosted-clusters/example-env-infra/example-env-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/tree/main) @ main (3333333)
 
@@ -414,7 +414,7 @@ Not verified: Address availability, MetalLB runtime allocation and the switch co
 </details>
 
 <details>
-<summary>✅ Workload DNS base domain — All DNS record hostnames use the hub hosted-cluster domains.</summary>
+<summary>OK: Workload DNS base domain — All DNS record hostnames use the hub hosted-cluster domains.</summary>
 
 Source: CCI-MOC/oac-apps · [`hosted-clusters/example-env-infra/example-env-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/example-env-infra/example-env-workload0/values.yaml) @ main (3333333)
 
@@ -428,7 +428,7 @@ Not verified: Only the suffix is compared; the records are not looked up in moc-
 </details>
 
 <details>
-<summary>✅ Workload node-pool host capacity — Every node pool has enough matching inventory hosts.</summary>
+<summary>OK: Workload node-pool host capacity — Every node pool has enough matching inventory hosts.</summary>
 
 Source: CCI-MOC/oac-infra · [`infra/inventory/00hosts.yaml`](https://github.com/CCI-MOC/oac-infra/blob/main/infra/inventory/00hosts.yaml) @ main (2222222)
 
@@ -442,7 +442,7 @@ Not verified: Host readiness, scheduling and non-string selector operators are n
 </details>
 
 <details>
-<summary>✅ Workload GPU feature support — GPU configuration is consistent with the inventory.</summary>
+<summary>OK: Workload GPU feature support — GPU configuration is consistent with the inventory.</summary>
 
 Source: CCI-MOC/oac-apps · [`hosted-clusters/example-env-infra/example-env-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/example-env-infra/example-env-workload0/values.yaml) @ main (3333333)
 
@@ -457,7 +457,7 @@ Not verified: GPU model, count and allocatable resources are not inspected, and 
 </details>
 
 <details>
-<summary>✅ Workload feature placements — Matched placements: all-managed-clusters. unused_labels: [].</summary>
+<summary>OK: Workload feature placements — Matched placements: all-managed-clusters. unused_labels: [].</summary>
 
 Source: CCI-MOC/oac-apps · [`values/example-env-infra/local-cluster/acm-placements.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/values/example-env-infra/local-cluster/acm-placements.yaml) @ main (3333333)
 
@@ -473,7 +473,7 @@ Not verified: Only string equality of matchLabels is compared, so label selector
 </details>
 
 <details>
-<summary>✅ Workload feature chart values — 1 chart received; all required values are set and every kustomize overlay exists.</summary>
+<summary>OK: Workload feature chart values — 1 chart received; all required values are set and every kustomize overlay exists.</summary>
 
 Source: CCI-MOC/oac-apps · [`values/example-env-infra/example-env-workload0`](https://github.com/CCI-MOC/oac-apps/blob/main/values/example-env-infra/example-env-workload0) @ main (3333333)
 
@@ -496,7 +496,7 @@ Not verified: Required calls inside if/with/range blocks and inside range-scoped
 </details>
 
 <details>
-<summary>✅ Workload address uniqueness — No workload address is used by another cluster.</summary>
+<summary>OK: Workload address uniqueness — No workload address is used by another cluster.</summary>
 
 Source: CCI-MOC/oac-apps · [`hosted-clusters/`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/) @ main (3333333)
 
@@ -513,7 +513,7 @@ Not verified: Addresses are compared as strings, so equivalent CIDR and bare-IP 
 </details>
 
 <details>
-<summary>✅ Workload internal address duplicates — No address is used by more than one field of example-env-workload0.</summary>
+<summary>OK: Workload internal address duplicates — No address is used by more than one field of example-env-workload0.</summary>
 
 Source: CCI-MOC/oac-apps · [`hosted-clusters/example-env-infra/example-env-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/example-env-infra/example-env-workload0/values.yaml) @ main (3333333)
 
@@ -530,7 +530,7 @@ Not verified: The report does not prove whether sharing an address is intentiona
 </details>
 
 <details>
-<summary>✅ Workload Pure storage realm — The example-env-workload0 Pure storage realm reports subnet_vlan, subnet_prefix and s3_endpoint.</summary>
+<summary>OK: Workload Pure storage realm — The example-env-workload0 Pure storage realm reports subnet_vlan, subnet_prefix and s3_endpoint.</summary>
 
 Source: CCI-MOC/everpure-moc · [`ansible/group_vars/all/realms.yaml`](https://github.com/CCI-MOC/everpure-moc/blob/main/ansible/group_vars/all/realms.yaml) @ main (5555555)
 
@@ -547,7 +547,7 @@ Not verified: The three values are not validated against the workload VLAN or DN
 </details>
 
 <details>
-<summary>✅ Workload moc-aws OIDC cluster — The moc-aws OIDC cluster entry for example-env-workload0 is present.</summary>
+<summary>OK: Workload moc-aws OIDC cluster — The moc-aws OIDC cluster entry for example-env-workload0 is present.</summary>
 
 Source: CCI-MOC/moc-aws · [`main.tf`](https://github.com/CCI-MOC/moc-aws/blob/main/main.tf) @ main (6666666)
 
@@ -562,7 +562,7 @@ Not verified: The block's other attributes are not inspected, and the OIDC provi
 </details>
 
 <details>
-<summary>✅ Workload moc-aws cert-manager policy — The cert-manager policy entry cert_manager_policy_example_env_workload0 names example-env-workload0 in policy_name or cluster_subdomain.</summary>
+<summary>OK: Workload moc-aws cert-manager policy — The cert-manager policy entry cert_manager_policy_example_env_workload0 names example-env-workload0 in policy_name or cluster_subdomain.</summary>
 
 Source: CCI-MOC/moc-aws · [`cert-manager-policies.tf`](https://github.com/CCI-MOC/moc-aws/blob/main/cert-manager-policies.tf) @ main (6666666)
 
@@ -576,7 +576,7 @@ Not verified: The match is textual, so the certificate zone, DNS records and AWS
 </details>
 
 <details>
-<summary>✅ Workload Keycloak OIDC client — The Keycloak OIDC client for example-env-workload0 matches cluster_name, openshift_redirect_uri and client_secret_name.</summary>
+<summary>OK: Workload Keycloak OIDC client — The Keycloak OIDC client for example-env-workload0 matches cluster_name, openshift_redirect_uri and client_secret_name.</summary>
 
 Source: CCI-MOC/moc-keycloak · [`main.tf`](https://github.com/CCI-MOC/moc-keycloak/blob/main/main.tf) @ main (4444444)
 
@@ -592,7 +592,7 @@ Not verified: Only those three attributes are compared; the secret is not read a
 </details>
 
 <details>
-<summary>✅ Workload identity provider — mocsso is enabled and the Keycloak OIDC client for example-env-workload0 matches cluster_name, openshift_redirect_uri and client_secret_name.</summary>
+<summary>OK: Workload identity provider — mocsso is enabled and the Keycloak OIDC client for example-env-workload0 matches cluster_name, openshift_redirect_uri and client_secret_name.</summary>
 
 Source: CCI-MOC/moc-keycloak · [`main.tf`](https://github.com/CCI-MOC/moc-keycloak/blob/main/main.tf) @ main (4444444)
 
@@ -625,7 +625,7 @@ Pull requests: skipped (--no-prs)
 
 ## Legend
 
-- ✅ `declared_in_main` — Desired configuration is present on merged main.
-- ⚪ `unknown` — The source could not be read or parsed.
+- OK: `declared_in_main` — Desired configuration is present on merged main.
+- UNKNOWN: `unknown` — The source could not be read or parsed.
 
 Repository-state disclaimer: this report describes repository configuration only. It does not prove live cluster synchronization, node readiness, or application health.

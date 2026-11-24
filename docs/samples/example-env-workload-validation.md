@@ -1,8 +1,8 @@
 SAMPLE — generated from a synthetic fixture, not a live environment.
 
-# 🧪 Desired-State Validation
+# Desired-State Validation
 
-**Result:** ✅ VALID
+**Result:** VALID
 
 | Field | Value |
 |---|---|
@@ -28,7 +28,7 @@ SAMPLE — generated from a synthetic fixture, not a live environment.
 
 | Check | Path | Expected | Actual | Result | Detail |
 |---|---|---|---|---|---|
-| YAML parsing and duplicate keys | `document` | Parseable YAML without duplicate mapping keys | Valid | ✅ Pass | — |
+| YAML parsing and duplicate keys | `document` | Parseable YAML without duplicate mapping keys | Valid | PASS | — |
 
 
 ## Interpretation

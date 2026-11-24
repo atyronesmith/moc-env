@@ -231,7 +231,7 @@ all:
             f"wrote markdown comparison report to {output_path}",
             stderr,
         )
-        self.assertIn("# 🔍 Hub Desired-State Comparison", rendered)
+        self.assertIn("# Hub Desired-State Comparison", rendered)
         self.assertIn("## Detailed comparison", rendered)
         self.assertIn("`matches_main`", rendered)
 
@@ -445,7 +445,7 @@ all:
 
         self.assertEqual(exit_code, 0)
         self.assertEqual(stdout, "")
-        self.assertIn("# 🔍 Workload Desired-State Comparison", rendered)
+        self.assertIn("# Workload Desired-State Comparison", rendered)
         self.assertIn("## Detailed comparison", rendered)
         self.assertIn(f"wrote markdown comparison report to {output_path}", stderr)
 

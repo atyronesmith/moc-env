@@ -212,15 +212,15 @@ metadata:
 
         self.assertEqual(exit_code, 0)
         rendered = stdout.getvalue()
-        self.assertIn("# 🧪 Desired-State Validation", rendered)
-        self.assertIn("**Result:** ✅ VALID", rendered)
+        self.assertIn("# Desired-State Validation", rendered)
+        self.assertIn("**Result:** VALID", rendered)
         self.assertIn("| Document |", rendered)
         self.assertIn("| Error count | 0 |", rendered)
         self.assertIn("| Warning count | 0 |", rendered)
         self.assertIn("## Check summary by category", rendered)
         self.assertIn("## Detailed checks", rendered)
         self.assertIn("| Check | Path | Expected | Actual | Result | Detail |", rendered)
-        self.assertIn("✅ Pass", rendered)
+        self.assertIn("PASS", rendered)
         self.assertIn("### Network and domain", rendered)
         self.assertEqual(stderr.getvalue(), "")
 
@@ -256,13 +256,13 @@ metadata:
             f"wrote markdown validation report to {output_path}",
             stderr.getvalue(),
         )
-        self.assertIn("**Result:** ❌ INVALID", rendered)
+        self.assertIn("**Result:** INVALID", rendered)
         self.assertIn("## Errors", rendered)
         self.assertIn("invalid IP address", rendered)
         self.assertIn("## Warnings", rendered)
         self.assertIn("unknown field", rendered)
-        self.assertIn("❌ Fail", rendered)
-        self.assertIn("⚠️ Warning", rendered)
+        self.assertIn("FAIL", rendered)
+        self.assertIn("WARNING", rendered)
 
 
 if __name__ == "__main__":

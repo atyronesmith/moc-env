@@ -225,7 +225,7 @@ class EnvironmentBundleTest(unittest.TestCase):
 
             self.assertEqual(check_code, 0)
             self.assertIn(
-                "# 🔍 Environment Desired-State Comparison",
+                "# Environment Desired-State Comparison",
                 check_stdout.getvalue(),
             )
             self.assertIn("Environment", check_stdout.getvalue())

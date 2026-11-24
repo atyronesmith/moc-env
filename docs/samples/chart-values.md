@@ -1,6 +1,6 @@
 SAMPLE — generated from a synthetic fixture, not a live environment.
 
-# 📘 Chart Configuration Reference
+# Chart Configuration Reference
 
 > **Generated documentation.** This file is produced by `moc-env document-values`. Edit `docs/variables/*.yaml` and `docs/sources.yaml`; do not edit the generated Markdown directly.
 

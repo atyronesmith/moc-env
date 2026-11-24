@@ -505,7 +505,7 @@ def _description(key: str, charts: Iterable[str]) -> str:
                 f"{chart_context} This key controls `{lookup_key.rsplit('.', 1)[-1]}`."
             )
     if _secret_like(key):
-        description += " ⚠️ Secret-like name; do not place secret material in values files."
+        description += " Warning: Secret-like name; do not place secret material in values files."
     return description
 
 
@@ -551,7 +551,7 @@ def render_chart_values_markdown(
     }
 
     lines = [
-        "# 📘 Chart Configuration Reference",
+        "# Chart Configuration Reference",
         "",
         "> **Generated documentation.** This file is produced by "
         "`moc-env document-values`. Edit `docs/variables/*.yaml` and "

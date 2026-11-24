@@ -971,16 +971,16 @@ def _markdown_value(value: Any) -> str:
 def render_comparison_markdown(report: ComparisonReport) -> str:
     data = report.to_dict()
     state_symbols = {
-        "matches_main": "✅",
-        "missing_from_main": "❌",
-        "value_mismatch": "🟡",
-        "unexpected_in_main": "⚠️",
-        "unsupported_check": "❓",
-        "ambiguous": "❓",
-        "pr_open": "🚧",
+        "matches_main": "MATCH",
+        "missing_from_main": "MISSING",
+        "value_mismatch": "MISMATCH",
+        "unexpected_in_main": "UNEXPECTED",
+        "unsupported_check": "UNSUPPORTED",
+        "ambiguous": "AMBIGUOUS",
+        "pr_open": "PR OPEN",
     }
     lines = [
-        f"# 🔍 {report.kind} Desired-State Comparison",
+        f"# {report.kind} Desired-State Comparison",
         "",
         f"## `{data['environment']['name']}` — {data['overall_state']}",
         "",
@@ -993,7 +993,7 @@ def render_comparison_markdown(report: ComparisonReport) -> str:
     ]
     for state, count in data["summary"]["state_counts"].items():
         lines.append(
-            f"| {state_symbols.get(state, '•')} `{state}` | {count} |"
+            f"| {state_symbols.get(state, 'UNKNOWN')} `{state}` | {count} |"
         )
     lines.extend(
         [
@@ -1011,7 +1011,7 @@ def render_comparison_markdown(report: ComparisonReport) -> str:
             f"`{_markdown_value(check.field)}` | "
             f"`{_markdown_value(check.desired)}` | "
             f"`{_markdown_value(check.current)}` | "
-            f"{state_symbols.get(check.state, '•')} `{check.state}` | "
+            f"{state_symbols.get(check.state, 'UNKNOWN')} `{check.state}` | "
             f"{_markdown_value(check.reason)} |"
         )
     return "\n".join(lines).rstrip() + "\n"

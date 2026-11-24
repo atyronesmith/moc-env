@@ -1319,18 +1319,18 @@ def render_validation_markdown(
 ) -> str:
     """Render a standalone human-readable validation report."""
 
-    status = "✅ VALID" if result.valid else "❌ INVALID"
+    status = "VALID" if result.valid else "INVALID"
     document = str(path) if path is not None else "—"
     passed_count = sum(check.status == "pass" for check in result.checks)
     failed_count = sum(check.status == "fail" for check in result.checks)
     warning_count = sum(check.status == "warning" for check in result.checks)
     status_symbols = {
-        "pass": "✅ Pass",
-        "fail": "❌ Fail",
-        "warning": "⚠️ Warning",
+        "pass": "PASS",
+        "fail": "FAIL",
+        "warning": "WARNING",
     }
     lines = [
-        "# 🧪 Desired-State Validation",
+        "# Desired-State Validation",
         "",
         f"**Result:** {status}",
         "",

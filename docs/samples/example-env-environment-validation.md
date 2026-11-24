@@ -1,8 +1,8 @@
 SAMPLE — generated from a synthetic fixture, not a live environment.
 
-# 🧪 Desired-State Validation
+# Desired-State Validation
 
-**Result:** ✅ VALID
+**Result:** VALID
 
 | Field | Value |
 |---|---|
@@ -34,11 +34,11 @@ SAMPLE — generated from a synthetic fixture, not a live environment.
 
 | Check | Path | Expected | Actual | Result | Detail |
 |---|---|---|---|---|---|
-| YAML parsing and duplicate keys | `document` | Parseable YAML without duplicate mapping keys | Valid | ✅ Pass | — |
-| YAML document shape | `document` | Mapping | Mapping | ✅ Pass | — |
-| API version | `apiVersion` | moc-env/v1alpha1 | 'moc-env/v1alpha1' | ✅ Pass | — |
-| Resource kind | `kind` | Environment | 'Environment' | ✅ Pass | — |
-| Schema version | `schemaVersion` | 1 | '1' | ✅ Pass | — |
+| YAML parsing and duplicate keys | `document` | Parseable YAML without duplicate mapping keys | Valid | PASS | — |
+| YAML document shape | `document` | Mapping | Mapping | PASS | — |
+| API version | `apiVersion` | moc-env/v1alpha1 | 'moc-env/v1alpha1' | PASS | — |
+| Resource kind | `kind` | Environment | 'Environment' | PASS | — |
+| Schema version | `schemaVersion` | 1 | '1' | PASS | — |
 
 ### Metadata
 
@@ -46,8 +46,8 @@ SAMPLE — generated from a synthetic fixture, not a live environment.
 
 | Check | Path | Expected | Actual | Result | Detail |
 |---|---|---|---|---|---|
-| Metadata mapping | `metadata` | Mapping | Mapping | ✅ Pass | — |
-| Environment name | `metadata.name` | Source object with a valid environment name | 'example-env' (inferred) | ✅ Pass | — |
+| Metadata mapping | `metadata` | Mapping | Mapping | PASS | — |
+| Environment name | `metadata.name` | Source object with a valid environment name | 'example-env' (inferred) | PASS | — |
 
 ### Bundle
 
@@ -55,8 +55,8 @@ SAMPLE — generated from a synthetic fixture, not a live environment.
 
 | Check | Path | Expected | Actual | Result | Detail |
 |---|---|---|---|---|---|
-| Spec mapping | `spec` | Mapping | Mapping | ✅ Pass | — |
-| MOC issue reference | `spec.issue` | CCI-MOC/MOC-issues issue URL | 'https://github.com/CCI-MOC/MOC-issues/issues/666' | ✅ Pass | — |
+| Spec mapping | `spec` | Mapping | Mapping | PASS | — |
+| MOC issue reference | `spec.issue` | CCI-MOC/MOC-issues issue URL | 'https://github.com/CCI-MOC/MOC-issues/issues/666' | PASS | — |
 
 ### References
 
@@ -64,12 +64,12 @@ SAMPLE — generated from a synthetic fixture, not a live environment.
 
 | Check | Path | Expected | Actual | Result | Detail |
 |---|---|---|---|---|---|
-| Hub-cluster name | `spec.hubCluster` | 'example-env-infra' | 'example-env-infra' | ✅ Pass | — |
-| Workload-cluster list | `spec.workloadClusters` | Non-empty list of workload mappings | List | ✅ Pass | — |
-| Workload 0 mapping | `spec.workloadClusters[0]` | Mapping with name and parentHubCluster | Mapping | ✅ Pass | — |
-| Workload 0 name | `spec.workloadClusters[0].name` | Name beginning with example-env-workload | 'example-env-workload0' | ✅ Pass | — |
-| Workload 0 parent | `spec.workloadClusters[0].parentHubCluster` | 'example-env-infra' | 'example-env-infra' | ✅ Pass | — |
-| Duplicate workload names | `spec.workloadClusters` | No duplicate workload names | None | ✅ Pass | — |
+| Hub-cluster name | `spec.hubCluster` | 'example-env-infra' | 'example-env-infra' | PASS | — |
+| Workload-cluster list | `spec.workloadClusters` | Non-empty list of workload mappings | List | PASS | — |
+| Workload 0 mapping | `spec.workloadClusters[0]` | Mapping with name and parentHubCluster | Mapping | PASS | — |
+| Workload 0 name | `spec.workloadClusters[0].name` | Name beginning with example-env-workload | 'example-env-workload0' | PASS | — |
+| Workload 0 parent | `spec.workloadClusters[0].parentHubCluster` | 'example-env-infra' | 'example-env-infra' | PASS | — |
+| Duplicate workload names | `spec.workloadClusters` | No duplicate workload names | None | PASS | — |
 
 ### Network and domain
 
@@ -77,9 +77,9 @@ SAMPLE — generated from a synthetic fixture, not a live environment.
 
 | Check | Path | Expected | Actual | Result | Detail |
 |---|---|---|---|---|---|
-| Network mapping | `spec.network` | Mapping | Mapping | ✅ Pass | — |
-| Machine-network CIDR | `spec.network.machineNetwork.value` | Valid IPv4 or IPv6 CIDR | '10.20.26.0/23' | ✅ Pass | — |
-| Domain syntax | `spec.domain.value` | Valid DNS name | 'example-env.int.massopen.cloud' | ✅ Pass | — |
+| Network mapping | `spec.network` | Mapping | Mapping | PASS | — |
+| Machine-network CIDR | `spec.network.machineNetwork.value` | Valid IPv4 or IPv6 CIDR | '10.20.26.0/23' | PASS | — |
+| Domain syntax | `spec.domain.value` | Valid DNS name | 'example-env.int.massopen.cloud' | PASS | — |
 
 ### Security
 
@@ -87,7 +87,7 @@ SAMPLE — generated from a synthetic fixture, not a live environment.
 
 | Check | Path | Expected | Actual | Result | Detail |
 |---|---|---|---|---|---|
-| Secret-like field names | `document` | No fields named secret, token, password, or credential | 0 prohibited field(s) | ✅ Pass | — |
+| Secret-like field names | `document` | No fields named secret, token, password, or credential | 0 prohibited field(s) | PASS | — |
 
 ### Schema compatibility
 
@@ -95,7 +95,7 @@ SAMPLE — generated from a synthetic fixture, not a live environment.
 
 | Check | Path | Expected | Actual | Result | Detail |
 |---|---|---|---|---|---|
-| Unknown fields | `document` | Only fields defined by the Environment bundle schema | 0 unknown field(s) | ✅ Pass | — |
+| Unknown fields | `document` | Only fields defined by the Environment bundle schema | 0 unknown field(s) | PASS | — |
 
 
 ## Interpretation

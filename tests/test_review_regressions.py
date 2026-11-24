@@ -82,9 +82,8 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertNotIn("cluster_name is", keycloak)
         self.assertEqual(client.refs, {"CCI-MOC/oac-apps": "pull/246/head"})
         self.assertFalse(any(ref in {"pull/31/head", "pull/66/head"} for _, ref in client.source_snapshots))
-        for ascii_mode in (False, True):
-            self.assertTrue(_phase_cell([c for c in checks.values() if c["scope"] == "workload" and c.get("phase") == 6], ascii_mode).startswith("[fail]" if ascii_mode else "❌"))
-            self.assertTrue(_phase_cell([c for c in checks.values() if c["scope"] == "hub" and c.get("phase") == 3], ascii_mode).startswith("[warn]" if ascii_mode else "🟡"))
+        self.assertTrue(_phase_cell([c for c in checks.values() if c["scope"] == "workload" and c.get("phase") == 6]).startswith("FAIL"))
+        self.assertTrue(_phase_cell([c for c in checks.values() if c["scope"] == "hub" and c.get("phase") == 3]).startswith("WARNING"))
         for renderer in (render_text, render_markdown):
             output = renderer(report)
             actions = output.split("NEXT", 1)[1].split("NOT CHECKED", 1)[0] if renderer is render_text else output.split("## Next actions", 1)[1].split("##", 1)[0]
@@ -98,9 +97,9 @@ class ReviewRegressionTest(unittest.TestCase):
             self.assertIn("resource_class", agent_action)
             self.assertNotIn("mac_addr", agent_action)
             self.assertNotIn("expected present", " ".join(actions.split()))
-        details = render_text(report, details=True, ascii_mode=True)
-        self.assertIn("[fail] Workload API address network", details)
-        self.assertIn("[warn] Workload GPU feature support", details)
+        details = render_text(report, details=True)
+        self.assertIn("FAIL: Workload API address network", details)
+        self.assertIn("WARNING: Workload GPU feature support", details)
 
     def test_mixed_dns_records_only_report_invalid_hostnames(self):
         check = {

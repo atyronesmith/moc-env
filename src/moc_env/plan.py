@@ -186,7 +186,7 @@ def render_change_plan_markdown(plan: ChangePlan) -> str:
     """Render a Phase 8 plan as review-friendly Markdown."""
 
     lines = [
-        "# 🗺️ Infra Change Plan",
+        "# Infra Change Plan",
         "",
         f"## `{plan.environment.name}` — {plan.overall_state}",
         "",

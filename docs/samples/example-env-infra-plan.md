@@ -1,6 +1,6 @@
 SAMPLE — generated from a synthetic fixture, not a live environment.
 
-# 🗺️ Infra Change Plan
+# Infra Change Plan
 
 ## `example-env` — NO CHANGES REQUIRED
 

@@ -22,7 +22,6 @@ def main():
                 ("fully-configured", "bu-ist-demo", FullyConfiguredFakeGitHubClient, []),
                 ("hub-no-workload", "dizzy", MultiWorkloadFakeGitHubClient, []),
                 ("details", "bu-ist-demo", FakeGitHubClient, ["--details"]),
-                ("ascii", "bu-ist-demo", FakeGitHubClient, ["--ascii"]),
             ):
                 code, output, _ = case.run_cli(
                     ["status", environment, "--format", output_format, "--no-prs", *flags],
