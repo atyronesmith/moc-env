@@ -4,6 +4,8 @@ import contextlib
 import io
 import json
 import os
+from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -11,13 +13,124 @@ import unittest
 from unittest.mock import patch
 
 from moc_env import cli
-from moc_env.completion import argument_completion, positional_actions
+from moc_env.completion import COMMANDS, argument_completion, positional_actions
 from moc_env.environment_cache import environment_cache_path
 
 from fakes import FakeGitHubClient
 
 
 class CompletionTest(unittest.TestCase):
+    def command_options(self) -> dict[str, set[str]]:
+        parser = cli.build_parser()
+        commands = next(
+            action.choices for action in parser._actions if isinstance(action.choices, dict)
+        )
+        self.assertEqual(set(COMMANDS), set(commands))
+        return {
+            command: {
+                option
+                for action in command_parser._actions
+                for option in action.option_strings
+            }
+            for command, command_parser in commands.items()
+        }
+
+    def test_hidden_completion_lists_every_commands_flags(self) -> None:
+        for command, options in self.command_options().items():
+            for prefix in ("", "-", "--"):
+                with self.subTest(command=command, prefix=prefix):
+                    exit_code, stdout, stderr = self.run_cli(["__complete-options", command, prefix])
+                    self.assertEqual(exit_code, 0)
+                    self.assertEqual(stderr, "")
+                    self.assertEqual(
+                        set(stdout.splitlines()), {o for o in options if o.startswith(prefix)}
+                    )
+
+    def test_bash_completion_lists_every_commands_flags(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            with patch.dict(os.environ, {"MOC_ENV_CACHE_DIR": temporary_directory}):
+                self.run_cli(["list", "--format", "json"])
+                script = self.run_cli(["completion", "bash"])[1]
+                for command, options in self.command_options().items():
+                    for prefix in ("", "--"):
+                        with self.subTest(command=command, prefix=prefix):
+                            result = subprocess.run(
+                                [
+                                    "bash", "-c", script
+                                    + '\nCOMP_WORDS=(moc-env "$1" "$2"); COMP_CWORD=2; '
+                                    + '_moc_env_complete; printf \'%s\\n\' "${COMPREPLY[@]}"',
+                                    "completion-test", command, prefix,
+                                ],
+                                env={
+                                    **os.environ,
+                                    "MOC_ENV_COMPLETION_COMMAND": f"{sys.executable} -m moc_env.cli",
+                                },
+                                text=True, capture_output=True, check=True, timeout=10,
+                            )
+                            self.assertEqual(result.stderr, "")
+                            flags = {
+                                line for line in result.stdout.splitlines() if line.startswith("-")
+                            }
+                            self.assertEqual(flags, {o for o in options if o.startswith(prefix)})
+
+    @unittest.skipUnless(shutil.which("zsh"), "Zsh is not installed")
+    def test_zsh_completion_lists_every_commands_flags(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            with patch.dict(os.environ, {"MOC_ENV_CACHE_DIR": temporary_directory}):
+                self.run_cli(["list", "--format", "json"])
+                script = self.run_cli(["completion", "zsh"])[1]
+                runner = directory / "completion.zsh"
+                matches = directory / "matches"
+                # Exercise the real _describe inside ZLE, including prefix-needed.
+                # Capture actual matches without replacing Zsh's completion helpers.
+                runner.write_text(
+                    "autoload -Uz compinit\ncompinit -D\n" + script + """
+compadd() {
+    local -a captured_matches
+    builtin compadd -A captured_matches "$@"
+    if (( ${#captured_matches} )); then
+        print -rl -- "${captured_matches[@]}" >> "$COMPLETION_MATCHES"
+    fi
+    builtin compadd "$@"
+}
+_capture_completion() {
+    _main_complete _moc-env
+}
+zle -C capture-completion complete-word _capture_completion
+bindkey '^I' capture-completion
+buffer="$1"
+vared buffer
+""", encoding="utf-8",
+                )
+                for command, options in self.command_options().items():
+                    for prefix in ("", "--"):
+                        with self.subTest(command=command, prefix=prefix):
+                            matches.write_text("", encoding="utf-8")
+                            result = subprocess.run(
+                                ["zsh", "-f", "-c", """
+zmodload zsh/zpty
+zpty child zsh -f -i "${(q)1}" "${(q)2}"
+zpty -w -n child $'\\t\\n'
+while zpty -r child line; do print -r -- "$line"; done
+zpty -d child
+""", "completion-test", str(runner), f"moc-env {command} {prefix}"],
+                                env={
+                                    **os.environ,
+                                    "MOC_ENV_COMPLETION_COMMAND": f"{sys.executable} -m moc_env.cli",
+                                    "COMPLETION_MATCHES": str(matches),
+                                },
+                                text=True, capture_output=True, check=True, timeout=10,
+                            )
+                            flags = {
+                                line for line in matches.read_text(encoding="utf-8").splitlines()
+                                if line.startswith("-")
+                            }
+                            self.assertEqual(
+                                flags, {o for o in options if o.startswith(prefix)},
+                                result.stdout + result.stderr,
+                            )
+
     def run_cli(self, arguments: list[str]) -> tuple[int, str, str]:
         stdout = io.StringIO()
         stderr = io.StringIO()

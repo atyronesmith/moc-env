@@ -283,7 +283,7 @@ _moc-env() {{
     option_output="$("${{executable_command[@]}}" __complete-options "$subcommand" "${{words[CURRENT]}}")"
     if [[ -n "$option_output" ]]; then
       values=(${{(f)option_output}})
-      _describe -t options 'option' values
+      _describe -O -t options 'option' values
     fi
     return
   fi
@@ -293,7 +293,8 @@ _moc-env() {{
     if [[ -n "$option_output" ]]; then
       local -a option_values
       option_values=(${{(f)option_output}})
-      _describe -t options 'option' option_values
+      # -O bypasses Zsh's default prefix-needed style on an empty word.
+      _describe -O -t options 'option' option_values
     fi
   fi
 
