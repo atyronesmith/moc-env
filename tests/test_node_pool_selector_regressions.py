@@ -75,7 +75,7 @@ class NodePoolSelectorRegressionTest(unittest.TestCase):
                 self.assertEqual(check.state, "declared_in_main")
                 self.assertEqual(check.actual[0]["matching_hosts"], 1)
 
-    def test_documented_resource_class_alias_is_still_supported(self) -> None:
+    def test_inventory_resource_class_takes_precedence_over_documentation(self) -> None:
         for key in ("resource_class", "openstack/resource-class"):
             with self.subTest(key=key):
                 checks = _run(
@@ -87,7 +87,7 @@ class NodePoolSelectorRegressionTest(unittest.TestCase):
                     {"example-node": "documented-class"},
                 )
                 self.assertEqual(
-                    checks["workload.node_pool_hosts"].state, "declared_in_main"
+                    checks["workload.node_pool_hosts"].state, "value_mismatch"
                 )
 
     def test_scalar_and_non_string_selectors_fail_without_crashing(self) -> None:

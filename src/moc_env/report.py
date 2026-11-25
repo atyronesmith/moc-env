@@ -742,6 +742,23 @@ def _unknown_headline(checks: list[dict[str, Any]]) -> str:
     return f"UNKNOWN: {shown}"
 
 
+def _node_pool_unknown_lines(checks: list[dict[str, Any]]) -> list[str]:
+    """Keep missing classification evidence next to every UNKNOWN summary."""
+
+    lines: list[str] = []
+    for check in checks:
+        if check.get("id") != "workload.node_pool_hosts" or check.get("deferred"):
+            continue
+        reasons = [
+            pool["reason"] for pool in check.get("actual") or []
+            if pool.get("state") == "unknown" and pool.get("reason")
+        ]
+        if not reasons and check.get("state") == "unknown":
+            reasons = [check["reason"]]
+        lines.extend(f"UNKNOWN: {reason}" for reason in reasons)
+    return lines
+
+
 def _blocked_summary(report: dict[str, Any]) -> str | None:
     checks = report.get("checks", [])
     hub_cluster = report["environment"].get("infra_cluster")
@@ -912,6 +929,11 @@ def _action_evidence(check: dict[str, Any], report: dict[str, Any]) -> str:
         current = report.get("environment", {}).get("workload_clusters") or []
         clusters = sorted({cluster for uses in duplicates.values() for cluster, _ in uses if cluster not in current})
         return f"{addresses} are also used by {', '.join(clusters)}; expected addresses unique to this cluster."
+    if check.get("id") == "workload.node_pool_hosts":
+        return " ".join(
+            pool["reason"] for pool in check.get("actual") or []
+            if pool.get("state") == "value_mismatch" and pool.get("reason")
+        ) or check["reason"]
     rows = failing_field_rows(check)
     if check.get("id") in {"workload.api_address_network", "workload.ingress_address_network"}:
         return " ".join(f"{name} is {plain(observed)}; it must be {plain(expected)}." for name, expected, observed in rows)
@@ -1225,9 +1247,28 @@ def _rendered_check_reason(check: dict[str, Any]) -> str:
     return reason
 
 
-def _rendered_field_rows(check: dict[str, Any]) -> list[list[Any]]:
+def _rendered_field_rows(
+    check: dict[str, Any], *, node_pool_basis: bool = False,
+) -> list[list[Any]]:
     """Present requirements and findings without changing shared check evidence."""
 
+    if check.get("id") == "workload.node_pool_hosts":
+        pool_rows = field_rows(check)
+        pools = [pool for pool in check.get("actual") or [] if isinstance(pool, dict)]
+        for row, pool in zip(pool_rows, pools):
+            count = pool.get("matching_hosts")
+            finding = str(count) if count is not None else "matching count undetermined"
+            if node_pool_basis and pool.get("basis"):
+                finding += f" (basis: {pool['basis']})"
+            if pool.get("state") == "unknown":
+                finding = f"UNKNOWN: {finding}; {pool['reason']}"
+            elif pool.get("reason"):
+                finding += f"; {pool['reason']}"
+            if pool.get("notes"):
+                finding += "; Note: " + " ".join(pool["notes"])
+            if pool.get("reason") or pool.get("notes") or (node_pool_basis and "basis" in pool):
+                row[2] = finding
+        return pool_rows
     if check.get("id") == "workload.feature_chart_values":
         evidence = check.get("evidence") or {}
         rows: list[list[Any]] = [[
@@ -1330,7 +1371,7 @@ def _detail_table_headers(check: dict[str, Any]) -> list[str]:
 
 
 def _detail_section(check: dict[str, Any]) -> list[str]:
-    rows = _rendered_field_rows(check)
+    rows = _rendered_field_rows(check, node_pool_basis=True)
     headers = _detail_table_headers(check)
     field_width = max([len(headers[0])] + [len(plain(row[0])) for row in rows])
     expected_width = max([len(headers[1])] + [len(plain(row[1])) for row in rows])
@@ -1454,6 +1495,7 @@ def render_text(
     lines.extend(_wrap(result))
     if unknown:
         lines.append(_unknown_headline(checks))
+    lines.extend(_node_pool_unknown_lines(checks))
     blocked_summary = _blocked_summary(report)
     if blocked_summary:
         lines.append(blocked_summary)
@@ -1488,6 +1530,10 @@ def render_text(
                     cell = f"{word:<7} {detail}"
                 cells.append(cell)
             lines.append(f"{label:<{phase_width}}" + "".join(f"{cell:<{cell_width}}" for cell in cells))
+            lines.extend(_node_pool_unknown_lines([
+                check for _header, scope_checks in columns for check in scope_checks
+                if check.get("phase") == phase
+            ]))
 
     if scope in {"environment", "hub"}:
         phase_table(
@@ -1948,6 +1994,15 @@ def _markdown_phase_table(report: dict[str, Any]) -> list[str]:
                 for _header, scope_checks in columns
             ]
             rendered.append(f"| {phase} {title} | " + " | ".join(cells) + " |")
+            reasons = _node_pool_unknown_lines([
+                check for _header, scope_checks in columns for check in scope_checks
+                if check.get("phase") == phase
+            ])
+            if reasons:
+                rendered.append(
+                    "| " + "<br>".join(_markdown_escape_cell(reason) for reason in reasons)
+                    + " |" + " |" * len(columns)
+                )
         rendered.append("")
         return rendered
 
@@ -2240,6 +2295,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"# {environment['name']} — {_scope_title(scope).lower()}",
         "",
         f"**{_markdown_verdict(report)}**",
+        *_node_pool_unknown_lines(report["checks"]),
         "",
         _markdown_metadata(report),
         "",

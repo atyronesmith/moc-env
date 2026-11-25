@@ -13,7 +13,9 @@ import yaml
 
 from .github import GitHubClient, GitHubError, github_url
 from .model import CheckResult, Environment
-from .observed import AppsObservation, InfraObservation
+from .observed import (
+    AppsObservation, HARDWARE_NETWORK_DOC_PATH, INVENTORY_PATH, InfraObservation,
+)
 from . import feature_charts
 from .repositories import (
     ANSIBLE_SWITCHES_REPOSITORY,
@@ -21,6 +23,7 @@ from .repositories import (
     MOC_AWS_REPOSITORY,
     MOC_DNS_REPOSITORY,
     OAC_APPS_REPOSITORY,
+    OAC_INFRA_REPOSITORY,
 )
 
 EVERPURE_PATH = "ansible/group_vars/all/realms.yaml"
@@ -1200,44 +1203,128 @@ def _workload_value_checks(
                 replicas = 0
             documented = infra.hardware_resource_classes.value
 
-            def selector_values(host: dict[str, Any], key: str) -> tuple[Any, ...]:
-                if key == "massopen.cloud/cluster":
-                    return (host.get("cluster"),)
-                if key in {"resource_class", "openstack/resource-class"}:
-                    return tuple(
-                        value
-                        for value in (
-                            host.get("resource_class"),
-                            documented.get(host.get("node_name")),
-                        )
-                        if value is not None
-                    )
-                return (host.get(key),)
-
-            def selector_matches(
-                host: dict[str, Any], selector: dict[str, Any]
-            ) -> bool:
-                return all(
-                    any(
-                        value == expected
-                        for value in selector_values(host, key)
-                    )
-                    for key, expected in selector.items()
-                    if isinstance(expected, str)
+            resource_keys = {"resource_class", "openstack/resource-class"}
+            required_classes = [
+                value for key, value in selector.items()
+                if key in resource_keys and isinstance(value, str)
+            ]
+            candidates = [
+                host for host in hosts
+                if all(
+                    host.get("cluster" if key == "massopen.cloud/cluster" else key) == value
+                    for key, value in selector.items()
+                    if key not in resource_keys and isinstance(value, str)
                 )
-
-            matching = sum(
-                1
-                for host in hosts
-                if selector_matches(host, selector)
+            ]
+            matching = 0
+            unclassified = 0
+            unclassified_names: list[str] = []
+            notes: list[str] = []
+            bases: set[str] = set()
+            matching_bases: set[str] = set()
+            for host in candidates:
+                inventory_class = host.get("resource_class")
+                documented_class = documented.get(host.get("node_name"))
+                if not required_classes:
+                    basis = "inventory"
+                    matches = True
+                elif inventory_class is not None:
+                    # Explicit inventory data is authoritative, even when the
+                    # documentation would otherwise match the selector.
+                    basis = "inventory"
+                    matches = all(inventory_class == value for value in required_classes)
+                elif host.get("bm_management") != "openstack":
+                    basis = "inventory"
+                    matches = False
+                    host_name = host.get("node_name") or host.get("name") or "unnamed host"
+                    notes.append(
+                        f"{host_name}: no resource_class in the inventory, so "
+                        "update-agents.yaml will not label it; see workload.agent_labels_inputs."
+                    )
+                elif isinstance(documented_class, str) and documented_class:
+                    basis = "documented class"
+                    matches = all(
+                        value == documented_class or value.endswith("-" + documented_class)
+                        for value in required_classes
+                    )
+                else:
+                    unclassified += 1
+                    unclassified_names.append(
+                        host.get("node_name") or host.get("name") or "unnamed host"
+                    )
+                    continue
+                bases.add(basis)
+                if matches:
+                    matching += 1
+                    matching_bases.add(basis)
+            pool_state = (
+                "declared_in_main" if matching >= replicas
+                else "value_mismatch" if matching + unclassified < replicas
+                else "unknown"
             )
-            pool_results.append({"name": pool_name, "replicas": replicas, "matching_hosts": matching})
-        if not pool_errors and all(item["matching_hosts"] >= item["replicas"] for item in pool_results):
+            pool_result: dict[str, Any] = {
+                "name": pool_name,
+                "replicas": replicas,
+                "matching_hosts": matching if bases or pool_state != "unknown" else None,
+                "classified_hosts": len(candidates) - unclassified,
+                "unclassified_hosts": unclassified,
+                "basis": ", ".join(sorted(matching_bases or bases)) or (
+                    None if unclassified else "inventory"
+                ),
+                "state": pool_state,
+            }
+            if required_classes:
+                pool_result["required_class"] = ", ".join(required_classes)
+            if pool_state == "value_mismatch":
+                pool_result["reason"] = (
+                    f"Pool {pool_name or index} requires {replicas} hosts: "
+                    f"{matching} confirmed matching hosts; {unclassified} unclassified hosts. "
+                    "The pool is short even if every unclassified host matched."
+                )
+            if unclassified and pool_state == "declared_in_main":
+                notes.append(
+                    f"{unclassified} unclassified hosts ({', '.join(unclassified_names)}); "
+                    "enough confirmed matching hosts are already available."
+                )
+            if notes and pool_state == "value_mismatch":
+                pool_result["reason"] += " " + " ".join(notes)
+            elif notes:
+                pool_result["notes"] = notes
+            if pool_state == "unknown":
+                required_class = ", ".join(required_classes)
+                count = f"{matching} confirmed matching hosts; " if bases else ""
+                pool_result["reason"] = (
+                    f"Pool {pool_name or index} requires resource class {required_class}: "
+                    f"{count}{unclassified} hosts matched the cluster selector but could not "
+                    f"be classified. No resource_class on these hosts in "
+                    f"{OAC_INFRA_REPOSITORY}/{INVENTORY_PATH}, and no documented class "
+                    f"for them in {OAC_INFRA_REPOSITORY}/{HARDWARE_NETWORK_DOC_PATH}. "
+                    "The hosts' actual resource-class labels are held in OpenStack "
+                    "and are not recorded in the repositories."
+                )
+            pool_results.append(pool_result)
+        unknown_reasons = [item["reason"] for item in pool_results if item["state"] == "unknown"]
+        shortage_reasons = [
+            item["reason"] for item in pool_results if item["state"] == "value_mismatch"
+        ]
+        shortages = bool(shortage_reasons)
+        if not pool_errors and not shortages and not unknown_reasons:
             results.append(_result("workload.node_pool_hosts", "workload", workload, "CCI-MOC/oac-infra", "infra/inventory/00hosts.yaml", "declared_in_main", "info", pools, pool_results, "Every node pool has enough matching inventory hosts."))
+        elif not pool_errors and not shortages:
+            results.append(_result(
+                "workload.node_pool_hosts", "workload", workload, OAC_INFRA_REPOSITORY,
+                INVENTORY_PATH, "unknown", "advisory", pools, pool_results,
+                " ".join(unknown_reasons),
+                next_action="Verify the hosts' actual resource-class labels in OpenStack.",
+            ))
         else:
             reason = "At least one node pool lacks matching inventory hosts."
             if pool_errors:
                 reason = "Malformed nodePools configuration: " + " ".join(pool_errors)
+            if shortage_reasons:
+                reason += " " + " ".join(shortage_reasons)
+            if unknown_reasons:
+                reason += " " + " ".join(unknown_reasons)
             results.append(_result("workload.node_pool_hosts", "workload", workload, "CCI-MOC/oac-infra", "infra/inventory/00hosts.yaml", "value_mismatch", "blocking", pools, pool_results, reason))
 
         gpu_enabled = str(_nested(values, ("clusterLabels", "massopen.cloud/feature-gpu"))).lower() == "true"

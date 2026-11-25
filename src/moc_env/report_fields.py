@@ -301,7 +301,8 @@ def failing_field_rows(check: dict[str, Any]) -> list[list[Any]]:
         return [row for row in rows if row[2] in missing["hostnames"]]
     if check.get("id") == "workload.node_pool_hosts":
         return [row for row, item in zip(rows, check.get("actual") or [])
-                if (item.get("matching_hosts") or 0) < (item.get("replicas") or 0)]
+                if item.get("state") != "unknown"
+                and (item.get("matching_hosts") or 0) < (item.get("replicas") or 0)]
     if check.get("id") == "workload.agent_labels_inputs":
         failed = {f"{host}.{name}" for host, names in evidence.get("missing_variables", {}).items() for name in names}
         failed.update(f"{item['host']}.resource_class" for item in evidence.get("resource_class_mismatches", []))
