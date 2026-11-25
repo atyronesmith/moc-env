@@ -59,6 +59,144 @@ class ApplicationSetParsingTest(unittest.TestCase):
         self.assertNotIn("sriov-network-operator", application_set.components)
 
 
+class GeneratorSelectionTest(unittest.TestCase):
+    """Invented templates exercise entry boundaries, not component proximity."""
+
+    @staticmethod
+    def template(*entries: str) -> str:
+        return "spec:\n  generators:\n" + "\n".join(entries) + "\n  template: {}\n"
+
+    @staticmethod
+    def entry(
+        placement: str,
+        components: tuple[str, ...],
+        *,
+        gate: bool = True,
+        cluster_gate: bool = False,
+        components_first: bool = False,
+    ) -> str:
+        selector = (
+            "          - clusterDecisionResource:\n"
+            "              labelSelector:\n"
+            "                matchLabels:\n"
+            f"                  cluster.open-cluster-management.io/placement: {placement}\n"
+        )
+        charts = "          - list:\n              elements:\n" + "".join(
+            f"                - component: {chart}\n" for chart in components
+        )
+        paths = []
+        if gate:
+            paths.append("hosted-clusters/{{ $hub }}/enabled.yaml")
+        if cluster_gate:
+            paths.append("values/{{ $hub }}/{{`{{name}}`}}/accelerator.yaml")
+        files = "".join(
+            '          - git:\n              files:\n'
+            f'                - path: "{path}"\n'
+            for path in paths
+        )
+        return "    - matrix:\n        generators:\n" + files + (
+            charts + selector if components_first else selector + charts
+        )
+
+    def rows(
+        self,
+        template: str,
+        *,
+        hub_gate: bool = True,
+        cluster_file: bool = False,
+        feature: bool = False,
+        cluster: str = "worker-one",
+    ):
+        tree = {}
+        if hub_gate:
+            tree["hosted-clusters/hub-one/enabled.yaml"] = {}
+        if cluster_file:
+            tree["values/hub-one/worker-one/accelerator.yaml"] = {}
+        return feature_charts.workload_chart_rows(
+            tree, "hub-one", cluster,
+            {"example.test/feature-special": "true"} if feature else {},
+            [
+                feature_charts.Placement("p-all"),
+                feature_charts.Placement("p-feat", {"example.test/feature-special": "true"}),
+            ],
+            [feature_charts.parse_application_set(template, "extra-set")],
+            lambda path: (None, None),
+        )
+
+    def test_each_generator_owns_its_placement_and_components(self) -> None:
+        template = self.template(
+            self.entry("p-all", ("a", "b")), self.entry("p-feat", ("c",))
+        )
+        self.assertEqual([row["chart"] for row in self.rows(template)], ["a", "b"])
+        rows = self.rows(template, feature=True)
+        self.assertEqual([row["chart"] for row in rows], ["a", "b", "c"])
+        self.assertEqual(rows[-1]["placement"], "p-feat")
+        self.assertTrue(all(row["application_set"] == "extra-set" for row in rows))
+
+    def test_components_can_precede_placement(self) -> None:
+        template = self.template(self.entry("p-feat", ("a", "b"), components_first=True))
+        self.assertEqual(self.rows(template), [])
+        self.assertEqual([row["chart"] for row in self.rows(template, feature=True)], ["a", "b"])
+
+    def test_cluster_gate_is_independent_of_satisfied_hub_gate(self) -> None:
+        template = self.template(self.entry("p-all", ("a", "b"), cluster_gate=True))
+        self.assertEqual([row["chart"] for row in self.rows(template, cluster_file=True)], ["a", "b"])
+        self.assertEqual(self.rows(template, cluster_file=True, cluster="worker-two"), [])
+        self.assertEqual(self.rows(template), [])
+
+    def test_missing_hub_gate_suppresses_all_entries(self) -> None:
+        template = self.template(
+            self.entry("p-all", ("a", "b")),
+            self.entry("p-feat", ("c",), cluster_gate=True),
+        )
+        for cluster in ("worker-one", "worker-two"):
+            self.assertEqual(
+                self.rows(template, hub_gate=False, cluster_file=True, feature=True, cluster=cluster),
+                [],
+            )
+
+    def test_gates_are_entry_local(self) -> None:
+        template = self.template(
+            self.entry("p-all", ("a",), gate=False),
+            self.entry("p-all", ("b",), cluster_gate=True),
+        )
+        self.assertEqual([row["chart"] for row in self.rows(template)], ["a"])
+        self.assertEqual([row["chart"] for row in self.rows(template, cluster_file=True)], ["a", "b"])
+        self.assertEqual([row["chart"] for row in self.rows(template, hub_gate=False)], ["a"])
+
+    def test_ungated_single_generator_preserves_existing_row_keys(self) -> None:
+        template = self.template(self.entry("p-all", ("a",), gate=False))
+        self.assertEqual(self.rows(template), [{
+            "chart": "a", "application_set": "extra-set", "placement": "p-all",
+            "feature_label": "baseline", "hub_values_file": False,
+            "cluster_values_file": False, "unmet_required_values": [],
+            "component": True,
+        }])
+        parsed = feature_charts.parse_application_set(template, "extra-set")
+        self.assertEqual(parsed.placement, "p-all")
+        self.assertEqual(parsed.components, ("a",))
+        self.assertIsNone(parsed.gate_path)
+
+    def test_generator_boundaries_support_different_yaml_indentation(self) -> None:
+        template = self.template(
+            self.entry("p-all", ("a",)), self.entry("p-feat", ("b",), cluster_gate=True)
+        )
+        four_space = "\n".join(
+            " " * (2 * (len(line) - len(line.lstrip()))) + line.lstrip()
+            for line in template.splitlines()
+        )
+        for text in (template, four_space):
+            with self.subTest(template=text):
+                parsed = feature_charts.parse_application_set(text)
+                self.assertEqual(len(parsed.generator_entries), 2)
+                self.assertEqual(parsed.generator_entries[1].placement, "p-feat")
+                self.assertEqual(
+                    parsed.generator_entries[1].cluster_gate_path,
+                    "values/{{ $hub }}/{{`{{name}}`}}/accelerator.yaml",
+                )
+                self.assertEqual([row["chart"] for row in self.rows(text, feature=True)], ["a"])
+
+
 class PlacementCheckTest(unittest.TestCase):
     def test_label_no_hub_matches_is_unused_evidence_and_passes(self) -> None:
         check = _feature_placement_check(

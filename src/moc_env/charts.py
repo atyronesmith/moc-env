@@ -422,8 +422,9 @@ def _drop_in_names(
 
 def _application_set_charts(
     application_set: feature_charts.ApplicationSet,
+    generator: feature_charts.ApplicationSetGenerator,
 ) -> tuple[str, ...]:
-    charts = list(application_set.components)
+    charts = list(generator.components)
     if application_set.literal_chart:
         charts.append(application_set.literal_chart)
     return tuple(dict.fromkeys(charts))
@@ -559,9 +560,10 @@ def _collect_chart_reference(
             {
                 chart
                 for application_set in application_sets
-                if application_set.placement
+                for generator in application_set.generator_entries
+                if generator.placement
                 == feature_charts.ALL_MANAGED_PLACEMENT
-                for chart in _application_set_charts(application_set)
+                for chart in _application_set_charts(application_set, generator)
             }
         )
     )
@@ -585,8 +587,9 @@ def _collect_chart_reference(
                 {
                     chart
                     for application_set in application_sets
-                    if application_set.placement == placement_name
-                    for chart in _application_set_charts(application_set)
+                    for generator in application_set.generator_entries
+                    if generator.placement == placement_name
+                    for chart in _application_set_charts(application_set, generator)
                 }
             )
         )

@@ -895,7 +895,10 @@ def _feature_chart_values_check(
 
     missing_overlays: list[str] = []
     for application_set in application_sets:
-        if application_set.placement not in matched:
+        if not any(
+            generator.placement in matched
+            for generator in application_set.generator_entries
+        ):
             continue
         if not application_set.kustomize_path:
             continue

@@ -66,8 +66,23 @@ class Placement:
 
 
 @dataclass(frozen=True)
+class ApplicationSetGenerator:
+    """Selection and charts belonging to one top-level generator entry."""
+
+    placement: str | None
+    components: tuple[str, ...] = ()
+    gate_path: str | None = None
+    cluster_gate_path: str | None = None
+
+
+@dataclass(frozen=True)
 class ApplicationSet:
-    """The placement and destination charts named by one managed template."""
+    """One template, with entry-local selection and legacy file-wide metadata.
+
+    ``components`` is the ordered union; ``placement`` and ``gate_path`` are
+    the first declared values. All retain their single-generator meaning.
+    Consumers selecting workloads must use ``generator_entries`` instead.
+    """
 
     name: str
     placement: str | None
@@ -77,6 +92,15 @@ class ApplicationSet:
     value_files: tuple[str, ...] = ()
     manifest_path: str = ""
     gate_path: str | None = None
+    generators: tuple[ApplicationSetGenerator, ...] = ()
+
+    @property
+    def generator_entries(self) -> tuple[ApplicationSetGenerator, ...]:
+        """Include directly constructed, pre-generator ApplicationSets."""
+
+        return self.generators or (
+            ApplicationSetGenerator(self.placement, self.components, self.gate_path),
+        )
 
 
 def parse_placements(text: str) -> list[Placement]:
@@ -200,6 +224,27 @@ def parse_application_set(
 
     placement_match = _PLACEMENT.search(text)
     components = tuple(dict.fromkeys(_COMPONENT.findall(text)))
+    blocks = _generator_blocks(text)
+    # Older callers provide abbreviated non-matrix templates with separate
+    # placement and list entries. Preserve that single-placement shorthand.
+    if (
+        len(_PLACEMENT.findall("\n".join(blocks))) == 1
+        and not any(_PLACEMENT.search(block) and _COMPONENT.search(block) for block in blocks)
+        and not any(re.search(r"^\s*-\s*matrix:", block, re.MULTILINE) for block in blocks)
+    ):
+        blocks = [text]
+    generators = tuple(
+        ApplicationSetGenerator(
+            placement=match.group(1) if (match := _PLACEMENT.search(block)) else None,
+            components=tuple(dict.fromkeys(_COMPONENT.findall(block))),
+            gate_path=hub_gate_path(block),
+            cluster_gate_path=next(
+                (path for path in _FILES_GENERATOR_PATH.findall(block) if _has_cluster_name(path)),
+                None,
+            ),
+        )
+        for block in blocks
+    )
     literal = _LITERAL_CHART.search(text)
     literal_chart = literal.group(1) if literal and not components else None
     kustomize_path = next(
@@ -219,7 +264,53 @@ def parse_application_set(
         value_files=parse_value_files(text),
         manifest_path=manifest_path,
         gate_path=hub_gate_path(text),
+        generators=generators,
     )
+
+
+def _generator_blocks(text: str) -> list[str]:
+    """Split spec.generators by YAML indentation, leaving Helm actions intact."""
+
+    lines = text.splitlines()
+    in_spec = False
+    field_indent: int | None = None
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped or stripped.startswith(("#", "{{")):
+            continue
+        if re.fullmatch(r"spec:\s*(?:#.*)?", line):
+            in_spec = True
+            continue
+        if not in_spec:
+            continue
+        indent = len(line) - len(line.lstrip())
+        if indent == 0:
+            break
+        if field_indent is None:
+            field_indent = indent
+        if indent != field_indent or not re.fullmatch(r"generators:\s*(?:#.*)?", stripped):
+            continue
+        blocks: list[list[str]] = []
+        entry_indent: int | None = None
+        for following in lines[index + 1 :]:
+            stripped = following.strip()
+            if not stripped or stripped.startswith(("#", "{{")):
+                continue
+            indent = len(following) - len(following.lstrip())
+            if indent < field_indent or (indent == field_indent and not stripped.startswith("-")):
+                break
+            if entry_indent is None:
+                entry_indent = indent
+            if indent == entry_indent and stripped.startswith("-"):
+                blocks.append([])
+            if blocks:
+                blocks[-1].append(following)
+        return ["\n".join(block) for block in blocks]
+    return []
+
+
+def _has_cluster_name(path: str) -> bool:
+    return re.search(r"\{\{\s*name\s*\}\}", path) is not None
 
 
 def application_set_name(text: str, fallback: str = "") -> str:
@@ -239,7 +330,7 @@ def hub_gate_path(text: str) -> str | None:
     """Return a git files-generator path that depends on ``$hub``, if any."""
 
     for value in _FILES_GENERATOR_PATH.findall(text):
-        if "{{ $hub }}" in value or "{{$hub}}" in value:
+        if re.search(r"\{\{\s*\$hub\s*\}\}", value) and not _has_cluster_name(value):
             return value
     return None
 
@@ -526,15 +617,25 @@ def workload_chart_rows(
     by_name = {placement.name: placement for placement in placements}
     rows: list[dict[str, Any]] = []
     seen: set[str] = set()
-    for application_set in application_sets:
-        if application_set.gate_path is not None and gated_path_for_hub(application_set.gate_path, hub) not in tree:
+    for application_set, generator in (
+        (application_set, generator)
+        for application_set in application_sets
+        for generator in application_set.generator_entries
+    ):
+        if generator.gate_path is not None and gated_path_for_hub(generator.gate_path, hub) not in tree:
             continue
-        if application_set.placement not in matched:
+        if generator.cluster_gate_path is not None:
+            cluster_gate = gated_path_for_hub(generator.cluster_gate_path, hub)
+            cluster_gate = cluster_gate.replace("{{`{{name}}`}}", workload)
+            cluster_gate = re.sub(r"\{\{\s*name\s*\}\}", lambda _: workload, cluster_gate)
+            if cluster_gate not in tree:
+                continue
+        if generator.placement not in matched:
             continue
-        placement = by_name.get(application_set.placement or "")
+        placement = by_name.get(generator.placement or "")
         feature_label = placement_feature_label(placement)
         for chart, is_component in (
-            *((component, True) for component in application_set.components),
+            *((component, True) for component in generator.components),
             *(
                 ((application_set.literal_chart, False),)
                 if application_set.literal_chart
@@ -572,7 +673,7 @@ def workload_chart_rows(
                 {
                     "chart": chart,
                     "application_set": application_set.name,
-                    "placement": application_set.placement,
+                    "placement": generator.placement,
                     "feature_label": feature_label,
                     "hub_values_file": hub_path in tree,
                     "cluster_values_file": cluster_path in tree,
