@@ -1132,7 +1132,12 @@ def _workload_value_checks(
         if not valid_domains:
             results.append(_unknown("workload.dns_base_domain", "workload", workload, "CCI-MOC/oac-apps", path, "Hosted-cluster baseDomain and hcpExternalDomain are unavailable from the hub hosted-cluster defaults.", expected_domains))
         elif not invalid:
-            results.append(_result("workload.dns_base_domain", "workload", workload, "CCI-MOC/oac-apps", path, "declared_in_main", "info", expected_domains, hostnames, "All DNS record hostnames use the hub hosted-cluster domains."))
+            reason = (
+                "All DNS record hostnames use the hub hosted-cluster domains."
+                if hostnames
+                else "No dns.records are declared, so there are no hostnames to compare."
+            )
+            results.append(_result("workload.dns_base_domain", "workload", workload, "CCI-MOC/oac-apps", path, "declared_in_main", "info", expected_domains, hostnames, reason))
         else:
             results.append(_result("workload.dns_base_domain", "workload", workload, "CCI-MOC/oac-apps", path, "value_mismatch", "blocking", expected_domains, hostnames, "Some DNS record hostnames do not use the hub hosted-cluster domains.", {"hostnames": invalid}))
 

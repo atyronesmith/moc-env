@@ -433,7 +433,8 @@ CHECK_DESCRIPTIONS: dict[str, CheckDescription] = {
             "hosted-clusters/{hub}/{workload}/values.yaml. The check passes when "
             "every hostname ends with the hub baseDomain `{base_domain}` or "
             "hcpExternalDomain `{hcp_external_domain}` taken from "
-            "hosted-clusters/{hub}/values.yaml."
+            "hosted-clusters/{hub}/values.yaml. "
+            "A workload that declares no dns.records passes without any comparison."
         ),
         not_verified=(
             "Only the suffix is compared; the records are not looked up in "

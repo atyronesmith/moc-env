@@ -16,6 +16,7 @@ from moc_env.cross_repo import (
 from moc_env.github import GitHubError
 from moc_env.model import Environment
 from moc_env.observed import parse_hardware_resource_classes
+from moc_env.report import render_markdown, render_text
 
 from fakes import CrossRepoFakeGitHubClient, FeatureChartsFakeGitHubClient
 
@@ -517,6 +518,41 @@ locals {{
                     self.check(self.report(client), "workload.dns_base_domain")["state"],
                     expected_state,
                 )
+
+    def test_dns_empty_records_pass_without_comparison(self) -> None:
+        client = Pr246Client()
+        client.files[client.DEFAULTS_PATH] = "baseDomain: cluster.example\nhcpExternalDomain: public.example\n"
+        for values in ({"dns": {"records": []}}, {}):
+            with self.subTest(values=values):
+                client.files[client.WORKLOAD_PATH] = yaml.safe_dump(values)
+                report = self.report(client)
+                check = self.check(report, "workload.dns_base_domain")
+                self.assertEqual(check["state"], "declared_in_main")
+                self.assertEqual(check["severity"], "info")
+                self.assertEqual(
+                    check["reason"],
+                    "No dns.records are declared, so there are no hostnames to compare.",
+                )
+                for rendered in (
+                    render_text({**report, "checks": [check]}, details=True),
+                    render_markdown({**report, "checks": [check]}),
+                ):
+                    self.assertRegex(rendered, r"(?m)^\s*\|?\s*`?dns\.records`?\s+[^\n]*none declared")
+                    self.assertNotIn("All DNS record hostnames", rendered)
+
+    def test_dns_valid_record_keeps_comparison_reason(self) -> None:
+        client = Pr246Client()
+        client.files[client.DEFAULTS_PATH] = "baseDomain: cluster.example\nhcpExternalDomain: public.example\n"
+        client.files[client.WORKLOAD_PATH] = yaml.safe_dump({
+            "dns": {"records": [{"hostname": "api.cluster.example"}]},
+        })
+        check = self.check(self.report(client), "workload.dns_base_domain")
+        self.assertEqual(check["state"], "declared_in_main")
+        self.assertEqual(check["severity"], "info")
+        self.assertEqual(
+            check["reason"],
+            "All DNS record hostnames use the hub hosted-cluster domains.",
+        )
 
     def test_corrected_checks_replay_live_oac_prod_evidence(self) -> None:
         """Re-run the changed checks, not just assertions on saved verdicts."""

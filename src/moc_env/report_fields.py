@@ -127,7 +127,7 @@ def field_rows(check: dict[str, Any]) -> list[list[Any]]:
         return [
             [f"dns.records[{index}].hostname", "under " + plain(domains), hostname]
             for index, hostname in enumerate(actual or [])
-        ] or [["dns.records", "hostnames under " + plain(domains), actual]]
+        ] or [["dns.records", "hostnames under " + plain(domains), "none declared"]]
     if check_id == "workload.gpu_without_hosts":
         label = actual_map.get("clusterLabels.massopen.cloud/feature-gpu", expected_map.get("feature-gpu"))
         return [
