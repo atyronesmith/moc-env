@@ -130,6 +130,18 @@ code `2`. Pass `--refresh` to ignore the disk cache and request current data;
 per-process request deduplication still applies. These options are mutually
 exclusive.
 
+Pull-request file lists are cached only when the pull's head and base commit
+identity is known (including base repository/ref when provided). Retargeting a
+pull or changing either commit therefore invalidates the file-list entry.
+Older head-only pull-request entries are ignored; an offline run must fetch a
+fresh list first (in an online run) when the current pull identity is
+incomplete or has no safe cache entry.
+
+Identity changes also invalidate in-memory PR-file pages. If quota runs out
+before all pages can be revalidated, PR discovery reports unavailable evidence
+instead of treating stale URL-keyed pages as files for the new identity. An
+already complete, identity-specific cached list remains usable offline.
+
 When any response is served from disk cache without revalidation, the report
 header identifies the repository with `from cache, fetched <time>`. The time
 is the original fetch time, not the report-generation time; if several cached
@@ -812,6 +824,16 @@ uv run moc-env export-environment bu-ist-demo \
 
 Exports are drafts for review. They record repository, path, ref, value, and
 confidence. They do not establish deployment or health.
+
+Workload exports accept the short name, such as `workload1`, or the full cluster
+name discovered in the environment's inventory. Environment bundles include all
+discovered workloads in sorted order; hub-only environments have an empty
+`workloadClusters` list. Exports do not invent a `workload0` entry when it is
+absent from the inventory.
+
+Environment comparisons check workload membership in both directions, including
+unexpected observed workloads when the desired list is empty. Inventory
+placeholders do not count as present groups; a real group with zero hosts does.
 
 In this guide, “export” means extracting a deterministic snapshot from current
 repository evidence into a local YAML draft.

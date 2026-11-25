@@ -290,6 +290,8 @@ def _list_handler(args: argparse.Namespace, **_context: Any) -> int:
     except OSError as exc:
         print(f"moc-env: could not write environment cache: {exc}", file=sys.stderr)
     rendered = render_environment_list_json(environments) if args.format == "json" else render_environment_list_text(environments)
+    if getattr(args, "output", None):
+        return write_output(args, rendered, f"{args.format} environment list")
     print(rendered, end="")
     return 0
 
@@ -360,17 +362,18 @@ def _export_infra_handler(args: argparse.Namespace, **_context: Any) -> int:
 
 def _export_workload_handler(args: argparse.Namespace, **_context: Any) -> int:
     environment = Environment(name=args.environment)
+    def render(client: ApiGitHubClient, progress: ProgressReporter) -> str:
+        infra = read_infra_observation(client, environment, progress=progress)
+        workload_cluster = workload_cluster_name(
+            environment, args.workload, infra.discovered_workload_clusters
+        )
+        apps = read_apps_observation(client, environment, progress=progress, include_pull_requests=False)
+        return render_workload_export(environment, workload_cluster, infra, apps)
     try:
-        workload_cluster = workload_cluster_name(environment, args.workload)
+        return _render_export(args, render, "WorkloadCluster YAML")
     except ValueError as exc:
         print(f"moc-env: {exc}", file=sys.stderr)
         return 2
-    def render(client: ApiGitHubClient, progress: ProgressReporter) -> str:
-        infra = read_infra_observation(client, environment, progress=progress)
-        apps = read_apps_observation(client, environment, progress=progress, include_pull_requests=False)
-        return render_workload_export(environment, workload_cluster, infra, apps)
-
-    return _render_export(args, render, "WorkloadCluster YAML")
 
 
 def _export_environment_handler(args: argparse.Namespace, registry: EnvironmentRegistry, **_context: Any) -> int:

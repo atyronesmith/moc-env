@@ -31,6 +31,9 @@ class PRFileCacheTest(unittest.TestCase):
         environment.start()
         self.addCleanup(environment.stop)
         self.heads = {237: "a" * 40, 238: "b" * 40}
+        self.base_shas = {237: "d" * 40, 238: "e" * 40}
+        self.base_refs = {237: "main", 238: "main"}
+        self.base_repos = {237: "CCI-MOC/oac-apps", 238: "CCI-MOC/oac-apps"}
         self.file_requests = []
 
     @staticmethod
@@ -53,6 +56,11 @@ class PRFileCacheTest(unittest.TestCase):
                 {
                     "number": number, "state": "open", "title": "test",
                     "head": {"sha": sha} if sha else {},
+                    "base": {
+                        "sha": self.base_shas[number],
+                        "ref": self.base_refs[number],
+                        "repo": {"full_name": self.base_repos[number]},
+                    },
                 }
                 for number, sha in self.heads.items()
             ])
@@ -91,6 +99,33 @@ class PRFileCacheTest(unittest.TestCase):
         self.assertIn("/pulls/238/files?", self.file_requests[0])
         self.assertIn("PR file lists: 1 fetched, 1 reused", summary)
 
+    def test_changed_base_sha_fetches_only_that_pr(self):
+        self.run_status()
+        self.file_requests.clear()
+        self.base_shas[237] = "f" * 40
+        _, summary = self.run_status()
+        self.assertEqual(len(self.file_requests), 1)
+        self.assertIn("/pulls/237/files?", self.file_requests[0])
+        self.assertIn("PR file lists: 1 fetched, 1 reused", summary)
+
+    def test_retargeted_base_ref_invalidates_even_when_sha_is_unchanged(self):
+        self.run_status()
+        self.file_requests.clear()
+        self.base_refs[238] = "release"
+        _, summary = self.run_status()
+        self.assertEqual(len(self.file_requests), 1)
+        self.assertIn("/pulls/238/files?", self.file_requests[0])
+        self.assertIn("PR file lists: 1 fetched, 1 reused", summary)
+
+    def test_changed_base_repository_invalidates_even_when_other_identity_is_unchanged(self):
+        self.run_status()
+        self.file_requests.clear()
+        self.base_repos[237] = "CCI-MOC/oac-infra"
+        _, summary = self.run_status()
+        self.assertEqual(len(self.file_requests), 1)
+        self.assertIn("/pulls/237/files?", self.file_requests[0])
+        self.assertIn("PR file lists: 1 fetched, 1 reused", summary)
+
     def test_missing_head_is_fetched_each_run_and_not_sha_cached(self):
         self.heads[237] = None
         self.run_status()
@@ -103,6 +138,34 @@ class PRFileCacheTest(unittest.TestCase):
             key.startswith("pr-files:CCI-MOC/oac-apps:237:")
             for key in client.response_cache._read_document()
         ))
+
+    def test_missing_base_is_fetched_each_run_and_offline_fails_explicitly(self):
+        self.base_shas[237] = None
+        self.run_status()
+        self.file_requests.clear()
+        self.run_status()
+        self.assertEqual(len(self.file_requests), 1)
+        with self.assertRaisesRegex(GitHubError, "without a complete head/base identity"):
+            client = GitHubClient(offline=True)
+            client._pull_identities[("CCI-MOC/oac-apps", 237)] = None
+            list(client.pr_files("CCI-MOC/oac-apps", 237))
+
+    def test_legacy_head_only_cache_key_is_never_reused(self):
+        client = GitHubClient()
+        client._store_response(
+            "pr-files:owner/repo:1:" + "a" * 40,
+            "",
+            json.dumps([{"filename": "legacy"}]),
+        )
+        client._pull_identities[("owner/repo", 1)] = (
+            "a" * 40,
+            "b" * 40,
+            "owner/repo",
+            "main",
+        )
+        with patch("moc_env.github.urlopen", return_value=self.response([])) as request:
+            self.assertEqual(list(client.pr_files("owner/repo", 1)), [])
+        request.assert_called_once()
 
     def test_refresh_fetches_all_and_offline_preserves_result_without_requests(self):
         first, _ = self.run_status()
@@ -122,7 +185,12 @@ class PRFileCacheTest(unittest.TestCase):
 
     def test_paginated_file_lists_are_cached_as_a_complete_list_without_etags(self):
         client = GitHubClient()
-        client._pull_heads[("owner/repo", 1)] = "a" * 40
+        client._pull_identities[("owner/repo", 1)] = (
+            "a" * 40,
+            "b" * 40,
+            "owner/repo",
+            "main",
+        )
         next_url = "https://api.github.com/repos/owner/repo/pulls/1/files?page=2"
         first = self.response([{"filename": "first"}], next_url)
         second = self.response([{"filename": "second"}])
@@ -133,11 +201,21 @@ class PRFileCacheTest(unittest.TestCase):
         self.assertEqual(request.call_count, 2)
         self.assertEqual(files, [{"filename": "first"}, {"filename": "second"}])
         offline = GitHubClient(offline=True)
-        offline._pull_heads[("owner/repo", 1)] = "a" * 40
+        offline._pull_identities[("owner/repo", 1)] = (
+            "a" * 40,
+            "b" * 40,
+            "owner/repo",
+            "main",
+        )
         with patch("moc_env.github.urlopen") as request:
             self.assertEqual(list(offline.pr_files("owner/repo", 1)), files)
         request.assert_not_called()
-        offline._pull_heads[("owner/repo", 1)] = "b" * 40
+        offline._pull_identities[("owner/repo", 1)] = (
+            "b" * 40,
+            "b" * 40,
+            "owner/repo",
+            "main",
+        )
         with self.assertRaisesRegex(GitHubError, "No cached PR file list"):
             list(offline.pr_files("owner/repo", 1))
 

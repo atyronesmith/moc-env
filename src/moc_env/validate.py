@@ -1041,12 +1041,12 @@ def validate_environment(document: Any) -> ValidationResult:
         "References",
         "Workload-cluster list",
         "spec.workloadClusters",
-        "Non-empty list of workload mappings",
+        "List of workload mappings (possibly empty for hub-only environments)",
         "List" if workloads_list else type(workloads).__name__,
-        workloads_list and bool(workloads),
+        workloads_list,
     )
-    if not workloads_list or not workloads:
-        errors.append("spec.workloadClusters: expected a non-empty list")
+    if not isinstance(workloads, list):
+        errors.append("spec.workloadClusters: expected a list")
         workloads = []
 
     workload_names: list[str] = []

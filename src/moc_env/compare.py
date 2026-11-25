@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import json
 from typing import Any
 
 from .model import Environment
+from .boot_image import image_is_specific
 from .observed import (
     AppsObservation,
     InfraObservation,
@@ -235,7 +236,10 @@ def compare_environment(
         "References",
         "spec.hubCluster.inventoryPresent",
         True,
-        environment.infra_cluster in infra.clusters,
+        (
+            environment.infra_cluster in infra.clusters
+            and infra.clusters[environment.infra_cluster].group_found.value
+        ),
     )
     _compare(
         checks,
@@ -265,18 +269,61 @@ def compare_environment(
 
     workloads = spec.get("workloadClusters")
     workloads = workloads if isinstance(workloads, list) else []
+    desired_workload_names = {
+        name
+        for workload in workloads
+        if isinstance(workload, dict)
+        for name in [_desired_source(workload, "name")]
+        if isinstance(name, str)
+    }
+    actual_workload_names = set(infra.discovered_workload_clusters) | {
+        name
+        for name, cluster in infra.clusters.items()
+        if name != environment.infra_cluster and cluster.group_found.value
+    }
+    for workload_name in sorted(desired_workload_names - actual_workload_names):
+        checks.append(
+            ComparisonCheck(
+                category="Workloads",
+                field=f"spec.workloadClusters.{workload_name}",
+                desired="present",
+                current="missing",
+                state="missing_from_main",
+                reason="The desired workload cluster is absent from merged main.",
+            )
+        )
+    for workload_name in sorted(actual_workload_names - desired_workload_names):
+        checks.append(
+            ComparisonCheck(
+                category="Workloads",
+                field=f"spec.workloadClusters.{workload_name}",
+                desired="absent",
+                current="present",
+                state="unexpected_in_main",
+                reason="Merged main contains a workload cluster absent from desired state.",
+            )
+        )
     paths = set(apps.paths.value)
     for index, workload in enumerate(workloads):
         if not isinstance(workload, dict):
             continue
         workload_name = _desired_source(workload, "name")
         parent_hub = _desired_source(workload, "parentHubCluster")
+        selected_workload = (
+            workload_name
+            if (
+                isinstance(workload_name, str)
+                and workload_name in infra.clusters
+                and infra.clusters[workload_name].group_found.value
+            )
+            else _MISSING
+        )
         _compare(
             checks,
             "References",
             f"spec.workloadClusters[{index}].name.value",
             workload_name,
-            environment.workload_cluster,
+            selected_workload,
         )
         _compare(
             checks,
@@ -290,7 +337,11 @@ def compare_environment(
             "References",
             f"spec.workloadClusters[{index}].inventoryPresent",
             True,
-            workload_name in infra.clusters,
+            (
+                isinstance(workload_name, str)
+                and workload_name in infra.clusters
+                and infra.clusters[workload_name].group_found.value
+            ),
         )
 
         hosted_path = (
@@ -376,7 +427,9 @@ def compare_environment(
     )
 
     return ComparisonReport(
-        environment=environment,
+        environment=replace(
+            environment, workload_clusters=tuple(sorted(infra.discovered_workload_clusters))
+        ),
         kind="Environment",
         checks=checks,
     )
@@ -486,7 +539,10 @@ def compare_infra(
     desired_clusters = desired_clusters if isinstance(desired_clusters, dict) else {}
     current_clusters = observation.clusters
     for cluster_name, desired_cluster in desired_clusters.items():
-        if cluster_name not in current_clusters:
+        if (
+            cluster_name not in current_clusters
+            or not current_clusters[cluster_name].group_found.value
+        ):
             checks.append(
                 ComparisonCheck(
                     category="Inventory",
@@ -546,6 +602,10 @@ def compare_infra(
                 )
 
     for cluster_name in sorted(set(current_clusters) - set(desired_clusters)):
+        # The observation can retain an absent workload0 placeholder for legacy
+        # readers. It is not an extra cluster declared in the repository.
+        if not current_clusters[cluster_name].group_found.value:
+            continue
         checks.append(
             ComparisonCheck(
                 category="Inventory",
@@ -587,14 +647,10 @@ def compare_infra(
     return ComparisonReport(environment=environment, kind="Hub", checks=checks)
 
 
-def _workload_boot_image_is_specific(url: Any, workload_cluster: str) -> bool:
-    if not isinstance(url, str):
-        return False
-    image_name = url.rsplit("/", 1)[-1]
-    aliases = [workload_cluster]
-    if workload_cluster.startswith("oac-"):
-        aliases.append(workload_cluster.removeprefix("oac-"))
-    return any(alias in image_name for alias in aliases)
+def _workload_boot_image_is_specific(
+    url: Any, workload_cluster: str, hub_cluster: str | None = None
+) -> bool:
+    return image_is_specific(url, workload_cluster, hub_cluster)
 
 
 def compare_workload(
@@ -627,18 +683,42 @@ def compare_workload(
         "Metadata",
         "metadata.name.value",
         workload_name,
-        environment.workload_cluster,
+        workload_name
+        if (
+            isinstance(workload_name, str)
+            and workload_name in infra_observation.clusters
+            and infra_observation.clusters[workload_name].group_found.value
+        )
+        else _MISSING,
     )
-    _compare(
-        checks,
-        "Metadata",
-        "metadata.parentInfraCluster.value",
-        parent_name,
-        environment.infra_cluster,
+    parent_present = (
+        environment.infra_cluster in infra_observation.clusters
+        and infra_observation.clusters[environment.infra_cluster].group_found.value
     )
+    if not parent_present and parent_name == environment.infra_cluster:
+        checks.append(
+            ComparisonCheck(
+                category="Metadata",
+                field="metadata.parentInfraCluster.value",
+                desired=parent_name,
+                current=None,
+                state="missing_from_main",
+                reason="The referenced parent hub cluster is absent from merged main.",
+            )
+        )
+    else:
+        _compare(
+            checks,
+            "Metadata",
+            "metadata.parentInfraCluster.value",
+            parent_name,
+            environment.infra_cluster,
+        )
 
     referenced_infra_present = (
-        isinstance(parent_name, str) and parent_name in infra_observation.clusters
+        isinstance(parent_name, str)
+        and parent_name in infra_observation.clusters
+        and infra_observation.clusters[parent_name].group_found.value
     )
     checks.append(
         ComparisonCheck(
@@ -687,7 +767,9 @@ def compare_workload(
     )
 
     workload_exists = (
-        isinstance(workload_name, str) and workload_name in infra_observation.clusters
+        isinstance(workload_name, str)
+        and workload_name in infra_observation.clusters
+        and infra_observation.clusters[workload_name].group_found.value
     )
     checks.append(
         ComparisonCheck(
@@ -752,6 +834,7 @@ def compare_workload(
         boot_is_specific = _workload_boot_image_is_specific(
             desired_boot,
             workload_name,
+            parent_name if isinstance(parent_name, str) else None,
         )
         checks.append(
             ComparisonCheck(
@@ -773,15 +856,16 @@ def compare_workload(
         hosted = _mapping(gitops, "hostedClusterValues")
         components = _mapping(gitops, "componentValues")
         applications = _mapping(gitops, "applications")
+        selected_workload = workload_name if isinstance(workload_name, str) else ""
         expected_hosted_path = (
             f"hosted-clusters/{environment.infra_cluster}/"
-            f"{environment.workload_cluster}/values.yaml"
+            f"{selected_workload}/values.yaml"
         )
         expected_component_prefix = (
-            f"values/{environment.infra_cluster}/{environment.workload_cluster}/"
+            f"values/{environment.infra_cluster}/{selected_workload}/"
         )
         expected_application_prefix = (
-            f"apps/{environment.infra_cluster}/{environment.workload_cluster}/"
+            f"apps/{environment.infra_cluster}/{selected_workload}/"
         )
 
         desired_hosted_path = _desired_source(hosted, "path")
@@ -921,7 +1005,10 @@ def compare_workload(
         )
 
     return ComparisonReport(
-        environment=environment,
+        environment=replace(
+            environment,
+            workload_clusters=(workload_name,) if isinstance(workload_name, str) else (),
+        ),
         kind="Workload",
         checks=checks,
     )

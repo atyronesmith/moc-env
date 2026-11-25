@@ -65,7 +65,7 @@ SAMPLE — generated from a synthetic fixture, not a live environment.
 | Check | Path | Expected | Actual | Result | Detail |
 |---|---|---|---|---|---|
 | Hub-cluster name | `spec.hubCluster` | 'example-env-infra' | 'example-env-infra' | PASS | — |
-| Workload-cluster list | `spec.workloadClusters` | Non-empty list of workload mappings | List | PASS | — |
+| Workload-cluster list | `spec.workloadClusters` | List of workload mappings (possibly empty for hub-only environments) | List | PASS | — |
 | Workload 0 mapping | `spec.workloadClusters[0]` | Mapping with name and parentHubCluster | Mapping | PASS | — |
 | Workload 0 name | `spec.workloadClusters[0].name` | Name beginning with example-env-workload | 'example-env-workload0' | PASS | — |
 | Workload 0 parent | `spec.workloadClusters[0].parentHubCluster` | 'example-env-infra' | 'example-env-infra' | PASS | — |

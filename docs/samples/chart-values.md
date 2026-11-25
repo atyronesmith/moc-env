@@ -77,8 +77,8 @@ Parent DNS domain used for the guest cluster’s application ingress wildcard. T
 
 | Key | Required | Default or fallback | Source(s) |
 |---|---|---|---|
-| `dns.enabled` | Optional | `—` | [HCP-1](#sources) |
-| `dns.autoGenerate` | Optional | `—` | [DNS-1](#sources), [HCP-1](#sources) |
+| `dns.enabled` | Optional | `False` | [HCP-1](#sources) |
+| `dns.autoGenerate` | Optional | `False` | [DNS-1](#sources), [HCP-1](#sources) |
 
 #### `dns.enabled`
 

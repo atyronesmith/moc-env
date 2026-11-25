@@ -1135,13 +1135,69 @@ def _workload_value_checks(
 
         cluster_observation = infra.clusters.get(workload)
         hosts = cluster_observation.hosts.value if cluster_observation else []
-        pools = values.get("nodePools") or []
+        pools = values.get("nodePools")
         pool_results: list[dict[str, Any]] = []
-        for pool_item in pools:
+        pool_errors: list[str] = []
+        if pools is None:
+            pools = []
+        elif not isinstance(pools, list):
+            pool_errors.append(
+                "nodePools must be a list of pool mappings; "
+                f"got {type(pools).__name__}."
+            )
+            pools = []
+
+        for index, pool_item in enumerate(pools):
             if not isinstance(pool_item, dict):
+                pool_errors.append(
+                    f"nodePools[{index}] must be a mapping; "
+                    f"got {type(pool_item).__name__}."
+                )
                 continue
-            selector = pool_item.get("agentLabelSelector") or {}
-            replicas = int(pool_item.get("replicas") or 0)
+            raw_name = pool_item.get("name")
+            pool_name = raw_name
+            if raw_name is not None and not isinstance(raw_name, str):
+                pool_errors.append(
+                    f"nodePools[{index}].name must be a string when provided; "
+                    f"got {type(raw_name).__name__}."
+                )
+                pool_name = repr(raw_name)
+            selector = pool_item.get("agentLabelSelector", {})
+            if selector is None:
+                selector = {}
+            if not isinstance(selector, dict):
+                pool_errors.append(
+                    f"nodePools[{index}].agentLabelSelector must be a mapping."
+                )
+                selector = {}
+            invalid_selector_keys = [
+                key for key, value in selector.items()
+                if not isinstance(key, str) or not isinstance(value, str)
+            ]
+            if invalid_selector_keys:
+                pool_errors.append(
+                    f"nodePools[{index}].agentLabelSelector values must be strings; "
+                    f"invalid keys: {', '.join(map(str, invalid_selector_keys))}."
+                )
+            raw_replicas = pool_item.get("replicas", 0)
+            replicas: int | None
+            if isinstance(raw_replicas, bool):
+                replicas = None
+            elif isinstance(raw_replicas, int):
+                replicas = raw_replicas if raw_replicas >= 0 else None
+            elif isinstance(raw_replicas, str) and re.fullmatch(r"[0-9]+", raw_replicas.strip()):
+                try:
+                    replicas = int(raw_replicas.strip())
+                except ValueError:
+                    replicas = None
+            else:
+                replicas = None
+            if replicas is None:
+                pool_errors.append(
+                    f"nodePools[{index}].replicas must be a non-negative integer; "
+                    f"got {raw_replicas!r}."
+                )
+                replicas = 0
             documented = infra.hardware_resource_classes.value
 
             def selector_values(host: dict[str, Any], key: str) -> tuple[Any, ...]:
@@ -1164,11 +1220,6 @@ def _workload_value_checks(
                 return all(
                     any(
                         value == expected
-                        or (
-                            isinstance(value, str)
-                            and isinstance(expected, str)
-                            and expected.endswith(value)
-                        )
                         for value in selector_values(host, key)
                     )
                     for key, expected in selector.items()
@@ -1180,11 +1231,14 @@ def _workload_value_checks(
                 for host in hosts
                 if selector_matches(host, selector)
             )
-            pool_results.append({"name": pool_item.get("name"), "replicas": replicas, "matching_hosts": matching})
-        if all(item["matching_hosts"] >= item["replicas"] for item in pool_results):
+            pool_results.append({"name": pool_name, "replicas": replicas, "matching_hosts": matching})
+        if not pool_errors and all(item["matching_hosts"] >= item["replicas"] for item in pool_results):
             results.append(_result("workload.node_pool_hosts", "workload", workload, "CCI-MOC/oac-infra", "infra/inventory/00hosts.yaml", "declared_in_main", "info", pools, pool_results, "Every node pool has enough matching inventory hosts."))
         else:
-            results.append(_result("workload.node_pool_hosts", "workload", workload, "CCI-MOC/oac-infra", "infra/inventory/00hosts.yaml", "value_mismatch", "blocking", pools, pool_results, "At least one node pool lacks matching inventory hosts."))
+            reason = "At least one node pool lacks matching inventory hosts."
+            if pool_errors:
+                reason = "Malformed nodePools configuration: " + " ".join(pool_errors)
+            results.append(_result("workload.node_pool_hosts", "workload", workload, "CCI-MOC/oac-infra", "infra/inventory/00hosts.yaml", "value_mismatch", "blocking", pools, pool_results, reason))
 
         gpu_enabled = str(_nested(values, ("clusterLabels", "massopen.cloud/feature-gpu"))).lower() == "true"
         gpu_hosts = [

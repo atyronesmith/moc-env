@@ -182,10 +182,15 @@ def field_rows(check: dict[str, Any]) -> list[list[Any]]:
             ],
         ]
     if check_id == "workload.node_pool_hosts":
-        pools = {item.get("name"): item for item in expected or [] if isinstance(item, dict)}
+        pools = [item for item in expected or [] if isinstance(item, dict)]
         return [
-            [f"nodePools.{item.get('name')}.matching_hosts", f"at least {pools.get(item.get('name'), {}).get('replicas', item.get('replicas'))}", item.get("matching_hosts")]
-            for item in actual or [] if isinstance(item, dict)
+            [
+                f"nodePools.{plain(item.get('name'))}.matching_hosts",
+                f"at least {next((pool.get('replicas', item.get('replicas')) for pool in pools if pool.get('name') == item.get('name')), item.get('replicas'))}",
+                item.get("matching_hosts"),
+            ]
+            for item in actual or []
+            if isinstance(item, dict)
         ]
     if check_id == "workload.address_uniqueness":
         rows = []
@@ -225,10 +230,19 @@ def field_rows(check: dict[str, Any]) -> list[list[Any]]:
         ]
     if check_id == "workload.agent_labels_inputs":
         return [
-            [f"{host.get('host')}.{key}",
-             ("present (not required for openstack)" if host.get("bm_management") == "openstack"
-              else (host.get("documented_resource_class") or "present") if key == "resource_class" else "present"),
-             host.get(key)]
+            [
+                f"{host.get('host')}.{key}",
+                (
+                    "present (not required for openstack)"
+                    if host.get("bm_management") == "openstack"
+                    else (
+                        host.get("documented_resource_class") or "present"
+                    )
+                    if key == "resource_class"
+                    else "present"
+                ),
+                host.get(key),
+            ]
             for host in evidence.get("agent_label_hosts", [])
             for key in ("mac_addr", "resource_class")
         ]

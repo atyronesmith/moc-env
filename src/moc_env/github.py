@@ -65,6 +65,9 @@ class GitHubClient:
         self._unrevalidated_sources: dict[str, str] = {}
         self._trees: dict[tuple[str, str], dict[str, dict[str, Any]]] = {}
         self._pull_heads: dict[tuple[str, int], str | None] = {}
+        self._pull_identities: dict[
+            tuple[str, int], tuple[str, str, str | None, str | None] | None
+        ] = {}
 
     @property
     def authenticated(self) -> bool:
@@ -129,6 +132,19 @@ class GitHubClient:
                 and parsed.query == "recursive=1"
             )
         return False
+
+    @staticmethod
+    def _is_pr_files_url(url: str) -> bool:
+        parsed = urlsplit(url)
+        parts = parsed.path.strip("/").split("/")
+        return (
+            parsed.netloc == "api.github.com"
+            and len(parts) >= 6
+            and parts[0] == "repos"
+            and parts[3] == "pulls"
+            and parts[4].isdigit()
+            and parts[5] == "files"
+        )
 
     def snapshot_request_urls(
         self,
@@ -364,6 +380,7 @@ class GitHubClient:
             not self.authenticated
             and self.rate_limit_remaining == 0
             and cached is not None
+            and not self._is_pr_files_url(url)
         ):
             self.cache_hits += 1
             self._mark_unrevalidated(url, cached)
@@ -373,6 +390,10 @@ class GitHubClient:
             )
             self._responses[url] = response
             return response
+        if self.rate_limit_remaining == 0 and cached is not None and self._is_pr_files_url(url):
+            raise GitHubError(
+                f"No identity-specific cached PR file response is available for {url}"
+            )
         if cached is not None and self._is_immutable_url(url):
             # A commit-pinned file or tree can never change, so serve it from
             # disk without a conditional request or a stale-cache notice.
@@ -532,20 +553,62 @@ class GitHubClient:
             f"/repos/{repository}/pulls", {"state": state, "per_page": "100"}
         ):
             if isinstance(pull, dict) and type(pull.get("number")) is int:
+                pull_key = (repository, pull["number"])
                 head = pull.get("head")
-                self._pull_heads[(repository, pull["number"])] = (
-                    head.get("sha") if isinstance(head, dict) else None
-                )
+                head_sha = head.get("sha") if isinstance(head, dict) else None
+                self._pull_heads[pull_key] = head_sha
+                base = pull.get("base")
+                base_sha = base.get("sha") if isinstance(base, dict) else None
+                base_ref = base.get("ref") if isinstance(base, dict) else None
+                base_repo = base.get("repo") if isinstance(base, dict) else None
+                if isinstance(base_repo, dict):
+                    base_repo = base_repo.get("full_name")
+                if (
+                    isinstance(head_sha, str)
+                    and head_sha
+                    and isinstance(base_sha, str)
+                    and base_sha
+                ):
+                    identity = (
+                        head_sha,
+                        base_sha,
+                        base_repo if isinstance(base_repo, str) and base_repo else None,
+                        base_ref if isinstance(base_ref, str) and base_ref else None,
+                    )
+                else:
+                    identity = None
+                if pull_key in self._pull_identities:
+                    previous = self._pull_identities[pull_key]
+                    if previous != identity:
+                        prefix = (
+                            f"{self.base_url}/repos/{repository}/pulls/"
+                            f"{pull['number']}/files?"
+                        )
+                        for url in list(self._responses):
+                            if url.startswith(prefix):
+                                del self._responses[url]
+                self._pull_identities[pull_key] = identity
             yield pull
 
     def pr_files(self, repository: str, number: int) -> Iterator[dict[str, Any]]:
-        """Reuse a complete PR file list only for the head seen in the pulls list."""
+        """Reuse a complete PR file list only for its immutable pull identity."""
 
+        identity = self._pull_identities.get((repository, number))
+        key = None
         head_sha = self._pull_heads.get((repository, number))
-        key = (
-            f"pr-files:{repository}:{number}:{head_sha}"
-            if isinstance(head_sha, str) and head_sha else None
-        )
+        if identity is not None:
+            head_sha, base_sha, base_repo, base_ref = identity
+            key = ":".join(
+                [
+                    "pr-files",
+                    repository,
+                    str(number),
+                    head_sha,
+                    base_sha,
+                    base_repo or "-",
+                    base_ref or "-",
+                ]
+            )
         cached = self.response_cache.read(key) if key and not self.refresh else None
         if cached is not None:
             try:
@@ -562,10 +625,13 @@ class GitHubClient:
                 self.pr_files_reused += 1
                 yield from files
                 return
-        if key and self.offline:
+        if self.offline:
+            identity_description = (
+                f"at {head_sha}" if key else "without a complete head/base identity"
+            )
             raise GitHubError(
                 f"No cached PR file list is available for {repository}#{number} "
-                f"at {head_sha}; run without --offline to populate the cache"
+                f"{identity_description}; run without --offline to populate the cache"
             )
         files = list(self.list(
             f"/repos/{repository}/pulls/{number}/files", {"per_page": "100"}

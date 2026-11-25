@@ -625,7 +625,13 @@ def render_chart_values_markdown(
             ]
         )
             for variable in variables:
-                default_or_fallback = variable.default or variable.fallback or "—"
+                default_or_fallback = (
+                    variable.default
+                    if variable.default is not None
+                    else variable.fallback
+                    if variable.fallback is not None
+                    else "—"
+                )
                 source_reference = _source_links(manual, variable)
                 lines.append(
                     f"| `{_inline(variable.key)}` | "

@@ -139,23 +139,23 @@ class CompareInfraTest(unittest.TestCase):
                 ):
                     return """
 all:
-  children:
-    bu_ist_demo_infra:
-      vars:
-        cluster: bu-ist-demo-infra
-      children:
-        group0:
-          vars:
-            boot_image_url: http://example.invalid/one.iso
-          hosts:
-            node0:
-              node_name: node-0
-        group1:
-          vars:
-            boot_image_url: http://example.invalid/two.iso
-          hosts:
-            node1:
-              node_name: node-1
+    children:
+        bu_ist_demo_infra:
+            vars:
+                cluster: bu-ist-demo-infra
+            children:
+                group0:
+                    vars:
+                        boot_image_url: http://example.invalid/one.iso
+                    hosts:
+                        node0:
+                            node_name: node-0
+                group1:
+                    vars:
+                        boot_image_url: http://example.invalid/two.iso
+                    hosts:
+                        node1:
+                            node_name: node-1
 """
                 return super().get_file(repository, path, ref)
 
@@ -262,17 +262,21 @@ class CompareWorkloadTest(unittest.TestCase):
                 ):
                     return """
 all:
-  children:
-    bu_ist_demo_workload0:
-      vars:
-        cluster: bu-ist-demo-workload0
-      children:
-        controller:
-          vars:
-            boot_image_url: http://10.2.0.82/boot/bu-ist-demo-workload0-agent.iso
-          hosts:
-            compute-0:
-              node_name: MOC-R4PAC10U31-S1B
+    children:
+        bu_ist_demo_infra:
+            vars:
+                cluster: bu-ist-demo-infra
+            children: {}
+        bu_ist_demo_workload0:
+            vars:
+                cluster: bu-ist-demo-workload0
+            children:
+                controller:
+                    vars:
+                        boot_image_url: http://10.2.0.82/boot/bu-ist-demo-workload0-agent.iso
+                    hosts:
+                        compute-0:
+                            node_name: MOC-R4PAC10U31-S1B
 """
                 return super().get_file(repository, path, ref)
 

@@ -107,19 +107,27 @@ def _apps_source(
     ).to_dict()
 
 
-def workload_cluster_name(environment: Environment, workload: str) -> str:
+def workload_cluster_name(
+    environment: Environment,
+    workload: str,
+    discovered_workloads: tuple[str, ...] | list[str] | None = None,
+) -> str:
     """Resolve a full or shortened workload name for the current model."""
 
-    workload_cluster = environment.workload_cluster
-    if workload_cluster is None:
+    candidates = (
+        tuple(discovered_workloads)
+        if discovered_workloads is not None
+        else tuple(environment.workload_clusters or ())
+    )
+    if discovered_workloads is None and not candidates and environment.workload_cluster:
+        candidates = (environment.workload_cluster,)
+    for workload_cluster in candidates:
+        if workload in {workload_cluster, workload_cluster.removeprefix(f"{environment.base_name}-")}:
+            return workload_cluster
+    if not candidates:
         raise ValueError("no workload cluster is declared for this environment")
-    if workload == workload_cluster:
-        return workload
-    if workload == workload_cluster.removeprefix(f"{environment.base_name}-"):
-        return workload_cluster
     raise ValueError(
-        f"workload must be {workload_cluster} or "
-        f"{workload_cluster.removeprefix(f'{environment.base_name}-')}"
+        "workload must be one of " + ", ".join(candidates)
     )
 
 
@@ -341,6 +349,7 @@ def build_environment_export(
     """Build a deterministic draft Environment bundle snapshot."""
 
     domain, domain_confidence = _observed_domain(infra_observation)
+    discovered = tuple(sorted(infra_observation.discovered_workload_clusters))
     return {
         "apiVersion": EXPORT_API_VERSION,
         "kind": ENVIRONMENT_EXPORT_KIND,
@@ -364,7 +373,7 @@ def build_environment_export(
             "workloadClusters": [
                 {
                     "name": SourceValue(
-                        environment.workload_cluster,
+                        workload_cluster,
                         infra_observation.repository,
                         infra_observation.inventory_path,
                         confidence="inferred",
@@ -376,6 +385,7 @@ def build_environment_export(
                         confidence="inferred",
                     ).to_dict(),
                 }
+                for workload_cluster in discovered
             ],
             "domain": SourceValue(
                 domain,
@@ -429,10 +439,7 @@ def build_infra_export(
     """Build a deterministic draft InfraCluster snapshot."""
 
     infra_cluster = observation.clusters[environment.infra_cluster]
-    workload_name = environment.workload_cluster
-    if workload_name is None:
-        raise ValueError("no workload cluster is declared for this environment")
-    workload_cluster = observation.clusters[workload_name]
+    workload_names = tuple(sorted(observation.discovered_workload_clusters))
     variables = observation.hub_variables.values
     domain = None
     domain_confidence = "unsupported"
@@ -443,6 +450,22 @@ def build_infra_export(
             domain = f"{cluster_domain}.{base_domain}"
             domain_confidence = "inferred"
 
+    clusters: dict[str, Any] = {
+        environment.infra_cluster: {
+            "name": _source(infra_cluster.cluster),
+            "groupPresent": _source(infra_cluster.group_found),
+            "hosts": _source(infra_cluster.hosts),
+            "bootImage": _boot_image(environment, observation),
+        }
+    }
+    for workload_name in workload_names:
+        if workload_name in observation.clusters:
+            workload_cluster = observation.clusters[workload_name]
+            clusters[workload_name] = {
+                "name": _source(workload_cluster.cluster),
+                "groupPresent": _source(workload_cluster.group_found),
+                "hosts": _source(workload_cluster.hosts),
+            }
     return {
         "apiVersion": EXPORT_API_VERSION,
         "kind": INFRA_EXPORT_KIND,
@@ -470,19 +493,7 @@ def build_infra_export(
                     confidence="inferred",
                 ),
                 "present": _source(observation.inventory_present),
-                "clusters": {
-                    environment.infra_cluster: {
-                        "name": _source(infra_cluster.cluster),
-                        "groupPresent": _source(infra_cluster.group_found),
-                        "hosts": _source(infra_cluster.hosts),
-                        "bootImage": _boot_image(environment, observation),
-                    },
-                    environment.workload_cluster: {
-                        "name": _source(workload_cluster.cluster),
-                        "groupPresent": _source(workload_cluster.group_found),
-                        "hosts": _source(workload_cluster.hosts),
-                    },
-                },
+                "clusters": clusters,
             },
             "hubInventory": {
                 "path": _field(

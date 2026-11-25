@@ -10,6 +10,7 @@ from typing import Any
 import yaml
 
 from . import __version__
+from .boot_image import image_is_specific
 
 from .check_descriptions import DescriptionContext, apply_descriptions
 from .github import GitHubClient, GitHubError, RateLimitError, github_url
@@ -207,15 +208,7 @@ def _boot_image_state(
 ) -> str:
     if not url:
         return "missing"
-    image_name = url.rsplit("/", 1)[-1]
-    if image_name == "discovery.iso":
-        return "partial"
-    cluster_aliases = [cluster]
-    if cluster.startswith("oac-"):
-        cluster_aliases.append(cluster.removeprefix("oac-"))
-    if hub_cluster is not None:
-        cluster_aliases.extend((hub_cluster, hub_cluster.removeprefix("oac-")))
-    if any(alias in image_name for alias in cluster_aliases):
+    if image_is_specific(url, cluster, hub_cluster):
         return "declared_in_main"
     return "partial"
 
@@ -695,7 +688,7 @@ class StatusChecker:
                     finally:
                         self.client.refs = refs
                 candidate = next((item for item in candidates[key]
-                                  if item.id == check.id and item.check == check.check), None)
+                                if item.id == check.id and item.check == check.check), None)
                 if candidate is None or candidate.state in {"unknown", "blocked"}:
                     continue
                 before = self._candidate_field_rows(check)
