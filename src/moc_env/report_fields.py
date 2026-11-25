@@ -235,10 +235,6 @@ def field_rows(check: dict[str, Any]) -> list[list[Any]]:
                 (
                     "present (not required for openstack)"
                     if host.get("bm_management") == "openstack"
-                    else (
-                        host.get("documented_resource_class") or "present"
-                    )
-                    if key == "resource_class"
                     else "present"
                 ),
                 host.get(key),
@@ -305,7 +301,6 @@ def failing_field_rows(check: dict[str, Any]) -> list[list[Any]]:
                 and (item.get("matching_hosts") or 0) < (item.get("replicas") or 0)]
     if check.get("id") == "workload.agent_labels_inputs":
         failed = {f"{host}.{name}" for host, names in evidence.get("missing_variables", {}).items() for name in names}
-        failed.update(f"{item['host']}.resource_class" for item in evidence.get("resource_class_mismatches", []))
         return [row for row in rows if row[0] in failed]
     if isinstance(missing, dict) and isinstance(missing.get("fields"), (dict, list)):
         return [row for row in rows if row[0] in missing["fields"]]

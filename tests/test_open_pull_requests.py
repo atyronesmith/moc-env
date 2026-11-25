@@ -13,11 +13,16 @@ from email.message import Message
 from urllib.parse import parse_qs, urlsplit
 from unittest.mock import patch
 
+import yaml
+
 from moc_env import observed
 from moc_env.checks import StatusChecker
 from moc_env.github import GitHubClient, GitHubError
 from moc_env.model import Environment, StatusReport
 from moc_env.report import render_markdown, render_text
+from moc_env.report_fields import failing_field_rows
+
+from fakes import FakeGitHubClient
 
 
 APPS = "example-lab/aurora-apps"
@@ -35,6 +40,78 @@ class SyntheticRepositoryClient(GitHubClient):
 
     def get_file(self, repository, path, ref="main"):
         return f"clusterName: {CLUSTER}\nnodePools: []\n"
+
+
+class AgentInputPullRequestsTest(unittest.TestCase):
+    def test_annotation_only_lists_missing_inputs_as_failures(self):
+        missing_hosts = ("quartz-0", "quartz-1")
+        advisory_hosts = ("opal-0", "opal-1")
+        documented_classes = ("reference-cpu", "reference-accelerator")
+
+        class InventoryPullClient(FakeGitHubClient):
+            def get_file(self, repository, path, ref="main"):
+                content = super().get_file(repository, path, ref)
+                if repository != "CCI-MOC/oac-infra":
+                    return content
+                if path == "infra/inventory/00hosts.yaml":
+                    inventory = yaml.safe_load(content)
+                    group = inventory["all"]["children"]["bu_ist_demo_clusters"]["children"]["bu_ist_demo_workload0"]
+                    hosts = {
+                        host: {
+                            "node_name": host.upper(),
+                            "bm_management": "bmc",
+                            "mac_addr": f"02:00:00:00:00:{index:02x}",
+                            **({"resource_class": "custom-accelerator"} if host in advisory_hosts else {}),
+                        }
+                        for index, host in enumerate((*missing_hosts, *advisory_hosts))
+                    }
+                    # Change an input in the PR, without fixing any missing class
+                    # or advisory documentation difference.
+                    if self.ref_for(repository) == "pull/73/head":
+                        hosts[missing_hosts[0]]["mac_addr"] = "02:00:00:00:01:00"
+                    group["children"]["compute"]["hosts"] = hosts
+                    return yaml.safe_dump(inventory)
+                if path == "docs/hardware-and-network-configuration.md":
+                    return "| Node Name | Resource Class |\n|---|---|\n" + "".join(
+                        f"| {host.upper()} | {documented} |\n"
+                        for hosts, documented in zip((missing_hosts, advisory_hosts), documented_classes)
+                        for host in hosts
+                    )
+                return content
+
+            def pulls(self, repository, state="all"):
+                if repository == "CCI-MOC/oac-infra":
+                    yield {
+                        "number": 73, "state": "open",
+                        "title": "Update workload inventory", "body": "",
+                        "head": {"ref": "inventory-change"},
+                    }
+
+            def pr_files(self, repository, number):
+                yield {"filename": "infra/inventory/00hosts.yaml", "patch": "+bu-ist-demo-workload0"}
+
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {"MOC_ENV_CACHE_DIR": directory}):
+            report = StatusChecker(InventoryPullClient()).run(
+                Environment(name="bu-ist-demo", issue_number=666),
+            ).to_dict()
+        check = next(check for check in report["checks"] if check["id"] == "workload.agent_labels_inputs")
+        self.assertEqual(check["state"], "partial")
+        self.assertEqual(check["severity"], "blocking")
+        self.assertEqual(len(check["evidence"]["resource_class_mismatches"]), 2)
+        annotations = check["evidence"]["pr_evaluations"]
+        self.assertEqual(len(annotations), 1)
+        annotation = annotations[0]
+        self.assertIn("open PR oac-infra#73 touches this but the check still fails there:", annotation)
+        for host in missing_hosts:
+            self.assertIn(f"{host}.resource_class is not found; expected present", annotation)
+        for documented in documented_classes:
+            self.assertNotIn(f"expected {documented}", annotation)
+        for host in advisory_hosts:
+            self.assertNotIn(host, annotation)
+
+        advisory_only = copy.deepcopy(check)
+        advisory_only["evidence"].pop("missing_variables")
+        self.assertEqual(failing_field_rows(advisory_only), [])
 
 
 class OpenPullRequestsTest(unittest.TestCase):
