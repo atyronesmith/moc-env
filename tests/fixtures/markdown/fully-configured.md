@@ -432,7 +432,7 @@ Not verified: Address availability, MetalLB runtime allocation and the switch co
 
 Source: CCI-MOC/oac-apps · [`hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml) @ main (3333333)
 
-Verifies: Reads dns.records[].hostname from hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml. The check passes when every hostname ends with the hub baseDomain `int.massopen.cloud` or hcpExternalDomain `hcp.bu-ist-demo.int.massopen.cloud` taken from hosted-clusters/bu-ist-demo-infra/values.yaml.
+Verifies: Reads dns.records[].hostname from hosted-clusters/bu-ist-demo-infra/bu-ist-demo-workload0/values.yaml. The check passes when every hostname ends with the hub baseDomain `int.massopen.cloud` or hcpExternalDomain `hcp.bu-ist-demo.int.massopen.cloud` taken from hosted-clusters/bu-ist-demo-infra/values.yaml. A workload that declares no dns.records passes without any comparison.
 Not verified: Only the suffix is compared; the records are not looked up in moc-dns and missing records are not detected.
 
 | Field | Expected | Observed |

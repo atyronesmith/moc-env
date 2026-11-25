@@ -434,7 +434,7 @@ Not verified: Address availability, MetalLB runtime allocation and the switch co
 
 Source: CCI-MOC/oac-apps · [`hosted-clusters/example-env-infra/example-env-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/example-env-infra/example-env-workload0/values.yaml) @ main (3333333)
 
-Verifies: Reads dns.records[].hostname from hosted-clusters/example-env-infra/example-env-workload0/values.yaml. The check passes when every hostname ends with the hub baseDomain `int.massopen.cloud` or hcpExternalDomain `hcp.example-env.int.massopen.cloud` taken from hosted-clusters/example-env-infra/values.yaml.
+Verifies: Reads dns.records[].hostname from hosted-clusters/example-env-infra/example-env-workload0/values.yaml. The check passes when every hostname ends with the hub baseDomain `int.massopen.cloud` or hcpExternalDomain `hcp.example-env.int.massopen.cloud` taken from hosted-clusters/example-env-infra/values.yaml. A workload that declares no dns.records passes without any comparison.
 Not verified: Only the suffix is compared; the records are not looked up in moc-dns and missing records are not detected.
 
 | Field | Expected | Observed |
@@ -625,6 +625,19 @@ Not verified: The configured identity-provider entries are not validated against
 </details>
 
 Pull requests: skipped (--no-prs)
+
+## Recent changes
+
+These are GitHub commit histories on main.
+
+| Repository | Path | History |
+|---|---|---|
+| oac-apps | `hosted-clusters/example-env-infra/` | [History](https://github.com/CCI-MOC/oac-apps/commits/main/hosted-clusters/example-env-infra/) |
+| oac-apps | `values/example-env-infra/` | [History](https://github.com/CCI-MOC/oac-apps/commits/main/values/example-env-infra/) |
+| oac-apps | `apps/example-env-infra/` | [History](https://github.com/CCI-MOC/oac-apps/commits/main/apps/example-env-infra/) |
+| oac-infra | `infra/inventory/00hosts.yaml` (shared by all clusters) | [History](https://github.com/CCI-MOC/oac-infra/commits/main/infra/inventory/00hosts.yaml) |
+| oac-infra | `hub-images/inventory.yml` (shared by all clusters) | [History](https://github.com/CCI-MOC/oac-infra/commits/main/hub-images/inventory.yml) |
+| moc-keycloak | `main.tf` (shared by all clusters) | [History](https://github.com/CCI-MOC/moc-keycloak/commits/main/main.tf) |
 
 ## Sources
 

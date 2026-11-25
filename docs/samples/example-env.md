@@ -448,7 +448,7 @@ Not verified: Address availability, MetalLB runtime allocation and the switch co
 
 Source: CCI-MOC/oac-apps · [`hosted-clusters/example-env-infra/example-env-workload0/values.yaml`](https://github.com/CCI-MOC/oac-apps/blob/main/hosted-clusters/example-env-infra/example-env-workload0/values.yaml) @ main (3333333)
 
-Verifies: Reads dns.records[].hostname from hosted-clusters/example-env-infra/example-env-workload0/values.yaml. The check passes when every hostname ends with the hub baseDomain `an unknown baseDomain` or hcpExternalDomain `an unknown hcpExternalDomain` taken from hosted-clusters/example-env-infra/values.yaml.
+Verifies: Reads dns.records[].hostname from hosted-clusters/example-env-infra/example-env-workload0/values.yaml. The check passes when every hostname ends with the hub baseDomain `an unknown baseDomain` or hcpExternalDomain `an unknown hcpExternalDomain` taken from hosted-clusters/example-env-infra/values.yaml. A workload that declares no dns.records passes without any comparison.
 Not verified: Only the suffix is compared; the records are not looked up in moc-dns and missing records are not detected.
 
 | Field | Expected | Observed |
@@ -549,6 +549,16 @@ Not verified: The match is textual, so the certificate zone, DNS records and AWS
 </details>
 
 Pull requests: skipped (--no-prs)
+
+## Recent changes
+
+These are GitHub commit histories on main.
+
+| Repository | Path | History |
+|---|---|---|
+| oac-infra | `infra/inventory/00hosts.yaml` (shared by all clusters) | [History](https://github.com/CCI-MOC/oac-infra/commits/main/infra/inventory/00hosts.yaml) |
+| oac-infra | `hub-images/inventory.yml` (shared by all clusters) | [History](https://github.com/CCI-MOC/oac-infra/commits/main/hub-images/inventory.yml) |
+| moc-keycloak | `main.tf` (shared by all clusters) | [History](https://github.com/CCI-MOC/moc-keycloak/commits/main/main.tf) |
 
 ## Sources
 
