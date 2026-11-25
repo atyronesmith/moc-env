@@ -1600,6 +1600,26 @@
       "bu-ist-demo-workload0"
     ]
   },
+  "history_links": [
+    {
+      "path": "infra/inventory/00hosts.yaml",
+      "repository": "CCI-MOC/oac-infra",
+      "shared": true,
+      "url": "https://github.com/CCI-MOC/oac-infra/commits/main/infra/inventory/00hosts.yaml"
+    },
+    {
+      "path": "hub-images/inventory.yml",
+      "repository": "CCI-MOC/oac-infra",
+      "shared": true,
+      "url": "https://github.com/CCI-MOC/oac-infra/commits/main/hub-images/inventory.yml"
+    },
+    {
+      "path": "main.tf",
+      "repository": "CCI-MOC/moc-keycloak",
+      "shared": true,
+      "url": "https://github.com/CCI-MOC/moc-keycloak/commits/main/main.tf"
+    }
+  ],
   "metadata": {
     "authenticated": false,
     "command": [

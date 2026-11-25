@@ -259,6 +259,7 @@ class AppsObservation:
     source_ref: str = "main"
     files: dict[str, str] = field(default_factory=dict)
     pull_requests_unavailable: str | None = None
+    history_links: tuple[dict[str, Any], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -745,6 +746,28 @@ def read_apps_observation(
             f"apps/{hub}/{workload}/",
         )
     )
+    history_prefixes = (
+        workload_path_prefixes if path_scope == "workload" else environment_path_prefixes
+    )
+    history_paths = [
+        (repository, prefix, False)
+        for prefix in history_prefixes
+        if any(path.startswith(prefix) for path in tree)
+    ]
+    history_paths.extend((
+        (OAC_INFRA_REPOSITORY, INVENTORY_PATH, True),
+        (OAC_INFRA_REPOSITORY, HUB_INVENTORY_PATH, True),
+        (MOC_KEYCLOAK_REPOSITORY, KEYCLOAK_PATH, True),
+    ))
+    history_links = tuple(
+        {
+            "repository": history_repository,
+            "path": path,
+            "url": f"https://github.com/{history_repository}/commits/main/{path}",
+            "shared": shared,
+        }
+        for history_repository, path, shared in history_paths
+    )
 
     def changes_environment_path(path: str) -> bool:
         if path_scope == "workload":
@@ -912,6 +935,7 @@ def read_apps_observation(
         pull_requests_unavailable=(
             "\n".join(pull_request_errors) if pull_request_errors else None
         ),
+        history_links=history_links,
     )
 
 

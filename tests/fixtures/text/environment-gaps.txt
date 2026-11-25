@@ -81,6 +81,12 @@ NOT CHECKED — verify by hand:
   Argo CD for bu-ist-demo-infra; Agents visible in hardware-inventory; Agents labelled and
   approved
 
+RECENT CHANGES
+These are GitHub commit histories on main.
+  oac-infra infra/inventory/00hosts.yaml (shared by all clusters) https://github.com/CCI-MOC/oac-infra/commits/main/infra/inventory/00hosts.yaml
+  oac-infra hub-images/inventory.yml (shared by all clusters) https://github.com/CCI-MOC/oac-infra/commits/main/hub-images/inventory.yml
+  moc-keycloak main.tf (shared by all clusters) https://github.com/CCI-MOC/moc-keycloak/commits/main/main.tf
+
 Sources
 Repository                 Ref      Commit
 CCI-MOC/MOC-issues          main     1111111

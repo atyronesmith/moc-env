@@ -22,6 +22,8 @@ STATE_SYMBOLS = {
     "requested": "REQUESTED",
 }
 
+HISTORY_EXPLANATION = "These are GitHub commit histories on main."
+
 
 class MarkdownCell(str):
     """A pre-rendered Markdown table cell that must not be escaped again."""
@@ -821,6 +823,39 @@ def _pull_failure_lines(report: dict[str, Any]) -> list[str]:
     return [
         f"Pull requests unavailable for {failure}"
         for failure in (report.get("pull_requests_unavailable") or "").splitlines()
+    ]
+
+
+def _text_history_lines(report: dict[str, Any]) -> list[str]:
+    links = report.get("history_links") or []
+    if not links:
+        return []
+    lines = ["", "RECENT CHANGES", HISTORY_EXPLANATION]
+    for link in links:
+        repository = link["repository"].removeprefix("CCI-MOC/")
+        shared = " (shared by all clusters)" if link["shared"] else ""
+        lines.append(f"  {repository} {link['path']}{shared} {link['url']}")
+    return lines
+
+
+def _markdown_history_lines(report: dict[str, Any]) -> list[str]:
+    links = report.get("history_links") or []
+    if not links:
+        return []
+    rows = [
+        [
+            link["repository"].removeprefix("CCI-MOC/"),
+            MarkdownCell(
+                _markdown_inline(link["path"])
+                + (" (shared by all clusters)" if link["shared"] else "")
+            ),
+            MarkdownCell(f"[History]({link['url']})"),
+        ]
+        for link in links
+    ]
+    return [
+        "## Recent changes", "", HISTORY_EXPLANATION, "",
+        *_markdown_table(["Repository", "Path", "History"], rows, True),
     ]
 
 
@@ -1624,6 +1659,7 @@ def render_text(
             *_pull_failure_lines(report),
         ])
 
+    lines.extend(_text_history_lines(report))
     lines.extend(["", "Sources"])
     lines.extend(_sources_table(report))
     lines.extend(
@@ -2312,6 +2348,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     for check in report.get("checks", []):
         lines.extend(_check_markdown_details(check, sources, report))
     lines.extend(_markdown_pull_requests(report))
+    lines.extend(_markdown_history_lines(report))
     lines.extend(["## Sources", "", *_markdown_sources_table(report), ""])
     lines.extend(_markdown_legend(report))
     return "\n".join(lines).rstrip() + "\n"

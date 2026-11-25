@@ -212,6 +212,7 @@ class StatusReport:
     pull_requests_skipped: bool = False
     pull_requests_skip_reason: str | None = None
     pull_requests_unavailable: str | None = None
+    history_links: tuple[dict[str, Any], ...] = ()
     rate_limited: bool = False
 
     def to_dict(self) -> dict[str, Any]:
@@ -262,6 +263,7 @@ class StatusReport:
             },
             "checks": [check.to_dict() for check in self.checks],
             "pull_requests": list(self.pull_requests),
+            "history_links": list(self.history_links),
             "pull_requests_skipped": self.pull_requests_skipped,
             **(
                 {"pull_requests_skip_reason": self.pull_requests_skip_reason}

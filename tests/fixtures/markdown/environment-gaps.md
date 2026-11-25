@@ -562,6 +562,16 @@ Not verified: The issue body, title, labels, assignee and comments are not inter
 
 Pull requests: skipped (--no-prs)
 
+## Recent changes
+
+These are GitHub commit histories on main.
+
+| Repository | Path | History |
+|---|---|---|
+| oac-infra | `infra/inventory/00hosts.yaml` (shared by all clusters) | [History](https://github.com/CCI-MOC/oac-infra/commits/main/infra/inventory/00hosts.yaml) |
+| oac-infra | `hub-images/inventory.yml` (shared by all clusters) | [History](https://github.com/CCI-MOC/oac-infra/commits/main/hub-images/inventory.yml) |
+| moc-keycloak | `main.tf` (shared by all clusters) | [History](https://github.com/CCI-MOC/moc-keycloak/commits/main/main.tf) |
+
 ## Sources
 
 | Repository | Ref | Commit |

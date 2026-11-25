@@ -325,6 +325,7 @@ class StatusChecker:
             metadata=self._metadata(),
             pull_requests=pulls,
             pull_requests_unavailable=observation.apps.pull_requests_unavailable,
+            history_links=observation.apps.history_links,
             pull_requests_skipped=not self.include_prs,
             pull_requests_skip_reason=(
                 "skipped (--no-prs)" if not self.include_prs else None
