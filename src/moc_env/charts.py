@@ -91,6 +91,7 @@ class ChartInventory:
     scope: str = "environment"
     hidden_clusters: tuple[str, ...] = ()
     test_clusters: tuple[str, ...] = ()
+    gated_application_sets: tuple[str, ...] = ()
 
     @property
     def has_errors(self) -> bool:
@@ -1136,6 +1137,11 @@ def collect_chart_inventory(
         scope=scope,
         hidden_clusters=hidden_clusters,
         test_clusters=test_clusters,
+        gated_application_sets=tuple(sorted({
+            application_set.name
+            for application_set in application_sets
+            if any(generator.gate_path is not None for generator in application_set.generator_entries)
+        })),
     )
 
 
@@ -1434,13 +1440,18 @@ def _summary_tables(inventory: ChartInventory) -> list[SummaryTable]:
     tables: list[SummaryTable] = []
 
     membership: dict[str, set[str]] = {}
-    charts_by_column: dict[str, set[str]] = {}
+    charts_by_column: dict[str, dict[str, set[str]]] = {}
     for cluster in workloads:
         cluster_columns: set[str] = set()
         for row in cluster.rows:
-            column = _feature_column(row)
+            application_set = str(row.get("application_set") or "")
+            column = (
+                application_set
+                if application_set in inventory.gated_application_sets
+                else _feature_column(row)
+            )
             cluster_columns.add(column)
-            charts_by_column.setdefault(column, set()).add(str(row["chart"]))
+            charts_by_column.setdefault(column, {}).setdefault(cluster.name, set()).add(str(row["chart"]))
         membership[cluster.name] = cluster_columns
     has_workloads = bool(workloads)
     features = sorted(
@@ -1459,9 +1470,19 @@ def _summary_tables(inventory: ChartInventory) -> list[SummaryTable]:
 
     feature_rows: list[tuple[Any, ...]] = []
     for column in columns[1:-1]:
-        feature_rows.append(
-            (column, tuple(sorted(charts_by_column.get(column, ()))))
-        )
+        per_cluster = charts_by_column.get(column, {})
+        chart_sets = list(per_cluster.values())
+        common = set.intersection(*chart_sets) if chart_sets else set()
+        cell: tuple[str, ...] | str = tuple(sorted(common))
+        if any(charts != common for charts in chart_sets):
+            parts = [", ".join(sorted(common))] if common else []
+            parts.extend(
+                f"also on {cluster}: {', '.join(sorted(charts - common))}"
+                for cluster, charts in sorted(per_cluster.items())
+                if charts - common
+            )
+            cell = "; ".join(parts)
+        feature_rows.append((column, cell))
     tables.append(
         SummaryTable(
             "Workload features",
