@@ -701,12 +701,10 @@ class ReportRenderingTest(unittest.TestCase):
             "1 open pull request changes configuration relevant to this environment.",
             rendered,
         )
-        open_section, closed_section = rendered.split(
-            "<summary>Merged and closed without merging</summary>", 1
-        )
-        open_section = open_section.split("### Open", 1)[1]
+        self.assertNotIn("<summary>Merged and closed without merging</summary>", rendered)
+        open_section = rendered.split("### Open", 1)[1]
         headers = "| Repository | PR | Title | Head branch | Changed files |"
-        for number, section in ((1, open_section), (2, closed_section), (3, closed_section)):
+        for number, section in ((1, open_section),):
             with self.subTest(number=number):
                 url = f"https://github.com/CCI-MOC/moc-keycloak/pull/{number}"
                 self.assertIn(headers, section)
@@ -719,7 +717,6 @@ class ReportRenderingTest(unittest.TestCase):
         self.assertNotIn("None.", open_section)
         self.assertNotIn("[#2]", open_section)
         self.assertNotIn("[#3]", open_section)
-        self.assertNotIn("[#1]", closed_section)
 
     def test_open_pull_with_no_file_list_is_not_hidden(self) -> None:
         pull = {

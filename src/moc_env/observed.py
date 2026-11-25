@@ -25,7 +25,6 @@ HARDWARE_NETWORK_DOC_PATH = (
 )
 HUB_INVENTORY_PATH = "hub-images/inventory.yml"
 KEYCLOAK_PATH = "main.tf"
-PR_FILE_FETCH_LIMIT = 20
 ProgressCallback = Callable[[str, str, str, str], None]
 
 
@@ -242,7 +241,6 @@ class PullRequestObservation:
     number: SourceValue
     title: SourceValue
     state: SourceValue
-    merged: SourceValue
     head_ref: SourceValue
     head_sha: SourceValue
     url: SourceValue
@@ -769,10 +767,10 @@ def read_apps_observation(
                     "GitOps configuration",
                     "inspect pull-request file lists for environment-relevant changes",
                     pull_repository,
-                    "pulls?state=all",
+                    "pulls?state=open",
                 )
             try:
-                all_pulls = list(client.pulls(pull_repository))
+                all_pulls = list(client.pulls(pull_repository, state="open"))
                 if any(
                     not isinstance(pull, dict)
                     or type(pull.get("number")) is not int
@@ -790,21 +788,10 @@ def read_apps_observation(
                 # failure must not discard repository configuration evidence.
                 pull_request_errors.append(f"{pull_repository}: {exc}")
                 continue
-            closed_pulls = sorted(
-                (pull for pull in all_pulls if pull.get("state") == "closed"),
-                key=lambda pull: str(pull.get("updated_at") or ""),
-                reverse=True,
-            )[:PR_FILE_FETCH_LIMIT]
-            closed_numbers = {
-                pull.get("number")
-                for pull in closed_pulls
-                if pull.get("number") is not None
-            }
             candidates = [
                 pull
                 for pull in all_pulls
                 if pull.get("state") == "open"
-                or pull.get("number") in closed_numbers
             ]
             for pull in candidates:
                 try:
@@ -890,25 +877,17 @@ def read_apps_observation(
 
                 if not matching_files:
                     continue
-                pull_state = pull.get("state")
-                merged = bool(pull.get("merged_at"))
-                classification = (
-                    "open"
-                    if pull_state == "open"
-                    else ("merged" if merged else "closed_unmerged")
-                )
-                source = (pull_repository, f"pulls/{pull['number']}", "all")
+                source = (pull_repository, f"pulls/{pull['number']}", "open")
                 files_source = (
                     pull_repository,
                     f"pulls/{pull['number']}/files",
-                    "all",
+                    "open",
                 )
                 pull_requests.append(
                     PullRequestObservation(
                         number=SourceValue(pull["number"], *source),
                         title=SourceValue(pull.get("title"), *source),
                         state=SourceValue(pull.get("state"), *source),
-                        merged=SourceValue(bool(pull.get("merged_at")), *source),
                         head_ref=SourceValue(
                             pull.get("head", {}).get("ref"), *source
                         ),
@@ -918,7 +897,7 @@ def read_apps_observation(
                         url=SourceValue(pull.get("html_url"), *source),
                         repository=SourceValue(pull_repository, *source),
                         changed_files=SourceValue(matching_files, *files_source),
-                        classification=SourceValue(classification, *source),
+                        classification=SourceValue("open", *source),
                     )
                 )
     return AppsObservation(
@@ -931,7 +910,7 @@ def read_apps_observation(
         source_repository=repository,
         files=values_files,
         pull_requests_unavailable=(
-            "; ".join(pull_request_errors) if pull_request_errors else None
+            "\n".join(pull_request_errors) if pull_request_errors else None
         ),
     )
 

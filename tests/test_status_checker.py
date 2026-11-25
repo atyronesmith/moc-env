@@ -793,10 +793,7 @@ bu_ist_demo_infra:
         report = StatusChecker(MergedPullRequestClient()).run(
             Environment(name="bu-ist-demo", issue_number=666)
         ).to_dict()
-        self.assertEqual(len(report["pull_requests"]), 1)
-        self.assertEqual(
-            report["pull_requests"][0]["classification"]["value"], "merged"
-        )
+        self.assertEqual(report["pull_requests"], [])
 
     def test_pull_request_body_match_alone_is_not_relevant(self) -> None:
         class UnrelatedPullRequestClient(FakeGitHubClient):
@@ -868,10 +865,10 @@ bu_ist_demo_infra:
             Environment(name="bu-ist-demo", issue_number=666)
         ).to_dict()
         pulls = report["pull_requests"]
-        self.assertEqual(len(pulls), 3)
+        self.assertEqual(len(pulls), 1)
         self.assertEqual(
             [item["classification"]["value"] for item in pulls],
-            ["open", "merged", "closed_unmerged"],
+            ["open"],
         )
 
     def test_workload_only_pull_request_is_not_hub_work(self) -> None:
@@ -912,13 +909,15 @@ bu_ist_demo_infra:
             workload_report["pull_requests"][0]["classification"]["value"], "open"
         )
 
-    def test_closed_pull_request_file_fetches_are_limited_to_recent_twenty(self) -> None:
+    def test_closed_pull_requests_are_never_fetched_or_reported(self) -> None:
         class LimitedPullRequestClient(FakeGitHubClient):
             def __init__(self):
                 super().__init__()
                 self.requested_files = []
+                self.requested_states = []
 
             def pulls(self, repository, state="all"):
+                self.requested_states.append(state)
                 if repository not in {
                     "CCI-MOC/oac-apps",
                     "CCI-MOC/oac-infra",
@@ -964,7 +963,8 @@ bu_ist_demo_infra:
             Environment(name="bu-ist-demo", issue_number=666)
         ).to_dict()
 
-        self.assertEqual(len(client.requested_files), 60)
+        self.assertEqual(client.requested_states, ["open", "open", "open"])
+        self.assertEqual(client.requested_files, [])
         requested_by_repository = {
             repository: [] for repository in (
                 "CCI-MOC/oac-apps",
@@ -975,11 +975,11 @@ bu_ist_demo_infra:
         for repository, number in client.requested_files:
             requested_by_repository[repository].append(number)
         self.assertEqual(requested_by_repository, {
-            "CCI-MOC/oac-apps": list(range(5, 25)),
-            "CCI-MOC/oac-infra": list(range(5, 25)),
-            "CCI-MOC/moc-keycloak": list(range(5, 25)),
+            "CCI-MOC/oac-apps": [],
+            "CCI-MOC/oac-infra": [],
+            "CCI-MOC/moc-keycloak": [],
         })
-        self.assertEqual(len(report["pull_requests"]), 60)
+        self.assertEqual(report["pull_requests"], [])
 
     def test_infra_pull_request_for_other_environment_is_not_relevant(self) -> None:
         class OtherEnvironmentInfraPullClient(FakeGitHubClient):

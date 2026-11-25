@@ -450,21 +450,17 @@ def _path_scope_summary(check: dict[str, Any]) -> list[str] | None:
 
 
 def _pull_request_count_summary(check: dict[str, Any]) -> list[str] | None:
-    """Render pull-request counts once instead of three nested JSON objects."""
+    """Render open pull-request counts without historical PR totals."""
     actual = check.get("actual")
     required = {
         "matching_pr_count",
         "open_count",
-        "merged_count",
-        "closed_unmerged_count",
     }
     if not isinstance(actual, dict) or not required.issubset(actual):
         return None
 
     counts = [
         ("Matching PRs", actual["matching_pr_count"]),
-        ("Merged PRs", actual["merged_count"]),
-        ("Closed-unmerged PRs", actual["closed_unmerged_count"]),
         ("Open PRs", actual["open_count"]),
     ]
     repository_counts = actual.get("repository_counts")
@@ -811,12 +807,21 @@ def _action_checks(report: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _pull_status_line(report: dict[str, Any]) -> str | None:
     unavailable = report.get("pull_requests_unavailable")
-    if unavailable:
-        return f"Pull requests: unavailable ({unavailable})"
+    if unavailable and not _report_pulls(report, {"open"}):
+        return f"Pull requests: unavailable ({'; '.join(unavailable.splitlines())})"
     if report.get("pull_requests_skipped"):
         reason = report.get("pull_requests_skip_reason")
         return f"Pull requests: {reason}" if reason else "Pull requests: skipped because this run is unauthenticated; use --prs to inspect them."
     return None
+
+
+def _pull_failure_lines(report: dict[str, Any]) -> list[str]:
+    """Preserve successfully read PRs and name each missing piece of context."""
+
+    return [
+        f"Pull requests unavailable for {failure}"
+        for failure in (report.get("pull_requests_unavailable") or "").splitlines()
+    ]
 
 
 def _cache_header_lines(report: dict[str, Any]) -> list[str]:
@@ -1616,6 +1621,7 @@ def render_text(
             "PULL REQUESTS",
             _pull_requests_headline(len(open_pulls)),
             *pr_lines,
+            *_pull_failure_lines(report),
         ])
 
     lines.extend(["", "Sources"])
@@ -2196,6 +2202,7 @@ def _markdown_pull_requests(report: dict[str, Any]) -> list[str]:
         ): pull
         for pull in report.get("pull_requests", [])
         if isinstance(pull, dict)
+        and _pull_field(pull, "classification") == "open"
     }
     lines = ["## Pull requests", ""]
     open_count = sum(
@@ -2245,14 +2252,8 @@ def _markdown_pull_requests(report: dict[str, Any]) -> list[str]:
     else:
         lines.extend(["### Open", "", "None.", ""])
 
-    closed_rows = pull_rows({"merged", "closed_unmerged"})
-    lines.extend(["<details>", "<summary>Merged and closed without merging</summary>", ""])
-    if closed_rows:
-        lines.extend(_markdown_table(headers, closed_rows, True))
-    else:
-        lines.append("None.")
-        lines.append("")
-    lines.extend(["</details>", ""])
+    lines.extend(_pull_failure_lines(report))
+    lines.append("")
     return lines
 
 

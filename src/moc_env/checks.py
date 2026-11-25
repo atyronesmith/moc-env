@@ -1001,7 +1001,6 @@ class StatusChecker:
                     "number": item.number.value,
                     "title": item.title.to_dict(),
                     "state": item.state.to_dict(),
-                    "merged": item.merged.to_dict(),
                     "classification": item.classification.to_dict(),
                     "head_ref": item.head_ref.to_dict(),
                     "head_sha": item.head_sha.to_dict(),
