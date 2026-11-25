@@ -149,6 +149,33 @@ class ReportRenderingTest(unittest.TestCase):
         self.assertNotRegex(ledger, r"\n\s+value\s+")
         self.assertIn("(advisory)", rendered)
 
+    def test_unread_dns_records_do_not_claim_none_declared(self) -> None:
+        for state in ("blocked", "unknown"):
+            check = {
+                **self.report["checks"][0],
+                "id": "workload.dns_base_domain",
+                "check": "Workload DNS base domain",
+                "scope": "workload",
+                "state": state,
+                "expected": {"baseDomain": "cluster.example"},
+                "actual": None,
+                "reason": "Workload values could not be read.",
+                "evidence": {},
+            }
+            report = {**self.report, "checks": [check]}
+            for renderer in (render_text, render_markdown):
+                with self.subTest(state=state, renderer=renderer):
+                    rendered = renderer(report, details=True) if renderer == render_text else renderer(report)
+                    row = next(
+                        line for line in rendered.splitlines()
+                        if re.match(r"\s*\|?\s*`?dns\.records`?\s+", line)
+                    )
+                    self.assertNotIn("none declared", row)
+                    if renderer == render_text:
+                        self.assertRegex(row, r"\snot found$")
+                    else:
+                        self.assertTrue(row.endswith("| `—` |"), row)
+
     def test_rendered_actions_substitute_placeholders(self) -> None:
         check = {
             **self.report["checks"][0],
