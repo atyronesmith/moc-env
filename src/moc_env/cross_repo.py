@@ -1277,10 +1277,17 @@ def _workload_value_checks(
                 pool_result["required_class"] = ", ".join(required_classes)
             if pool_state == "value_mismatch":
                 pool_result["reason"] = (
-                    f"Pool {pool_name or index} requires {replicas} hosts: "
-                    f"{matching} confirmed matching hosts; {unclassified} unclassified hosts. "
-                    "The pool is short even if every unclassified host matched."
+                    f"Pool {pool_name or index} requires {replicas} "
+                    f"{'host' if replicas == 1 else 'hosts'}: "
+                    f"{matching} confirmed matching {'host' if matching == 1 else 'hosts'}"
                 )
+                if unclassified:
+                    pool_result["reason"] += (
+                        f"; {unclassified} unclassified {'host' if unclassified == 1 else 'hosts'}. "
+                        "The pool is short even if every unclassified host matched."
+                    )
+                else:
+                    pool_result["reason"] += "."
             if unclassified and pool_state == "declared_in_main":
                 notes.append(
                     f"{unclassified} unclassified hosts ({', '.join(unclassified_names)}); "

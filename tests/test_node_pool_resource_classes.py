@@ -177,10 +177,10 @@ class NodePoolResourceClassTest(unittest.TestCase):
         )
         self.assertEqual(check.state, "value_mismatch")
         self.assertEqual(check.severity, "blocking")
-        self.assertIn("2 confirmed matching hosts; 1 unclassified hosts", check.reason)
+        self.assertIn("2 confirmed matching hosts; 1 unclassified host.", check.reason)
         self.assertIn("short even if every unclassified host matched", check.reason)
         for output in rendered_report(check):
-            self.assertIn("2 confirmed matching hosts; 1 unclassified hosts", " ".join(output.split()))
+            self.assertIn("2 confirmed matching hosts; 1 unclassified host.", " ".join(output.split()))
             self.assertNotIn("UNKNOWN", output)
 
     def test_four_confirmed_one_unclassified_for_five_is_unknown(self):
