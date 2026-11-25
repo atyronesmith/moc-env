@@ -47,7 +47,7 @@ def markdown_result_counts(text: str) -> tuple[int, int]:
     if "No deployment gaps" in verdict:
         return 0, 0
     match = re.search(
-        r"\*\*(\d+) blocking gaps, (\d+) advisories,", verdict
+        r"\*\*(\d+) blocking gaps?, (\d+) advisor(?:y|ies),", verdict
     )
     if match is None:
         raise AssertionError(f"unexpected Markdown verdict: {verdict}")

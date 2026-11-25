@@ -148,7 +148,7 @@ def result_counts(text: str) -> tuple[int, int]:
     result = next(line for line in text.splitlines() if line.startswith("RESULT:"))
     if "No deployment gaps" in result:
         return 0, 0
-    match = re.search(r"RESULT: (\d+) blocking gaps.*?· (\d+) advisories", result)
+    match = re.search(r"RESULT: (\d+) blocking gaps?.*?· (\d+) advisor(?:y|ies)", result)
     assert match, result
     return int(match.group(1)), int(match.group(2))
 

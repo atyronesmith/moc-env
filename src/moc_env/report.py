@@ -1475,6 +1475,10 @@ def _detail_section(check: dict[str, Any]) -> list[str]:
     return lines
 
 
+def _count_phrase(count: int, singular: str, plural: str) -> str:
+    return f"{count} {singular if count == 1 else plural}"
+
+
 def render_text(
     report: dict[str, Any],
     details: bool = False,
@@ -1529,8 +1533,8 @@ def render_text(
         result = "RESULT: No deployment gaps in repository configuration."
     else:
         result = (
-            f"RESULT: {len(blocking)} blocking gaps{scope_text} · "
-            f"{len(advisories)} advisories · {passing} of {len(active_checks)} checks pass"
+            f"RESULT: {_count_phrase(len(blocking), 'blocking gap', 'blocking gaps')}{scope_text} · "
+            f"{_count_phrase(len(advisories), 'advisory', 'advisories')} · {passing} of {len(active_checks)} checks pass"
         )
     lines.extend(_wrap(result))
     if unknown:
@@ -1973,7 +1977,8 @@ def _markdown_verdict(report: dict[str, Any]) -> str:
     if not blocking and not advisories and not unknown:
         return "No deployment gaps in repository configuration."
     verdict = (
-        f"{len(blocking)} blocking gaps, {len(advisories)} advisories, "
+        f"{_count_phrase(len(blocking), 'blocking gap', 'blocking gaps')}, "
+        f"{_count_phrase(len(advisories), 'advisory', 'advisories')}, "
         f"and {passing} of {len(active_checks)} checks pass"
     )
     unknown_headline = _unknown_headline(checks)

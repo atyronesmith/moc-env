@@ -63,8 +63,8 @@ class ReportRenderingTest(unittest.TestCase):
         """Blocking mismatches fail; advisory mismatches remain warnings."""
 
         for severity, marker, summary in (
-            ("blocking", "FAIL", "1 blocking gaps"),
-            ("advisory", "WARNING", "1 advisories"),
+            ("blocking", "FAIL", "1 blocking gap"),
+            ("advisory", "WARNING", "1 advisory"),
         ):
             with self.subTest(severity=severity):
                 check = {
@@ -85,6 +85,28 @@ class ReportRenderingTest(unittest.TestCase):
                 markdown = render_markdown(report)
                 self.assertIn(summary, markdown)
                 self.assertIn("Fixture mismatch", markdown)
+
+    def test_headline_count_nouns_in_both_renderers(self) -> None:
+        for blocking in range(3):
+            for advisory in range(3):
+                checks = [
+                    {
+                        **self.report["checks"][0], "id": f"{severity}.{index}",
+                        "state": "missing", "severity": severity,
+                    }
+                    for severity, count in (("blocking", blocking), ("advisory", advisory))
+                    for index in range(count)
+                ]
+                # Keep the count headline visible even when both counts are zero.
+                checks.append({**self.report["checks"][0], "state": "unknown"})
+                for renderer in (render_text, render_markdown):
+                    with self.subTest(blocking=blocking, advisory=advisory, renderer=renderer):
+                        rendered = renderer({**self.report, "scope": "hub", "checks": checks})
+                        gap_phrase = ("0 blocking gaps", "1 blocking gap", "2 blocking gaps")[blocking]
+                        advisory_phrase = ("0 advisories", "1 advisory", "2 advisories")[advisory]
+                        separator = " ·" if renderer == render_text else ","
+                        self.assertIn(gap_phrase + separator, rendered)
+                        self.assertIn(advisory_phrase + separator, rendered)
 
     def test_unchecked_phase_is_explicitly_manual(self) -> None:
         self.assertEqual(_phase_cell([]), "verify by hand")
@@ -170,7 +192,7 @@ class ReportRenderingTest(unittest.TestCase):
     def test_markdown_is_verbose_and_actionable(self) -> None:
         rendered = render_markdown(self.report)
         self.assertIn("# fixture-env — environment configuration status", rendered)
-        self.assertIn("**0 blocking gaps, 1 advisories, and 0 of 1 checks pass**", rendered)
+        self.assertIn("**0 blocking gaps, 1 advisory, and 0 of 1 checks pass**", rendered)
         self.assertIn("## Phase summary", rendered)
         self.assertIn("## Next actions", rendered)
         self.assertIn("## Not checked — verify by hand", rendered)
@@ -299,7 +321,7 @@ class ReportRenderingTest(unittest.TestCase):
             self.assertIn("Advisory documentation difference for gpu-0.resource_class", compact)
             self.assertNotIn("Set compute-0 resource_class to", rendered)
             self.assertNotIn("expected h100", compact)
-        self.assertIn("1 blocking gaps", text)
+        self.assertIn("RESULT: 1 blocking gap (workload 1) ·", text)
         self.assertEqual(report, before)
         self.assertEqual(render_json(report), original_json)
 
